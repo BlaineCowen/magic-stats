@@ -1,0 +1,15 @@
+node_modules
+.env
+*.sqlite
+*.db
+*.log
+*.csv
+*.parquet
+*.zip
+*.tar
+*.gz
+.DS_Store
+venv
+.env.*
+samples/
+

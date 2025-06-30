@@ -1,0 +1,1 @@
+DATABASE_URL = "postgresql://nfl_user:oun2308dlqued02hDji3@192.168.86.100:5433/nfl_stats" 

@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  db:
+    container_name: nfl-stats-postgres
+    image: postgres:16
+    hostname: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=nfl_user
+      - POSTGRES_PASSWORD=oun2308dlqued02hDji3
+      - POSTGRES_DB=nfl_stats
+    ports:
+      - "5433:5432"
+    volumes:
+      - /DATA/AppData/nfl-stats/postgres:/var/lib/postgresql/data/
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /DATA/AppData/nfl-stats/postgres
