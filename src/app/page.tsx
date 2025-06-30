@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import toast, { Toaster } from "react-hot-toast";
 
 type QueryResult = Record<string, string | number | boolean | null>;
 
@@ -78,6 +79,16 @@ export default function Home() {
       await navigator.clipboard.writeText(message);
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
+    }
+  };
+
+  const copyExampleQuery = async (exampleQuery: string) => {
+    try {
+      await navigator.clipboard.writeText(exampleQuery);
+      toast.success("Example query copied to clipboard!");
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+      toast.error("Failed to copy to clipboard");
     }
   };
 
@@ -285,32 +296,159 @@ No results were returned. Please help debug this query.`);
         {!query && (
           <div className="rounded-lg bg-blue-50 p-6 text-blue-700">
             <h2 className="mb-2 font-semibold">Example queries:</h2>
-            <ul className="list-inside list-disc space-y-1">
-              <li>
-                Show me the top 10 quarterbacks in 2024 with at least 200
-                attempts, ranked by passing EPA per attempt
+            <ul className="space-y-3">
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  Show me the top 10 quarterbacks in 2024 with at least 200
+                  attempts, ranked by passing EPA per attempt
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "Show me the top 10 quarterbacks in 2024 with at least 200 attempts, ranked by passing EPA per attempt",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
               </li>
-              <li>
-                Find receivers in 2024 who had at least 50 targets and show
-                their air yards share, target share, and yards per target
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  Find receivers in 2024 who had at least 50 targets and show
+                  their air yards share, target share, and yards per target
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "Find receivers in 2024 who had at least 50 targets and show their air yards share, target share, and yards per target",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
               </li>
-              <li>
-                Show me running backs in 2024 with at least 100 carries, ranked
-                by rushing EPA per carry, and include their total rushing yards
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  Show me running backs in 2024 with at least 100 carries,
+                  ranked by rushing EPA per carry, and include their total
+                  rushing yards
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "Show me running backs in 2024 with at least 100 carries, ranked by rushing EPA per carry, and include their total rushing yards",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
               </li>
-              <li>
-                List the top 15 players in PPR fantasy points in 2024, but only
-                include players who played at least 10 games
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  List the top 15 players in PPR fantasy points in 2024, but
+                  only include players who played at least 10 games
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "List the top 15 players in PPR fantasy points in 2024, but only include players who played at least 10 games",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
               </li>
-              <li>
-                Show me receivers in 2024 with at least 30 targets, ranked by
-                WOPR (weighted opportunity rating), and include their RACR and
-                receiving EPA
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  Show me receivers in 2024 with at least 30 targets, ranked by
+                  WOPR (weighted opportunity rating), and include their RACR and
+                  receiving EPA
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "Show me receivers in 2024 with at least 30 targets, ranked by WOPR (weighted opportunity rating), and include their RACR and receiving EPA",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
               </li>
             </ul>
           </div>
         )}
       </div>
+      <Toaster position="bottom-center" />
     </main>
   );
 }
