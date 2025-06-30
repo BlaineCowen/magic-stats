@@ -84,9 +84,49 @@ export default function Home() {
             <button
               type="submit"
               disabled={isLoading || !query.trim()}
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400"
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400"
             >
-              {isLoading ? "Searching..." : "Search"}
+              {isLoading ? (
+                <>
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Executing...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                  Execute
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -153,12 +193,25 @@ export default function Home() {
             <h2 className="mb-2 font-semibold">Example queries:</h2>
             <ul className="list-inside list-disc space-y-1">
               <li>
-                Show me all games where the Cowboys scored more than 40 points
-                in 2023
+                Show me the top 10 quarterbacks in 2024 with at least 200
+                attempts, ranked by passing EPA per attempt
               </li>
-              <li>What was Tom Brady&apos;s completion percentage in 2020?</li>
               <li>
-                How many touchdowns did the Chiefs score in the 2023 playoffs?
+                Find receivers in 2024 who had at least 50 targets and show
+                their air yards share, target share, and yards per target
+              </li>
+              <li>
+                Show me running backs in 2024 with at least 100 carries, ranked
+                by rushing EPA per carry, and include their total rushing yards
+              </li>
+              <li>
+                List the top 15 players in PPR fantasy points in 2024, but only
+                include players who played at least 10 games
+              </li>
+              <li>
+                Show me receivers in 2024 with at least 30 targets, ranked by
+                WOPR (weighted opportunity rating), and include their RACR and
+                receiving EPA
               </li>
             </ul>
           </div>

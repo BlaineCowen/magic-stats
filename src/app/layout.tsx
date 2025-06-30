@@ -3,8 +3,6 @@ import "@/styles/globals.css";
 import { type Metadata } from "next";
 import { Inter } from "next/font/google";
 
-import { TRPCReactProvider } from "@/trpc/react";
-
 export const metadata: Metadata = {
   title: "NFL Stats Query",
   description: "Natural language NFL statistics search engine",
@@ -21,9 +19,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${inter.variable}`}>
-      <body className="min-h-screen bg-slate-50">
-        <TRPCReactProvider>{children}</TRPCReactProvider>
-      </body>
+      <body className="min-h-screen bg-slate-50">{children}</body>
     </html>
   );
 }
