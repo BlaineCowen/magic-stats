@@ -92,6 +92,51 @@ export default function Home() {
     }
   };
 
+  const downloadCSV = () => {
+    if (results.length === 0) return;
+
+    // Get headers from first result
+    const headers = Object.keys(results[0]!);
+
+    // Convert headers to human-readable format
+    const readableHeaders = headers.map(formatColumnHeader);
+
+    // Create CSV content
+    const csvContent = [
+      readableHeaders.join(","), // Header row
+      ...results.map((row) =>
+        headers
+          .map((header) => {
+            const value = row[header];
+            // Handle values that need quotes (strings with commas, quotes, or newlines)
+            const stringValue = formatValue(value ?? null);
+            if (
+              stringValue.includes(",") ||
+              stringValue.includes('"') ||
+              stringValue.includes("\n")
+            ) {
+              return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+            return stringValue;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "nfl_stats_results.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast.success("CSV downloaded successfully!");
+  };
+
   const sendEmail = () => {
     const subject = encodeURIComponent("NFL Stats Query Debug - No Results");
     const body = encodeURIComponent(`User Query: ${query}
@@ -185,9 +230,29 @@ No results were returned. Please help debug this query.`);
 
         {results.length > 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold text-gray-900">
-              Results
-            </h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Results</h2>
+              <button
+                onClick={downloadCSV}
+                className="flex items-center gap-2 rounded bg-green-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+                title="Download as CSV"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+                Download CSV
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
