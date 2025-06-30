@@ -8,6 +8,7 @@ interface ApiResponse {
   results?: QueryResult[];
   error?: string;
   interpretation?: string;
+  r_code?: string;
 }
 
 // Utility function to convert camelCase to human-readable format
@@ -37,14 +38,18 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QueryResult[]>([]);
   const [interpretation, setInterpretation] = useState("");
+  const [rCode, setRCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [hasExecuted, setHasExecuted] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setInterpretation("");
+    setRCode("");
+    setHasExecuted(false);
 
     try {
       const response = await fetch("/api/query", {
@@ -58,11 +63,34 @@ export default function Home() {
         throw new Error(data.error ?? "Failed to fetch results");
       setResults(data.results ?? []);
       setInterpretation(data.interpretation ?? "");
+      setRCode(data.r_code ?? "");
+      setHasExecuted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch results");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const copyToClipboard = async () => {
+    const message = `User Query: ${query}\n\nR Code Generated: ${rCode}\n\nNo results were returned. Please help debug this query.`;
+    try {
+      await navigator.clipboard.writeText(message);
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+    }
+  };
+
+  const sendEmail = () => {
+    const subject = encodeURIComponent("NFL Stats Query Debug - No Results");
+    const body = encodeURIComponent(`User Query: ${query}
+
+R Code Generated: ${rCode}
+
+No results were returned. Please help debug this query.`);
+    window.open(
+      `mailto:blaine.cowen@gmail.com?subject=${subject}&body=${body}`,
+    );
   };
 
   return (
@@ -182,11 +210,77 @@ export default function Home() {
           </div>
         )}
 
-        {!isLoading && !error && results.length === 0 && query && (
-          <div className="text-center text-gray-500">
-            No results found. Try a different query.
-          </div>
-        )}
+        {!isLoading &&
+          !error &&
+          results.length === 0 &&
+          query &&
+          hasExecuted && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6">
+              <h3 className="mb-4 text-lg font-semibold text-yellow-800">
+                No Results Found
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <h4 className="mb-2 font-medium text-yellow-700">
+                    User Query:
+                  </h4>
+                  <p className="rounded bg-yellow-100 p-3 text-yellow-800">
+                    {query}
+                  </p>
+                </div>
+                {rCode && (
+                  <div>
+                    <h4 className="mb-2 font-medium text-yellow-700">
+                      R Code Generated:
+                    </h4>
+                    <pre className="overflow-x-auto rounded bg-yellow-100 p-3 text-sm whitespace-pre-wrap text-yellow-800">
+                      {rCode}
+                    </pre>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={copyToClipboard}
+                    className="flex items-center gap-2 rounded bg-yellow-600 px-4 py-2 text-white transition-colors hover:bg-yellow-700"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                    Copy Debug Info
+                  </button>
+                  <button
+                    onClick={sendEmail}
+                    className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      />
+                    </svg>
+                    Email Debug Info
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
         {!query && (
           <div className="rounded-lg bg-blue-50 p-6 text-blue-700">
