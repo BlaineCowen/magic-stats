@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { SimpleDataTable } from "@/components/simple-data-table";
 
@@ -44,9 +44,27 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasExecuted, setHasExecuted] = useState(false);
+  const [queryCount, setQueryCount] = useState(0);
+  const [isLimitReached, setIsLimitReached] = useState(false);
+
+  // Load query count from localStorage on component mount
+  useEffect(() => {
+    const savedCount = localStorage.getItem("nfl_query_count");
+    const count = savedCount ? parseInt(savedCount, 10) : 0;
+    setQueryCount(count);
+    setIsLimitReached(count >= 50);
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isLimitReached) {
+      setError(
+        "You've reached the limit of 50 queries. Please clear your browser data to reset.",
+      );
+      return;
+    }
+
     setIsLoading(true);
     setError("");
     setRCode("");
@@ -69,6 +87,14 @@ export default function Home() {
       setRCode(data.r_code ?? "");
       setNote(data.note ?? "");
       setHasExecuted(true);
+
+      // Increment query count
+      const newCount = queryCount + 1;
+      setQueryCount(newCount);
+      localStorage.setItem("nfl_query_count", newCount.toString());
+      if (newCount >= 50) {
+        setIsLimitReached(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch results");
       setHasExecuted(true);
@@ -160,6 +186,17 @@ No results were returned. Please help debug this query.`);
           NFL Stats Query
         </h1>
 
+        {queryCount > 0 && (
+          <div className="mb-4 text-center text-sm text-gray-600">
+            Queries used: {queryCount}/50
+            {isLimitReached && (
+              <span className="ml-2 font-medium text-red-600">
+                (Limit reached)
+              </span>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSearch} className="mb-8">
           <div className="flex gap-2">
             <input
@@ -171,7 +208,7 @@ No results were returned. Please help debug this query.`);
             />
             <button
               type="submit"
-              disabled={isLoading || !query.trim()}
+              disabled={isLoading || !query.trim() || isLimitReached}
               className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400 sm:gap-2 sm:px-4 sm:text-base"
             >
               {isLoading ? (
