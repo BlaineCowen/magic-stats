@@ -1367,6 +1367,9 @@ Return ONLY the R code, no markdown formatting, no backticks, no explanations.`;
 "Show me CJ Stroud's top 10 passes by air yards in 2024"
 → rosters <- load_rosters(2024); player_info <- rosters %>% filter(grepl("Stroud", full_name, ignore.case = TRUE)) %>% select(gsis_id, years_exp, full_name) %>% first(); player_id <- player_info$gsis_id; load_pbp(2023) %>% filter(passer_player_id == player_id, pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, receiver_player_name, air_yards, desc) %>% head(10)
 
+"Show me receivers in 2024 with at least 30 targets, ranked by WOPR, and include their RACR and receiving EPA"
+→ load_player_stats(season = 2024) %>% group_by(player_name, recent_team) %>% summarise(total_targets = sum(targets, na.rm = TRUE), wopr = mean(wopr, na.rm = TRUE), racr = mean(racr, na.rm = TRUE), receiving_epa = sum(receiving_epa, na.rm = TRUE)) %>% filter(total_targets >= 30) %>% arrange(desc(wopr)) %>% head(100)
+
 "Show me the top 10 plays of all time in terms of air yards"
 → load_pbp(2023:2024) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc) %>% head(10)
 
