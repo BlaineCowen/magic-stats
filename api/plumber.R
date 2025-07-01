@@ -24,20 +24,17 @@ cat("Preloading NFL data...\n")
 # Load required libraries first
 library(dplyr)
 library(nflreadr)
+library(memoise)
+library(arrow)
 
-# Load current season data
-tryCatch(
-    {
-        cat("Loading current season data...\n")
-        cached_data$current_pbp <- load_pbp(current_season)
-        cached_data$current_rosters <- load_rosters(current_season)
-        cached_data$current_player_stats <- load_player_stats(current_season)
-        cat("Current season data loaded successfully\n")
-    },
-    error = function(e) {
-        cat("Warning: Could not preload current season data:", e$message, "\n")
-    }
-)
+# Memoize nflreadr functions for caching
+load_player_stats <- memoise(load_player_stats)
+load_rosters <- memoise(load_rosters)
+load_schedules <- memoise(load_schedules)
+load_pbp <- memoise(load_pbp)
+
+# Preloading removed - data will be loaded on-demand with memoise caching
+cat("NFL API ready - data will be loaded on-demand with caching\n")
 
 # Function to load data with caching and memory management
 load_data_with_cache <- function(data_type, season) {
@@ -49,16 +46,20 @@ load_data_with_cache <- function(data_type, season) {
         tryCatch(
             {
                 if (data_type == "pbp") {
-                    # For play-by-play, load with memory optimization
-                    cached_data[[cache_key]] <<- load_pbp(season)
+                    # For play-by-play, load with memory optimization using arrow
+                    pbp_data <- load_pbp(season)
+                    cached_data[[cache_key]] <<- arrow_table(pbp_data)
                     # Force garbage collection after loading large datasets
                     gc()
                 } else if (data_type == "rosters") {
                     cached_data[[cache_key]] <<- load_rosters(season)
+                    gc()
                 } else if (data_type == "player_stats") {
                     cached_data[[cache_key]] <<- load_player_stats(season)
+                    gc()
                 } else if (data_type == "schedules") {
                     cached_data[[cache_key]] <<- load_schedules(season)
+                    gc()
                 }
                 cat("Successfully loaded", data_type, "for season", season, "\n")
             },
@@ -70,6 +71,14 @@ load_data_with_cache <- function(data_type, season) {
     }
 
     return(cached_data[[cache_key]])
+}
+
+# Helper function to convert arrow table to data frame if needed
+convert_arrow_to_df <- function(data) {
+    if (inherits(data, "ArrowTable")) {
+        return(as.data.frame(data))
+    }
+    return(data)
 }
 
 # Function to load multiple seasons efficiently with memory management
@@ -90,9 +99,11 @@ load_multiple_seasons <- function(data_type, seasons) {
     # Combine all data frames
     if (data_type %in% c("pbp", "player_stats", "schedules")) {
         cat("Combining", length(seasons), "seasons of", data_type, "data...\n")
-        combined_data <- do.call(rbind, all_data)
+        # Convert arrow tables to data frames for combining
+        all_data_df <- lapply(all_data, convert_arrow_to_df)
+        combined_data <- do.call(rbind, all_data_df)
         # Clear individual season data to free memory
-        rm(all_data)
+        rm(all_data, all_data_df)
         gc()
         return(combined_data)
     } else {
@@ -114,6 +125,7 @@ function(req, code = "") {
             # Load required libraries
             library(dplyr)
             library(nflreadr)
+            library(arrow)
 
             # Suppress nflreadr warnings
             options(nflreadr.verbose = FALSE)
@@ -125,6 +137,14 @@ function(req, code = "") {
             # Execute the code and capture the result
             result <- eval(parse(text = code_modified))
 
+            # Convert arrow table back to regular data frame for JSON
+            if (inherits(result, "ArrowTable")) {
+                result <- as.data.frame(result)
+            }
+
+            # Force garbage collection after execution
+            gc()
+
             # Convert to list for JSON serialization
             if (is.data.frame(result)) {
                 # Convert data frame to list of lists
@@ -135,6 +155,10 @@ function(req, code = "") {
             } else {
                 result_list <- result
             }
+
+            # Clear any intermediate variables and force GC again
+            rm(code_modified)
+            gc()
 
             list(
                 success = TRUE,
@@ -161,7 +185,8 @@ function() {
         cache_dir = cache_dir,
         current_season = get_current_season(),
         cached_data_keys = names(cached_data),
-        memory_usage = paste(round(memory.size() / 1024^2, 2), "MB")
+        memory_usage = paste(round(memory.size() / 1024^2, 2), "MB"),
+        arrow_available = requireNamespace("arrow", quietly = TRUE)
     )
 }
 

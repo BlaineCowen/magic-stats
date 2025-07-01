@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
+import { SimpleDataTable } from "@/components/simple-data-table";
 
 type QueryResult = Record<string, string | number | boolean | null>;
 
 interface ApiResponse {
   results?: QueryResult[];
   error?: string;
-  interpretation?: string;
   r_code?: string;
   note?: string;
 }
@@ -39,7 +39,6 @@ function formatValue(value: string | number | boolean | null): string {
 export default function Home() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QueryResult[]>([]);
-  const [interpretation, setInterpretation] = useState("");
   const [rCode, setRCode] = useState("");
   const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -50,7 +49,6 @@ export default function Home() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
-    setInterpretation("");
     setRCode("");
     setHasExecuted(false);
 
@@ -62,15 +60,18 @@ export default function Home() {
       });
 
       const data = (await response.json()) as ApiResponse;
-      if (!response.ok)
+      if (!response.ok) {
+        setRCode(data.r_code ?? "");
+        setHasExecuted(true);
         throw new Error(data.error ?? "Failed to fetch results");
+      }
       setResults(data.results ?? []);
-      setInterpretation(data.interpretation ?? "");
       setRCode(data.r_code ?? "");
       setNote(data.note ?? "");
       setHasExecuted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch results");
+      setHasExecuted(true);
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +156,7 @@ No results were returned. Please help debug this query.`);
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="mx-auto max-w-3xl">
-        <h1 className="mb-8 text-center text-4xl font-bold text-gray-900">
+        <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
           NFL Stats Query
         </h1>
 
@@ -166,12 +167,12 @@ No results were returned. Please help debug this query.`);
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask any question about NFL stats..."
-              className="flex-1 rounded-lg border border-gray-300 px-4 py-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:px-4 sm:text-base"
             />
             <button
               type="submit"
               disabled={isLoading || !query.trim()}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400"
+              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400 sm:gap-2 sm:px-4 sm:text-base"
             >
               {isLoading ? (
                 <>
@@ -194,7 +195,7 @@ No results were returned. Please help debug this query.`);
                       d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                     ></path>
                   </svg>
-                  Executing...
+                  <span className="hidden sm:inline">Executing...</span>
                 </>
               ) : (
                 <>
@@ -211,7 +212,7 @@ No results were returned. Please help debug this query.`);
                       d="M13 7l5 5m0 0l-5 5m5-5H6"
                     />
                   </svg>
-                  Execute
+                  <span className="hidden sm:inline">Execute</span>
                 </>
               )}
             </button>
@@ -224,31 +225,19 @@ No results were returned. Please help debug this query.`);
           </div>
         )}
 
-        {interpretation && (
-          <div className="mb-6 rounded-lg bg-blue-50 p-4 text-blue-700">
-            <h3 className="mb-2 font-semibold">Query Interpretation:</h3>
-            <p>{interpretation}</p>
-          </div>
-        )}
-
-        {note && (
-          <div className="mb-6 rounded-lg bg-yellow-50 p-4 text-yellow-700">
-            <h3 className="mb-2 font-semibold">Note:</h3>
-            <p>{note}</p>
-          </div>
-        )}
-
         {results.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">Results</h2>
+              <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
+                Results
+              </h2>
               <button
                 onClick={downloadCSV}
-                className="flex items-center gap-2 rounded bg-green-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+                className="flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm"
                 title="Download as CSV"
               >
                 <svg
-                  className="h-4 w-4"
+                  className="h-3 w-3 sm:h-4 sm:w-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -260,118 +249,87 @@ No results were returned. Please help debug this query.`);
                     d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                   />
                 </svg>
-                Download CSV
+                <span className="hidden sm:inline">Download CSV</span>
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {Object.keys(results[0]!).map((key) => (
-                      <th
-                        key={key}
-                        className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-                      >
-                        {formatColumnHeader(key)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {results.map((row, i) => (
-                    <tr key={i}>
-                      {Object.values(row).map((value, j) => (
-                        <td
-                          key={j}
-                          className="px-6 py-4 text-sm whitespace-nowrap text-gray-900"
-                        >
-                          {formatValue(value)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <SimpleDataTable data={results} />
+          </div>
+        )}
+
+        {!isLoading && results.length === 0 && query && hasExecuted && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 sm:p-6">
+            <h3 className="mb-4 text-base font-semibold text-yellow-800 sm:text-lg">
+              No Results Found
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <h4 className="mb-2 text-sm font-medium text-yellow-700 sm:text-base">
+                  User Query:
+                </h4>
+                <p className="rounded bg-yellow-100 p-2 text-sm text-yellow-800 sm:p-3 sm:text-base">
+                  {query}
+                </p>
+              </div>
+              {rCode && (
+                <div>
+                  <h4 className="mb-2 text-sm font-medium text-yellow-700 sm:text-base">
+                    R Code Generated:
+                  </h4>
+                  <pre className="overflow-x-auto rounded bg-yellow-100 p-2 text-xs whitespace-pre-wrap text-yellow-800 sm:p-3 sm:text-sm">
+                    {rCode}
+                  </pre>
+                </div>
+              )}
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:gap-3">
+                <button
+                  onClick={copyToClipboard}
+                  className="flex items-center justify-center gap-1 rounded bg-yellow-600 px-3 py-2 text-sm text-white transition-colors hover:bg-yellow-700 sm:gap-2 sm:px-4"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Copy Debug Info
+                </button>
+                <button
+                  onClick={sendEmail}
+                  className="flex items-center justify-center gap-1 rounded bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 sm:gap-2 sm:px-4"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Email Debug Info
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {!isLoading &&
-          !error &&
-          results.length === 0 &&
-          query &&
-          hasExecuted && (
-            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6">
-              <h3 className="mb-4 text-lg font-semibold text-yellow-800">
-                No Results Found
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="mb-2 font-medium text-yellow-700">
-                    User Query:
-                  </h4>
-                  <p className="rounded bg-yellow-100 p-3 text-yellow-800">
-                    {query}
-                  </p>
-                </div>
-                {rCode && (
-                  <div>
-                    <h4 className="mb-2 font-medium text-yellow-700">
-                      R Code Generated:
-                    </h4>
-                    <pre className="overflow-x-auto rounded bg-yellow-100 p-3 text-sm whitespace-pre-wrap text-yellow-800">
-                      {rCode}
-                    </pre>
-                  </div>
-                )}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={copyToClipboard}
-                    className="flex items-center gap-2 rounded bg-yellow-600 px-4 py-2 text-white transition-colors hover:bg-yellow-700"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Copy Debug Info
-                  </button>
-                  <button
-                    onClick={sendEmail}
-                    className="flex items-center gap-2 rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Email Debug Info
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
         {!query && (
-          <div className="rounded-lg bg-blue-50 p-6 text-blue-700">
-            <h2 className="mb-2 font-semibold">Example queries:</h2>
-            <ul className="space-y-3">
+          <div className="rounded-lg bg-blue-50 p-4 text-blue-700 sm:p-6">
+            <h2 className="mb-2 text-base font-semibold sm:text-lg">
+              Example queries:
+            </h2>
+            <ul className="space-y-2 sm:space-y-3">
               <li className="flex items-start justify-between gap-3">
                 <span className="flex-1">
                   Show me the top 10 quarterbacks in 2024 with at least 200

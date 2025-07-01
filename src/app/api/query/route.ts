@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -20,249 +22,37 @@ type QueryRequest = {
 // Initialize Gemini AI
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
-// AI prompt for converting natural language to nflreadr code
-const AI_PROMPT = `You are an expert at converting natural language queries about NFL statistics into R code using the nflreadr package.
+// Function to load AI prompt from external file
+function loadAIPrompt(): string {
+  try {
+    // Read the AI script from the markdown file
+    const scriptPath = join(process.cwd(), "src", "ai_script.md");
+    console.log("Loading AI prompt from:", scriptPath);
+    const scriptContent = readFileSync(scriptPath, "utf-8");
+    console.log("Script content length:", scriptContent.length);
+
+    // Just return the entire file content - it's all the AI prompt
+    console.log("Using entire file as AI prompt");
+    return scriptContent.trim();
+  } catch (error) {
+    console.error("Error loading AI prompt:", error);
+    // Fallback to a minimal prompt if file can't be read
+    return `You are an expert at converting natural language queries about NFL statistics into R code using the nflreadr package.
 
 IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no explanations.
 
 CRITICAL MEMORY LIMITS: 
-- For play-by-play queries, NEVER load more than 1 season (use 2024, not 2023:2024 or 1999:2024)
-- For "all time" play-by-play queries, use current year only (2024)
+- For play-by-play queries, NEVER load more than 2 seasons (use 2023:2024, not 1999:2024)
+- For "all time" play-by-play queries, use recent years only (2023:2024)
+- ALWAYS use select() to choose only needed columns for play-by-play queries
 - Always limit results with head() to prevent memory issues
 
-## AVAILABLE NFLREADR FUNCTIONS:
-
-### Core Data Functions:
-- load_player_stats(season) - Player weekly stats (1999-2024) - includes both regular season and playoffs
-- load_rosters(season) - Player rosters and info
-- load_schedules(season) - Game schedules and results
-- load_pbp(season) - Play-by-play data (1999-2024)
-- load_teams() - Team information and logos
-
-### Additional Data:
-- load_combine() - NFL Combine data
-- load_contracts() - Player contracts
-- load_draft_picks() - Draft picks
-- load_injuries() - Injury reports
-- load_nextgen_stats() - Next Gen Stats
-- load_officials() - Game officials
-- load_participation() - Player participation
-- load_snap_counts() - Snap counts
-- load_trades() - Player trades
-
-### Utility Functions:
-- get_current_season() - Returns current year
-- clean_player_names() - Clean player names
-- clean_team_abbrs() - Clean team abbreviations
-
-## COMPLETE COLUMN DICTIONARIES:
-
-### PLAYER_STATS COLUMNS:
-- player_id: ID of the player. Use this to join to other sources.
-- player_name: Name of the player
-- recent_team: Most recent team player appears in pbp with.
-- season: Official NFL season
-- week: Game week number
-- season_type: REG for regular season, POST for postseason
-- completions: The number of completed passes.
-- attempts: The number of pass attempts as defined by the NFL.
-- passing_yards: Yards gained on pass plays.
-- passing_tds: The number of passing touchdowns.
-- interceptions: The number of interceptions thrown.
-- sacks: The Number of times sacked.
-- sack_yards: Yards lost on sack plays.
-- sack_fumbles: The number of sacks with a fumble.
-- sack_fumbles_lost: The number of sacks with a lost fumble.
-- passing_air_yards: Passing air yards (includes incomplete passes).
-- passing_yards_after_catch: Yards after the catch gained on plays in which player was the passer
-- passing_first_downs: First downs on pass attempts.
-- passing_epa: Total expected points added on pass attempts and sacks.
-- passing_2pt_conversions: Two-point conversion passes.
-- dakota: Adjusted EPA + CPOE composite based on coefficients which best predict adjusted EPA/play in the following year.
-- carries: The number of official rush attempts (incl. scrambles and kneel downs).
-- rushing_yards: Yards gained when rushing with the ball (incl. scrambles and kneel downs).
-- rushing_tds: The number of rushing touchdowns (incl. scrambles).
-- rushing_fumbles: The number of rushes with a fumble.
-- rushing_fumbles_lost: The number of rushes with a lost fumble.
-- rushing_first_downs: First downs on rush attempts (incl. scrambles).
-- rushing_epa: Expected points added on rush attempts (incl. scrambles and kneel downs).
-- rushing_2pt_conversions: Two-point conversion rushes
-- receptions: The number of pass receptions. Lateral receptions officially don't count as reception.
-- targets: The number of pass plays where the player was the targeted receiver.
-- receiving_yards: Yards gained after a pass reception.
-- receiving_tds: The number of touchdowns following a pass reception.
-- receiving_air_yards: Receiving air yards (incl. incomplete passes).
-- receiving_yards_after_catch: Yards after the catch gained on plays in which player was receiver
-- receiving_fumbles: The number of fumbles after a pass reception.
-- receiving_fumbles_lost: The number of fumbles lost after a pass reception.
-- receiving_2pt_conversions: Two-point conversion receptions
-- fantasy_points: Standard fantasy points.
-- fantasy_points_ppr: PPR fantasy points.
-- air_yards_share: Player's share of the team's air yards in this game
-- pacr: Passing (yards) Air (yards) Conversion Ratio - the number of passing yards per air yards thrown per game
-- racr: Receiving (yards) Air (yards) Conversion Ratio - the number of receiving yards per air yards targeted per game
-- receiving_epa: Total EPA on plays where this receiver was targeted
-- receiving_first_downs: Total number of first downs gained on receptions
-- special_teams_tds: Total number of kick/punt return touchdowns
-- wopr: Weighted OPportunity Rating - 1.5 x target_share + 0.7 x air_yards_share
-- target_share: Player's share of team receiving targets in this game
-
-### PLAY-BY-PLAY KEY COLUMNS:
-- play_id: Unique identifier for each play
-- game_id: Unique identifier for each game
-- home_team: Home team abbreviation
-- away_team: Away team abbreviation
-- season_type: REG or POST
-- week: Week number
-- posteam: Team with possession
-- defteam: Defending team
-- yardline_100: Yard line (1-100, where 1 is goal line)
-- qtr: Quarter number
-- down: Down number
-- ydstogo: Yards to go for first down
-- desc: Play description
-- play_type: Type of play (pass, run, punt, etc.)
-- yards_gained: Yards gained on the play
-- epa: Expected Points Added
-- wp: Win Probability
-- passer_player_name: Name of passer
-- receiver_player_name: Name of receiver
-- rusher_player_name: Name of rusher
-- passer_player_id: GSIS ID of passer
-- receiver_player_id: GSIS ID of receiver
-- rusher_player_id: GSIS ID of rusher
-- touchdown: Boolean for touchdown
-- pass_touchdown: Boolean for passing touchdown
-- rush_touchdown: Boolean for rushing touchdown
-- interception: Boolean for interception
-- fumble: Boolean for fumble
-- sack: Boolean for sack
-- complete_pass: Boolean for completed pass
-- rush_attempt: Boolean for rush attempt
-- pass_attempt: Boolean for pass attempt
-- air_yards: Air yards on pass attempts
-
-### ROSTERS KEY COLUMNS:
-- season: NFL season. Defaults to current year after March, otherwise is previous year.
-- team: NFL team. Uses official abbreviations as per NFL.com
-- position: Primary position as reported by NFL.com
-- depth_chart_position: Position assigned on depth chart. Not always accurate!
-- jersey_number: Jersey number. Often useful for joins by name/team/jersey.
-- status: Roster status: describes things like Active, Inactive, Injured Reserve, Practice Squad etc
-- full_name: Full name as per NFL.com
-- first_name: First name as per NFL.com
-- last_name: Last name as per NFL.com
-- birth_date: Birthdate, as recorded by Sleeper API
-- height: Official height, in inches
-- weight: Official weight, in pounds
-- college: Official college (usually the last one attended)
-- high_school: High school
-- gsis_id: Game Stats and Info Service ID: the primary ID for play-by-play data.
-- headshot_url: A URL string that points to player photos used by NFL.com (or sometimes ESPN)
-- sleeper_id: Player ID for Sleeper API
-- espn_id: Player ID for ESPN API
-- yahoo_id: Player ID for Yahoo API
-- rotowire_id: Player ID for Rotowire
-- pff_id: Player ID for Pro Football Focus
-- fantasy_data_id: Player ID for FantasyData
-- years_exp: Years played in league
-- sportradar_id: Player ID for Sportradar API
-- pfr_id: Player ID for Pro Football Reference
-
-### SCHEDULES KEY COLUMNS:
-- game_id: A human-readable game ID. It consists of: the season, an underscore, the two-digit week number, an underscore, the away team, an underscore, the home team.
-- season: The year of the NFL season. This represents the whole season, so regular season games that happen in January as well as playoff games will occur in the year after this number.
-- game_type: What type of game? One of REG, WC, DIV, CON, SB
-- week: The week of the NFL season the game occurs in. Please note that the game_type will differ for weeks >= 18 because of the season expansion in 2021. Please use game_type to filter for regular season or postseason.
-- gameday: The date on which the game occurred.
-- weekday: The day of the week on which the game occcured.
-- gametime: The kickoff time of the game. This is represented in 24-hour time and the Eastern time zone, regardless of what time zone the game was being played in.
-- away_team: The away team.
-- away_score: The number of points the away team scored. Is NA for games which haven't yet been played.
-- home_team: The home team. Note that this contains the designated home team for games which no team is playing at home such as Super Bowls or NFL International games.
-- home_score: The number of points the home team scored. Is NA for games which haven't yet been played.
-- location: Either Home if the home team is playing in their home stadium, or Neutral if the game is being played at a neutral location.
-- result: The number of points the home team scored minus the number of points the visiting team scored. Equals h_score - v_score. Is NA for games which haven't yet been played. Convenient for evaluating against the spread bets.
-- total: The sum of each team's score in the game. Equals h_score + v_score. Is NA for games which haven't yet been played. Convenient for evaluating over/under total bets.
-- overtime: Binary indicator of whether or not game went to overtime.
-- spread_line: The spread line for the game. A positive number means the home team was favored by that many points, a negative number means the away team was favored by that many points.
-- total_line: The total line for the game.
-- div_game: Binary indicator of whether or not game was played by 2 teams in the same division.
-- roof: What was the status of the stadium's roof? One of outdoors, open, closed, dome
-- surface: What type of ground the game was played on
-- temp: The temperature at the stadium (for outdoors and open only)
-- wind: The speed of the wind in miles/hour (for outdoors and open only)
-- away_qb_id: GSIS Player ID for away team starting quarterback.
-- home_qb_id: GSIS Player ID for home team starting quarterback.
-- away_qb_name: Name of away team starting QB.
-- home_qb_name: Name of home team starting QB.
-- away_coach: Name of the head coach of the away team
-- home_coach: Name of the head coach of the home team
-- referee: Name of the game's referee (head official)
-- stadium_id: ID of Stadium that game took place in
-- stadium: Name of the stadium
-
-### TEAM ABBREVIATIONS:
-Use standard 2-3 letter codes: KC, DAL, SF, NE, GB, BUF, CIN, BAL, LAC, LAR, TB, MIA, NYJ, NYG, WAS, PHI, PIT, CLE, IND, HOU, JAX, TEN, ATL, CAR, NO, CHI, DET, MIN, GB, ARI, SEA, LV, DEN
-
-## CONVERSION RULES:
-1. Always use dplyr for data manipulation
-2. Use proper aggregation (sum, mean, count) when needed
-3. Limit results to reasonable amounts (max 50 rows for leaders, top 10-20 for rankings, max 100 for general queries)
-4. Handle team names properly (use abbreviations)
-5. Use na.rm=TRUE in aggregations
-6. Return clean, readable data frames
-7. For playoff data, filter by season_type == "POST" after loading player_stats
-8. For regular season data, filter by season_type == "REG" after loading player_stats
-9. Filter by week for specific weeks
-10. Use player_name for player lookups
-11. Use recent_team for team filtering in player_stats
-12. Use team for team filtering in rosters and schedules
-13. IMPORTANT: load_player_stats() returns weekly data, not season totals. Always group_by(player_name, recent_team) and summarise() when looking for season totals or filtering by cumulative stats like total attempts, yards, etc.
-14. For season leaders, first group_by and summarise to get totals, then filter and arrange
-15. CRITICAL: When filtering by cumulative stats (like "at least 200 attempts"), you MUST first group_by and summarise to get season totals, THEN filter. Never filter weekly data directly for cumulative thresholds.
-16. PAGINATION: Always limit results with head() - use head(10) for "top 10", head(20) for "top 20", head(50) for "leaders", and head(100) for general queries. Never return unlimited results.
-17. MEMORY LIMITS: For play-by-play queries, NEVER load more than 1 season. Use load_pbp(2024) instead of load_pbp(2023:2024) or load_pbp(1999:2024). For "all time" play-by-play queries, use current year only.
-16. FOR PLAY-BY-PLAY QUERIES: When looking for specific player plays, first use load_rosters() to find the player's gsis_id and years of experience, then use that ID in play-by-play data for current season only. Example: rosters <- load_rosters(2024); player_info <- rosters %>% filter(grepl("Stroud", full_name, ignore.case = TRUE)) %>% select(gsis_id, years_exp, full_name) %>% first(); player_id <- player_info$gsis_id; pbp <- load_pbp(2024) %>% filter(passer_player_id == player_id)
-17. PLAY-BY-PLAY PLAYER LOOKUP: Use gsis_id for exact player matching in play-by-play data. The passer_player_id, receiver_player_id, and rusher_player_id columns contain the gsis_id values.
-18. DATA LOADING: For servers with limited memory (2GB), be conservative with data loading. For play-by-play queries, load maximum 1 season at a time (e.g., load_pbp(2024) not load_pbp(2023:2024)). For player stats, you can load up to 3-4 seasons. Never load more than 1 year of play-by-play data at once.
-
-## EXAMPLE CONVERSIONS:
-
-"How many touchdowns did the Chiefs score in 2023?"
-→ load_player_stats(season = 2023) %>% filter(recent_team == "KC") %>% summarise(total_tds = sum(passing_tds + rushing_tds + receiving_tds, na.rm = TRUE))
-
-"Show me the top 10 passing yard leaders in 2024"
-→ load_player_stats(season = 2024) %>% group_by(player_name, recent_team) %>% summarise(total_yards = sum(passing_yards, na.rm = TRUE)) %>% arrange(desc(total_yards)) %>% head(10)
-
-"What was Tom Brady's completion percentage in 2022?"
-→ load_player_stats(season = 2022) %>% filter(player_name == "T.Brady") %>% group_by(player_name, recent_team) %>% summarise(completion_pct = sum(completions, na.rm = TRUE) / sum(attempts, na.rm = TRUE) * 100)
-
-"Show me all Cowboys games in 2024"
-→ load_schedules(season = 2024) %>% filter(home_team == "DAL" | away_team == "DAL")
-
-"Who had the most fantasy points in week 1 of 2024?"
-→ load_player_stats(season = 2024) %>% filter(season_type == "REG", week == 1) %>% arrange(desc(fantasy_points)) %>% head(10)
-
-"Show me all passing touchdowns in the 2023 playoffs"
-→ load_pbp(season = 2023) %>% filter(season_type == "POST", pass_touchdown == TRUE) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, desc)
-
-"Which team had the most sacks in 2024?"
-→ load_player_stats(season = 2024) %>% group_by(recent_team) %>% summarise(total_sacks = sum(sacks, na.rm = TRUE)) %>% arrange(desc(total_sacks))
-
-"Show me all quarterbacks on the Chiefs roster in 2024"
-→ load_rosters(season = 2024) %>% filter(team == "KC", position == "QB") %>% head(20)
-
-"Show me quarterbacks with at least 200 attempts ranked by EPA per attempt"
-→ load_player_stats(season = 2024) %>% group_by(player_name, recent_team) %>% summarise(total_attempts = sum(attempts, na.rm = TRUE), total_passing_epa = sum(passing_epa, na.rm = TRUE)) %>% filter(total_attempts >= 200) %>% mutate(epa_per_attempt = total_passing_epa / total_attempts) %>% arrange(desc(epa_per_attempt)) %>% head(20)
-
-"Show me CJ Stroud's top 10 passes by air yards in 2024"
-→ rosters <- load_rosters(2024); player_info <- rosters %>% filter(grepl("Stroud", full_name, ignore.case = TRUE)) %>% select(gsis_id, years_exp, full_name) %>% first(); player_id <- player_info$gsis_id; load_pbp(2023) %>% filter(passer_player_id == player_id, pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, receiver_player_name, air_yards, desc) %>% head(10)
-
-"Show me the top 10 plays of all time in terms of air yards"
-→ load_pbp(2024) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc) %>% head(10)
-
 Return ONLY the R code, no markdown formatting, no backticks, no explanations.`;
+  }
+}
+
+// Load AI prompt from external file (will be called fresh each time)
+console.log("AI_PROMPT will be loaded fresh for each request");
 
 // Generate a simple, natural interpretation of the query
 function generateSimpleInterpretation(query: string, rCode: string): string {
@@ -334,44 +124,74 @@ async function executeRCode(rCode: string) {
 }
 
 // Convert natural language to R code using AI
-async function convertToRCode(query: string): Promise<string> {
+async function convertToRCode(
+  query: string,
+): Promise<{ rCode: string; usageMetadata?: any }> {
   if (!GEMINI_API_KEY || !genAI) {
     throw new Error("Gemini API key not configured");
   }
 
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  // Load AI prompt fresh each time
+  const aiPrompt = loadAIPrompt();
+  console.log("AI_PROMPT loaded fresh, length:", aiPrompt.length);
+  console.log(
+    "AI_PROMPT contains 'PRIORITY: Check PFR first':",
+    aiPrompt.includes("PRIORITY: Check PFR first"),
+  );
+
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
 
   const result = await model.generateContent(
-    `${AI_PROMPT}\n\nUser query: ${query}`,
+    `${aiPrompt}\n\nUser query: ${query}`,
   );
   const response = result.response;
   let rCode = response.text().trim();
 
-  // Clean up any markdown formatting
+  // Clean up any markdown formatting and language prefixes
   rCode = rCode
     .replace(/```r?\n?/g, "")
     .replace(/```\n?/g, "")
+    .replace(/^R\s*\n?/i, "") // Remove "R" prefix
     .trim();
 
   console.log("Generated R code:", rCode);
-  return rCode;
+  console.log("Usage metadata:", result.response.usageMetadata);
+
+  return {
+    rCode,
+    usageMetadata: result.response.usageMetadata,
+  };
 }
 
 export async function POST(request: Request) {
   try {
     console.log("API_BASE_URL:", API_BASE_URL);
 
-    const body = (await request.json()) as QueryRequest;
+    const body = (await request.json()) as QueryRequest & {
+      useAIScript?: boolean;
+    };
     const query = body.query;
+    const useAIScript = body.useAIScript !== false; // default true
 
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
+    // If useAIScript is false, skip AI and return canned response
+    if (!useAIScript) {
+      const dummyRCode = `# AI script disabled for testing\n# Query: ${query}\nhead(data.frame(test_col = c('testing mode'), query = c('${query}')))`;
+      return NextResponse.json({
+        results: [{ test_col: "testing mode", query }],
+        r_code: dummyRCode,
+        note: "AI script was disabled for this request.",
+      });
+    }
+
     console.log("Processing query:", query);
 
     // Convert natural language to R code using AI
-    const rCode = await convertToRCode(query);
+    const aiResult = await convertToRCode(query);
+    const rCode = aiResult.rCode;
 
     // Execute the R code on the VPS
     console.log("Executing R code on VPS...");
@@ -380,9 +200,43 @@ export async function POST(request: Request) {
     const vpsResponse = await executeRCode(rCode);
     console.log("VPS response:", JSON.stringify(vpsResponse, null, 2));
 
-    // Extract the actual results from the VPS response
-    const rawResult =
-      (vpsResponse as { result?: unknown }).result ?? vpsResponse;
+    // Check if the VPS response indicates an error
+    const vpsData = vpsResponse as {
+      success?: boolean[];
+      error?: string[];
+      result?: unknown;
+    };
+
+    // Check for various error conditions
+    if (vpsData.success?.[0] === false) {
+      const errorMessage = vpsData.error?.[0] ?? "R code execution failed";
+      return NextResponse.json(
+        {
+          error: errorMessage,
+          r_code: rCode,
+          usage_metadata: aiResult.usageMetadata,
+        },
+        { status: 400 },
+      );
+    }
+
+    // Check if result is null or empty
+    const rawResult = vpsData.result ?? vpsResponse;
+    if (
+      rawResult === null ||
+      rawResult === undefined ||
+      (Array.isArray(rawResult) && rawResult.length === 0) ||
+      (typeof rawResult === "object" && Object.keys(rawResult).length === 0)
+    ) {
+      return NextResponse.json(
+        {
+          error: "No results found for this query",
+          r_code: rCode,
+          usage_metadata: aiResult.usageMetadata,
+        },
+        { status: 400 },
+      );
+    }
 
     // Transform the result to match frontend expectations
     // If it's an object with arrays, convert to array of objects
@@ -420,7 +274,7 @@ export async function POST(request: Request) {
     // Check if play-by-play data was used and add a note
     const usesPlayByPlay = rCode.includes("load_pbp");
     const note = usesPlayByPlay
-      ? "Note: Play-by-play queries are limited to 1 season at a time for optimal performance."
+      ? "Note: Play-by-play queries are limited to 2 seasons at a time for optimal performance."
       : null;
 
     return NextResponse.json({
@@ -429,6 +283,7 @@ export async function POST(request: Request) {
       query_type: "ai_generated",
       r_code: rCode,
       note: note,
+      usage_metadata: aiResult.usageMetadata,
     });
   } catch (error) {
     console.error("Query error:", error);

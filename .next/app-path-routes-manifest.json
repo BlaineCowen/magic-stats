@@ -1,0 +1,6 @@
+{
+  "/api/query/route": "/api/query",
+  "/_not-found/page": "/_not-found",
+  "/page": "/",
+  "/testing/page": "/testing"
+}
