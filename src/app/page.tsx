@@ -10,6 +10,7 @@ interface ApiResponse {
   error?: string;
   interpretation?: string;
   r_code?: string;
+  note?: string;
 }
 
 // Utility function to convert camelCase to human-readable format
@@ -40,6 +41,7 @@ export default function Home() {
   const [results, setResults] = useState<QueryResult[]>([]);
   const [interpretation, setInterpretation] = useState("");
   const [rCode, setRCode] = useState("");
+  const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasExecuted, setHasExecuted] = useState(false);
@@ -65,6 +67,7 @@ export default function Home() {
       setResults(data.results ?? []);
       setInterpretation(data.interpretation ?? "");
       setRCode(data.r_code ?? "");
+      setNote(data.note ?? "");
       setHasExecuted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch results");
@@ -225,6 +228,13 @@ No results were returned. Please help debug this query.`);
           <div className="mb-6 rounded-lg bg-blue-50 p-4 text-blue-700">
             <h3 className="mb-2 font-semibold">Query Interpretation:</h3>
             <p>{interpretation}</p>
+          </div>
+        )}
+
+        {note && (
+          <div className="mb-6 rounded-lg bg-yellow-50 p-4 text-yellow-700">
+            <h3 className="mb-2 font-semibold">Note:</h3>
+            <p>{note}</p>
           </div>
         )}
 
@@ -489,6 +499,34 @@ No results were returned. Please help debug this query.`);
                   onClick={() =>
                     copyExampleQuery(
                       "Show me receivers in 2024 with at least 30 targets, ranked by WOPR (weighted opportunity rating), and include their RACR and receiving EPA",
+                    )
+                  }
+                  className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"
+                  title="Copy query"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
+              </li>
+              <li className="flex items-start justify-between gap-3">
+                <span className="flex-1">
+                  Show me CJ Stroud&apos;s top 10 passes by air yards in 2024
+                </span>
+                <button
+                  onClick={() =>
+                    copyExampleQuery(
+                      "Show me CJ Stroud's top 10 passes by air yards in 2024",
                     )
                   }
                   className="flex-shrink-0 rounded bg-blue-600 p-2 text-white transition-colors hover:bg-blue-700"

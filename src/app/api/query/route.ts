@@ -25,6 +25,11 @@ const AI_PROMPT = `You are an expert at converting natural language queries abou
 
 IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no explanations.
 
+CRITICAL MEMORY LIMITS: 
+- For play-by-play queries, NEVER load more than 1 season (use 2024, not 2023:2024 or 1999:2024)
+- For "all time" play-by-play queries, use current year only (2024)
+- Always limit results with head() to prevent memory issues
+
 ## AVAILABLE NFLREADR FUNCTIONS:
 
 ### Core Data Functions:
@@ -123,6 +128,9 @@ IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no expl
 - passer_player_name: Name of passer
 - receiver_player_name: Name of receiver
 - rusher_player_name: Name of rusher
+- passer_player_id: GSIS ID of passer
+- receiver_player_id: GSIS ID of receiver
+- rusher_player_id: GSIS ID of rusher
 - touchdown: Boolean for touchdown
 - pass_touchdown: Boolean for passing touchdown
 - rush_touchdown: Boolean for rushing touchdown
@@ -132,6 +140,7 @@ IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no expl
 - complete_pass: Boolean for completed pass
 - rush_attempt: Boolean for rush attempt
 - pass_attempt: Boolean for pass attempt
+- air_yards: Air yards on pass attempts
 
 ### ROSTERS KEY COLUMNS:
 - season: NFL season. Defaults to current year after March, otherwise is previous year.
@@ -199,7 +208,7 @@ Use standard 2-3 letter codes: KC, DAL, SF, NE, GB, BUF, CIN, BAL, LAC, LAR, TB,
 ## CONVERSION RULES:
 1. Always use dplyr for data manipulation
 2. Use proper aggregation (sum, mean, count) when needed
-3. Limit results to reasonable amounts (max 50 rows for leaders)
+3. Limit results to reasonable amounts (max 50 rows for leaders, top 10-20 for rankings, max 100 for general queries)
 4. Handle team names properly (use abbreviations)
 5. Use na.rm=TRUE in aggregations
 6. Return clean, readable data frames
@@ -212,6 +221,11 @@ Use standard 2-3 letter codes: KC, DAL, SF, NE, GB, BUF, CIN, BAL, LAC, LAR, TB,
 13. IMPORTANT: load_player_stats() returns weekly data, not season totals. Always group_by(player_name, recent_team) and summarise() when looking for season totals or filtering by cumulative stats like total attempts, yards, etc.
 14. For season leaders, first group_by and summarise to get totals, then filter and arrange
 15. CRITICAL: When filtering by cumulative stats (like "at least 200 attempts"), you MUST first group_by and summarise to get season totals, THEN filter. Never filter weekly data directly for cumulative thresholds.
+16. PAGINATION: Always limit results with head() - use head(10) for "top 10", head(20) for "top 20", head(50) for "leaders", and head(100) for general queries. Never return unlimited results.
+17. MEMORY LIMITS: For play-by-play queries, NEVER load more than 1 season. Use load_pbp(2024) instead of load_pbp(2023:2024) or load_pbp(1999:2024). For "all time" play-by-play queries, use current year only.
+16. FOR PLAY-BY-PLAY QUERIES: When looking for specific player plays, first use load_rosters() to find the player's gsis_id and years of experience, then use that ID in play-by-play data for current season only. Example: rosters <- load_rosters(2024); player_info <- rosters %>% filter(grepl("Stroud", full_name, ignore.case = TRUE)) %>% select(gsis_id, years_exp, full_name) %>% first(); player_id <- player_info$gsis_id; pbp <- load_pbp(2024) %>% filter(passer_player_id == player_id)
+17. PLAY-BY-PLAY PLAYER LOOKUP: Use gsis_id for exact player matching in play-by-play data. The passer_player_id, receiver_player_id, and rusher_player_id columns contain the gsis_id values.
+18. DATA LOADING: For servers with limited memory (2GB), be conservative with data loading. For play-by-play queries, load maximum 1 season at a time (e.g., load_pbp(2024) not load_pbp(2023:2024)). For player stats, you can load up to 3-4 seasons. Never load more than 1 year of play-by-play data at once.
 
 ## EXAMPLE CONVERSIONS:
 
@@ -237,10 +251,16 @@ Use standard 2-3 letter codes: KC, DAL, SF, NE, GB, BUF, CIN, BAL, LAC, LAR, TB,
 → load_player_stats(season = 2024) %>% group_by(recent_team) %>% summarise(total_sacks = sum(sacks, na.rm = TRUE)) %>% arrange(desc(total_sacks))
 
 "Show me all quarterbacks on the Chiefs roster in 2024"
-→ load_rosters(season = 2024) %>% filter(team == "KC", position == "QB")
+→ load_rosters(season = 2024) %>% filter(team == "KC", position == "QB") %>% head(20)
 
 "Show me quarterbacks with at least 200 attempts ranked by EPA per attempt"
-→ load_player_stats(season = 2024) %>% group_by(player_name, recent_team) %>% summarise(total_attempts = sum(attempts, na.rm = TRUE), total_passing_epa = sum(passing_epa, na.rm = TRUE)) %>% filter(total_attempts >= 200) %>% mutate(epa_per_attempt = total_passing_epa / total_attempts) %>% arrange(desc(epa_per_attempt))
+→ load_player_stats(season = 2024) %>% group_by(player_name, recent_team) %>% summarise(total_attempts = sum(attempts, na.rm = TRUE), total_passing_epa = sum(passing_epa, na.rm = TRUE)) %>% filter(total_attempts >= 200) %>% mutate(epa_per_attempt = total_passing_epa / total_attempts) %>% arrange(desc(epa_per_attempt)) %>% head(20)
+
+"Show me CJ Stroud's top 10 passes by air yards in 2024"
+→ rosters <- load_rosters(2024); player_info <- rosters %>% filter(grepl("Stroud", full_name, ignore.case = TRUE)) %>% select(gsis_id, years_exp, full_name) %>% first(); player_id <- player_info$gsis_id; load_pbp(2023) %>% filter(passer_player_id == player_id, pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, receiver_player_name, air_yards, desc) %>% head(10)
+
+"Show me the top 10 plays of all time in terms of air yards"
+→ load_pbp(2024) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc) %>% head(10)
 
 Return ONLY the R code, no markdown formatting, no backticks, no explanations.`;
 
@@ -397,11 +417,18 @@ export async function POST(request: Request) {
     // Generate a simple, natural interpretation
     const interpretation = generateSimpleInterpretation(query, rCode);
 
+    // Check if play-by-play data was used and add a note
+    const usesPlayByPlay = rCode.includes("load_pbp");
+    const note = usesPlayByPlay
+      ? "Note: Play-by-play queries are limited to 1 season at a time for optimal performance."
+      : null;
+
     return NextResponse.json({
       results: results,
       interpretation: interpretation,
       query_type: "ai_generated",
       r_code: rCode,
+      note: note,
     });
   } catch (error) {
     console.error("Query error:", error);

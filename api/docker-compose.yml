@@ -10,6 +10,12 @@ services:
     environment:
       - R_ENVIRON_USER=/app/.Renviron
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1800M
+        reservations:
+          memory: 1000M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

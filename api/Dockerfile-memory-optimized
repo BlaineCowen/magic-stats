@@ -1,0 +1,39 @@
+FROM rocker/r-ver:4.3.2
+
+# Install system dependencies with memory optimization
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    libfontconfig1-dev \
+    libharfbuzz-dev \
+    libfribidi-dev \
+    libfreetype6-dev \
+    libpng-dev \
+    libtiff5-dev \
+    libjpeg-dev \
+    libgomp1 \
+    libopenblas-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set memory limits for R
+ENV R_MAX_MEM_SIZE=1800M
+ENV R_MAX_VSIZE=1800M
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements first (for better Docker caching)
+COPY requirements-memory-optimized.R .
+
+# Install R packages with memory optimization
+RUN Rscript requirements-memory-optimized.R
+
+# Copy API files
+COPY plumber-memory-optimized.R .
+
+# Expose port
+EXPOSE 8000
+
+# Start the API with memory monitoring
+CMD ["Rscript", "-e", "plumber::plumb('plumber-memory-optimized.R')$run(host='0.0.0.0', port=8000)"] 
