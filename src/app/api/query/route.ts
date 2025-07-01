@@ -31,9 +31,17 @@ function loadAIPrompt(): string {
     const scriptContent = readFileSync(scriptPath, "utf-8");
     console.log("Script content length:", scriptContent.length);
 
-    // Just return the entire file content - it's all the AI prompt
-    console.log("Using entire file as AI prompt");
-    return scriptContent.trim();
+    // Read the data dictionaries
+    const dictPath = join(process.cwd(), "src", "nflReadRDicts.md");
+    console.log("Loading data dictionaries from:", dictPath);
+    const dictContent = readFileSync(dictPath, "utf-8");
+    console.log("Dictionary content length:", dictContent.length);
+
+    // Combine the AI script with the data dictionaries
+    const combinedPrompt = `${scriptContent.trim()}\n\n## DATA DICTIONARIES:\n\n${dictContent.trim()}`;
+    console.log("Combined prompt length:", combinedPrompt.length);
+
+    return combinedPrompt;
   } catch (error) {
     console.error("Error loading AI prompt:", error);
     // Fallback to a minimal prompt if file can't be read
@@ -135,8 +143,8 @@ async function convertToRCode(
   const aiPrompt = loadAIPrompt();
   console.log("AI_PROMPT loaded fresh, length:", aiPrompt.length);
   console.log(
-    "AI_PROMPT contains 'PRIORITY: Check PFR first':",
-    aiPrompt.includes("PRIORITY: Check PFR first"),
+    "DEFAULT: Regular season only':",
+    aiPrompt.includes("DEFAULT: Regular season only"),
   );
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
