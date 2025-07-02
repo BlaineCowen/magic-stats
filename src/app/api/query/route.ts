@@ -4,13 +4,8 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/prefer-regexp-exec */
-/* eslint-disable @typescript-eslint/await-thenable */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 const API_BASE_URL = process.env.R_API_URL ?? "http://localhost:8000";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -50,8 +45,8 @@ function loadAIPrompt(): string {
 IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no explanations.
 
 CRITICAL MEMORY LIMITS: 
-- For play-by-play queries, NEVER load more than 2 seasons (use 2023:2024, not 1999:2024)
-- For "all time" play-by-play queries, use recent years only (2023:2024)
+- For play-by-play queries spanning more than 2 seasons, use chunking strategy (load in 2-year chunks, filter/select, then combine)
+- For "all time" play-by-play queries, use chunking to span many years efficiently
 - ALWAYS use select() to choose only needed columns for play-by-play queries
 - Always limit results with head() to prevent memory issues
 

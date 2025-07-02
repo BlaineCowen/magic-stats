@@ -27,8 +27,8 @@ COMMON STATS BY POSITION (ALWAYS INCLUDE WHEN RELEVANT):
 -Be sure to always filter by position when the user specifies so that rbs with a lot of receptions don't get lumped in with wrs
 
 CRITICAL MEMORY LIMITS: 
-- For play-by-play queries, NEVER load more than 2 seasons (use 2023:2024, not 1999:2024)
-- For "all time" play-by-play queries, use recent years only (2023:2024)
+- For play-by-play queries spanning more than 2 seasons, use chunking strategy (load in 2-year chunks, filter/select, then combine)
+- For "all time" play-by-play queries, use chunking to span many years efficiently
 - ALWAYS use select() to choose only needed columns for play-by-play queries
 - Always limit results with head() to prevent memory issues
 
@@ -158,6 +158,8 @@ group_by and summarise to get season totals.
 - ONLY when the required fields exist in the dictionary
 - **NOTE**: For QB advanced stats (2018+), prefer 
 load_pfr_advstats() instead
+- **NOTE**: For receiver stats, ALWAYS include WOPR (weighted opportunity rating) and target_share
+- **NOTE**: For receiver filtering, use targets (not attempts) - receivers don't have attempts
 
 ### Use load_player_stats(stat_type = "defense") for:
 - Defensive statistics (tackles, sacks, interceptions, etc.)
@@ -223,16 +225,16 @@ directly for cumulative thresholds.
 for "top 10", head(20) for "top 20", head(50) for "leaders", 
 and head(100) for general queries. Never return unlimited 
 results.
-19. MEMORY LIMITS: For play-by-play queries, NEVER load more 
-than 2 seasons. Use load_pbp(2023:2024) instead of load_pbp
-(1999:2024). For "all time" play-by-play queries, use recent 
-years only.
+19. MEMORY LIMITS: For play-by-play queries spanning more than 2 seasons, use chunking strategy. For "all time" play-by-play queries, use chunking to span many years efficiently.
 20. COLUMN SELECTION: ALWAYS use select() to choose only needed 
 columns for play-by-play queries. Common patterns: select
 (game_id, week, posteam, desc, wp) for basic plays, select
 (game_id, week, posteam, passer_player_name, 
 receiver_player_name, air_yards, epa, wp, desc) for passing 
 plays.
+21. MEMORY OPTIMIZATION: Use these nflreadr options for better memory efficiency: options(nflreadr.prefer = "parquet"), options(nflreadr.cache = "filesystem"), options(nflreadr.verbose = FALSE)
+22. LAZY EVALUATION: For large play-by-play queries, consider using arrow for lazy evaluation: load_pbp(seasons) %>% as_arrow_table() %>% filter(...) %>% collect()
+23. CHUNKING STRATEGY: For queries spanning many seasons, use chunking to manage memory: load data in 2-year chunks, filter/select, then combine. Example: chunk1 <- load_pbp(2017:2018) %>% filter(...) %>% select(...); chunk2 <- load_pbp(2019:2020) %>% filter(...) %>% select(...); bind_rows(chunk1, chunk2) %>% arrange(...)
 21. FOR PLAY-BY-PLAY QUERIES: When looking for specific player 
 plays, first use load_rosters() to find the player's gsis_id 
 and years of experience, then use that ID in play-by-play data 
@@ -245,11 +247,7 @@ full_name) %>% first(); player_id <- player_info$gsis_id; pbp
 matching in play-by-play data. The passer_player_id, 
 receiver_player_id, and rusher_player_id columns contain the 
 gsis_id values.
-23. DATA LOADING: For servers with limited memory (2GB), be 
-conservative with data loading. For play-by-play queries, load 
-maximum 1 season at a time (e.g., load_pbp(2024) not load_pbp
-(2023:2024)). For player stats, you can load up to 3-4 seasons. 
-Never load more than 1 year of play-by-play data at once.
+23. DATA LOADING: For servers with limited memory (2GB), use chunking strategy for play-by-play queries spanning multiple seasons. For player stats, you can load up to 3-4 seasons. Use 2-year chunks for optimal memory efficiency.
 24. PLAYER IDENTIFICATION: When using play-by-play data 
 (load_pbp), player IDs (passer_player_id, rusher_player_id, 
 receiver_player_id) are GSIS IDs. To get player names and 
@@ -322,8 +320,14 @@ load_player_stats(season = 2024) %>% filter(season_type == "REG") %>% group_by(p
 "Show me the top 15 wide receivers by receiving yards in 2024"
 → load_player_stats(season = 2024) %>% group_by(player_id, recent_team) %>% summarise(total_receiving_yards = sum(receiving_yards, na.rm = TRUE), total_receiving_tds = sum(receiving_tds, na.rm = TRUE), total_targets = sum(targets, na.rm = TRUE), total_receiving_epa = sum(receiving_epa, na.rm = TRUE), total_racr = sum(racr, na.rm = TRUE), total_wopr = sum(wopr, na.rm = TRUE), total_games = n(), .groups = "drop") %>% filter(total_targets >= 30) %>% mutate(avg_receiving_epa = total_receiving_epa / total_targets, avg_racr = total_racr / total_games, avg_wopr = total_wopr / total_games) %>% arrange(desc(total_receiving_yards)) %>% left_join(load_rosters(season = 2024) %>% select(gsis_id, full_name, team), by = c("player_id" = "gsis_id")) %>% select(full_name, team, total_receiving_yards, total_receiving_tds, total_targets, avg_receiving_epa, avg_racr, avg_wopr) %>% head(15)
 
+"Show me receivers with the highest target share in 2024"
+→ load_player_stats(season = 2024) %>% filter(season_type == "REG") %>% group_by(player_id, recent_team) %>% summarise(total_targets = sum(targets, na.rm = TRUE), avg_target_share = mean(target_share, na.rm = TRUE), avg_wopr = mean(wopr, na.rm = TRUE), total_receiving_yards = sum(receiving_yards, na.rm = TRUE), total_receiving_tds = sum(receiving_tds, na.rm = TRUE), games_played = n(), .groups = "drop") %>% filter(total_targets >= 30) %>% arrange(desc(avg_target_share)) %>% left_join(load_rosters(season = 2024) %>% select(gsis_id, full_name, team, position), by = c("player_id" = "gsis_id")) %>% filter(position == "WR") %>% select(full_name, team, avg_target_share, avg_wopr, total_targets, total_receiving_yards, total_receiving_tds, games_played) %>% head(10)
+
 "Show me the top 10 plays of all time in terms of air yards"
 → load_pbp(2023:2024) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% arrange(desc(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc) %>% head(10)
+
+"Show me the longest air yard passes from 2010-2024 using chunking"
+→ chunk1 <- load_pbp(2010:2011) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk2 <- load_pbp(2012:2013) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk3 <- load_pbp(2014:2015) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk4 <- load_pbp(2016:2017) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk5 <- load_pbp(2018:2019) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk6 <- load_pbp(2020:2021) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk7 <- load_pbp(2022:2023) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); chunk8 <- load_pbp(2024) %>% filter(pass_attempt == TRUE, !is.na(air_yards)) %>% select(game_id, week, posteam, passer_player_name, receiver_player_name, air_yards, desc); bind_rows(chunk1, chunk2, chunk3, chunk4, chunk5, chunk6, chunk7, chunk8) %>% arrange(desc(air_yards)) %>% head(10)
 
 "Show me RBs under 27 years old with their rushing stats"
 → load_rosters(season = 2024) %>% filter(position == "RB") %>% mutate(age = as.integer(as.numeric(difftime(Sys.Date(), birth_date, units = "days")) / 365.25)) %>% filter(age < 27) %>% select(gsis_id, full_name, age, team) %>% left_join(load_player_stats(season = 2005:2024) %>% filter(season_type == "REG") %>% group_by(player_id, player_name, recent_team) %>% summarise(rushing_yards = sum(rushing_yards, na.rm = TRUE), rushing_tds = sum(rushing_tds, na.rm = TRUE)), by = c("gsis_id" = "player_id")) %>% select(full_name, team, age, rushing_yards, rushing_tds) %>% arrange(desc(rushing_yards)) %>% head(20)

@@ -5,7 +5,8 @@
 cache_dir <- "/app/cache"
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 
-# Set cache directory for nflreadr
+# Set optimal nflreadr options for memory efficiency
+options(nflreadr.prefer = "parquet")
 options(nflreadr.cache = "filesystem")
 options(nflreadr.verbose = FALSE)
 
@@ -144,6 +145,9 @@ function(req, code = "") {
 
             # Force garbage collection after execution
             gc()
+
+            # Additional garbage collection for memory cleanup
+            gc(verbose = FALSE)
 
             # Convert to list for JSON serialization
             if (is.data.frame(result)) {
