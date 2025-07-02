@@ -35,7 +35,9 @@ CRITICAL MEMORY LIMITS:
 ## AVAILABLE NFLREADR FUNCTIONS:
 
 ### Core Data Functions:
-- load_player_stats(season) - Player weekly stats (1999-2024) - includes both regular season and playoffs
+- load_player_stats(season, stat_type = "offense") - Offensive Player weekly stats (1999-2024) - includes both regular season and playoffs
+- load_player_stats(season, stat_type = "defense") - Defensive Player weekly stats (1999-2024) - includes both regular season and playoffs
+- load_player_stats(season, stat_type = "kicking") - Kicking Player weekly stats (1999-2024) - includes both regular season and playoffs
 - load_rosters(season) - Player rosters and info
 - load_schedules(season) - Game schedules and results
 - load_pbp(season) - Play-by-play data (1999-2024)
@@ -156,6 +158,14 @@ group_by and summarise to get season totals.
 - ONLY when the required fields exist in the dictionary
 - **NOTE**: For QB advanced stats (2018+), prefer 
 load_pfr_advstats() instead
+
+### Use load_player_stats(stat_type = "defense") for:
+- Defensive statistics (tackles, sacks, interceptions, etc.)
+- All fields starting with "def_" (def_tackles, def_sacks, def_interceptions, etc.)
+- When user asks for defensive stats, defensive players, or defensive metrics
+- **CRITICAL**: Defensive stats are in load_player_stats() with stat_type = "defense"
+- **NOTE**: player_name and team columns exist but are inconsistently populated (often NA)
+- **BEST PRACTICE**: Group by player_id only, then join with rosters to get reliable player names and teams
 
 ### Use load_pbp() for:
 - Play-specific analysis (success rates, EPA on specific plays)
@@ -336,10 +346,20 @@ load_player_stats(season = 2024) %>% filter(season_type == "REG") %>% group_by(p
 "Show me QBs with the highest drop percentage in 2024"
 → load_pfr_advstats(season = 2024, stat_type = "pass") %>% group_by(pfr_player_name, team) %>% summarise(avg_drop_pct = mean(passing_drop_pct, na.rm = TRUE), total_games = n()) %>% filter(total_games >= 5) %>% arrange(desc(avg_drop_pct)) %>% select(pfr_player_name, team, avg_drop_pct, total_games) %>% head(20)
 
+"Show me Colin Allred's defensive stats in 2007"
+→ load_rosters(2007) %>% filter(full_name == "Colin Allred") %>% select(gsis_id) %>% pull() -> player_id; if(length(player_id) > 0){ load_player_stats(2007, stat_type = "defense") %>% filter(player_id == local(player_id)) %>% group_by(player_id) %>% summarise(def_tackles = sum(def_tackles, na.rm = TRUE), def_tackles_solo = sum(def_tackles_solo, na.rm = TRUE), def_tackles_with_assist = sum(def_tackles_with_assist, na.rm = TRUE), def_tackle_assists = sum(def_tackle_assists, na.rm = TRUE), def_tackles_for_loss = sum(def_tackles_for_loss, na.rm = TRUE), def_tackles_for_loss_yards = sum(def_tackles_for_loss_yards, na.rm = TRUE), def_fumbles_forced = sum(def_fumbles_forced, na.rm = TRUE), def_sacks = sum(def_sacks, na.rm = TRUE), def_sack_yards = sum(def_sack_yards, na.rm = TRUE), def_qb_hits = sum(def_qb_hits, na.rm = TRUE), def_interceptions = sum(def_interceptions, na.rm = TRUE), def_interception_yards = sum(def_interception_yards, na.rm = TRUE), def_pass_defended = sum(def_pass_defended, na.rm = TRUE), def_tds = sum(def_tds, na.rm = TRUE), def_fumbles = sum(def_fumbles, na.rm = TRUE), def_fumble_recovery_own = sum(def_fumble_recovery_own, na.rm = TRUE), def_fumble_recovery_yards_own = sum(def_fumble_recovery_yards_own, na.rm = TRUE), def_fumble_recovery_opp = sum(def_fumble_recovery_opp, na.rm = TRUE), def_fumble_recovery_yards_opp = sum(def_fumble_recovery_yards_opp, na.rm = TRUE), def_safety = sum(def_safety, na.rm = TRUE), def_penalty = sum(def_penalty, na.rm = TRUE), def_penalty_yards = sum(def_penalty_yards, na.rm = TRUE)) %>% left_join(load_rosters(2007) %>% select(gsis_id, full_name, team), by = c("player_id" = "gsis_id")) %>% select(full_name, team, def_tackles, def_sacks, def_interceptions, def_pass_defended, def_tackles_for_loss, def_fumbles_forced, def_tds) }
+
+"Show me defensive player stats with game averages"
+→ load_player_stats(2024, stat_type = "defense") %>% group_by(player_id) %>% summarise(games_played = n(), def_tackles = sum(def_tackles, na.rm = TRUE), def_tackles_solo = sum(def_tackles_solo, na.rm = TRUE), def_tackles_with_assist = sum(def_tackles_with_assist, na.rm = TRUE), def_tackle_assists = sum(def_tackle_assists, na.rm = TRUE), def_tackles_for_loss = sum(def_tackles_for_loss, na.rm = TRUE), def_tackles_for_loss_yards = sum(def_tackles_for_loss_yards, na.rm = TRUE), def_fumbles_forced = sum(def_fumbles_forced, na.rm = TRUE), def_sacks = sum(def_sacks, na.rm = TRUE), def_sack_yards = sum(def_sack_yards, na.rm = TRUE), def_qb_hits = sum(def_qb_hits, na.rm = TRUE), def_interceptions = sum(def_interceptions, na.rm = TRUE), def_interception_yards = sum(def_interception_yards, na.rm = TRUE), def_pass_defended = sum(def_pass_defended, na.rm = TRUE), def_tds = sum(def_tds, na.rm = TRUE), def_fumbles = sum(def_fumbles, na.rm = TRUE), def_fumble_recovery_own = sum(def_fumble_recovery_own, na.rm = TRUE), def_fumble_recovery_yards_own = sum(def_fumble_recovery_yards_own, na.rm = TRUE), def_fumble_recovery_opp = sum(def_fumble_recovery_opp, na.rm = TRUE), def_fumble_recovery_yards_opp = sum(def_fumble_recovery_yards_opp, na.rm = TRUE), def_safety = sum(def_safety, na.rm = TRUE), def_penalty = sum(def_penalty, na.rm = TRUE), def_penalty_yards = sum(def_penalty_yards, na.rm = TRUE), .groups = "drop") %>% mutate(avg_tackles_per_game = def_tackles / games_played, avg_sacks_per_game = def_sacks / games_played, avg_interceptions_per_game = def_interceptions / games_played, avg_qb_hits_per_game = def_qb_hits / games_played, avg_pass_defended_per_game = def_pass_defended / games_played) %>% left_join(load_rosters(2024) %>% select(gsis_id, full_name, team, position), by = c("player_id" = "gsis_id")) %>% select(full_name, team, position, games_played, def_tackles, avg_tackles_per_game, def_sacks, avg_sacks_per_game, def_interceptions, avg_interceptions_per_game, def_qb_hits, avg_qb_hits_per_game, def_pass_defended, avg_pass_defended_per_game, def_tackles_for_loss, def_fumbles_forced, def_tds) %>% arrange(desc(def_tackles)) %>% head(50)
+
 ### WRONG APPROACH (DO NOT DO THIS):
 "Show me RBs success rate inside 10 yard line"
 → load_player_stats(season = 2024) %>% filter(rush_attempt_inside_10 >= 10) %>% mutate(success_rate = rush_success_inside_10 / rush_attempt_inside_10)
 # WRONG: rush_attempt_inside_10 and rush_success_inside_10 do not exist in player_stats
+
+"Show me Colin Allred's defensive stats"
+→ load_player_stats(2007) %>% filter(player_name == "Colin Allred") %>% select(def_tackles, def_sacks, def_interceptions)
+# WRONG: def_tackles, def_sacks, def_interceptions do not exist in load_player_stats() without stat_type = "defense"
 
 ### CORRECT APPROACH:
 "Show me RBs success rate inside 10 yard line"

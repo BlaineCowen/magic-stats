@@ -134,6 +134,7 @@ async function executeRCode(rCode: string) {
 // Convert natural language to R code using AI
 async function convertToRCode(
   query: string,
+  errorContext?: { rCode: string; error: string },
 ): Promise<{ rCode: string; usageMetadata?: any }> {
   if (!GEMINI_API_KEY || !genAI) {
     throw new Error("Gemini API key not configured");
@@ -149,9 +150,16 @@ async function convertToRCode(
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
 
-  const result = await model.generateContent(
-    `${aiPrompt}\n\nUser query: ${query}`,
-  );
+  let prompt: string;
+  if (errorContext) {
+    // Error correction mode
+    prompt = `${aiPrompt}\n\nYou just attempted to fill a user's request with ${errorContext.rCode} based on their query "${query}". The server returned this error: ${errorContext.error}. Based on your knowledge of nflReadR, please correct the mistake with the R code only.`;
+  } else {
+    // Normal mode
+    prompt = `${aiPrompt}\n\nUser query: ${query}`;
+  }
+
+  const result = await model.generateContent(prompt);
   const response = result.response;
   let rCode = response.text().trim();
 
@@ -198,34 +206,58 @@ export async function POST(request: Request) {
     console.log("Processing query:", query);
 
     // Convert natural language to R code using AI
-    const aiResult = await convertToRCode(query);
-    const rCode = aiResult.rCode;
+    let aiResult = await convertToRCode(query);
+    let rCode = aiResult.rCode;
+    let retryCount = 0;
+    const maxRetries = 1; // Only retry once to avoid infinite loops
+    let vpsResponse: unknown = null;
+    let vpsData: { success?: boolean[]; error?: string[]; result?: unknown } =
+      {};
 
-    // Execute the R code on the VPS
-    console.log("Executing R code on VPS...");
-    console.log("R code to execute:", rCode);
+    while (retryCount <= maxRetries) {
+      // Execute the R code on the VPS
+      console.log(`Executing R code on VPS (attempt ${retryCount + 1})...`);
+      console.log("R code to execute:", rCode);
 
-    const vpsResponse = await executeRCode(rCode);
-    console.log("VPS response:", JSON.stringify(vpsResponse, null, 2));
+      vpsResponse = await executeRCode(rCode);
+      console.log("VPS response:", JSON.stringify(vpsResponse, null, 2));
 
-    // Check if the VPS response indicates an error
-    const vpsData = vpsResponse as {
-      success?: boolean[];
-      error?: string[];
-      result?: unknown;
-    };
+      // Check if the VPS response indicates an error
+      vpsData = vpsResponse as {
+        success?: boolean[];
+        error?: string[];
+        result?: unknown;
+      };
 
-    // Check for various error conditions
-    if (vpsData.success?.[0] === false) {
-      const errorMessage = vpsData.error?.[0] ?? "R code execution failed";
-      return NextResponse.json(
-        {
-          error: errorMessage,
-          r_code: rCode,
-          usage_metadata: aiResult.usageMetadata,
-        },
-        { status: 400 },
-      );
+      // Check for various error conditions
+      if (vpsData.success?.[0] === false) {
+        const errorMessage = vpsData.error?.[0] ?? "R code execution failed";
+
+        // If we haven't retried yet, try to correct the error
+        if (retryCount < maxRetries) {
+          console.log("R code failed, attempting error correction...");
+          aiResult = await convertToRCode(query, {
+            rCode,
+            error: errorMessage,
+          });
+          rCode = aiResult.rCode;
+          retryCount++;
+          continue;
+        } else {
+          // Final attempt failed, return error
+          return NextResponse.json(
+            {
+              error: errorMessage,
+              r_code: rCode,
+              usage_metadata: aiResult.usageMetadata,
+            },
+            { status: 400 },
+          );
+        }
+      }
+
+      // If we get here, the code executed successfully
+      break;
     }
 
     // Check if result is null or empty
