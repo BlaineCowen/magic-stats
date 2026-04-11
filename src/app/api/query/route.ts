@@ -7,6 +7,28 @@ import { join } from "path";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+
+// Simple in-memory cache for queries (works in Node.js server environment)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const queryCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+
+function getCached(query: string) {
+  const cached = queryCache.get(query.toLowerCase().trim());
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return cached.data;
+  }
+  return null;
+}
+
+function setCache(query: string, data: any) {
+  queryCache.set(query.toLowerCase().trim(), {
+    data,
+    timestamp: Date.now()
+  });
+}
+
 const API_BASE_URL = process.env.R_API_URL ?? "http://localhost:8000";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -187,6 +209,14 @@ export async function POST(request: Request) {
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
+    
+    // Check cache first
+    const cachedResponse = getCached(query);
+    if (cachedResponse) {
+      console.log("Serving query from cache:", query);
+      return NextResponse.json({ ...cachedResponse, cached: true });
+    }
+
 
     // If useAIScript is false, skip AI and return canned response
     if (!useAIScript) {
@@ -312,14 +342,19 @@ export async function POST(request: Request) {
       ? "Note: Play-by-play queries are limited to 2 seasons at a time for optimal performance."
       : null;
 
-    return NextResponse.json({
+    const responseData = {
       results: results,
       interpretation: interpretation,
       query_type: "ai_generated",
       r_code: rCode,
       note: note,
       usage_metadata: aiResult.usageMetadata,
-    });
+    };
+    
+    // Save to cache
+    setCache(query, responseData);
+    
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error("Query error:", error);
     const errorMessage =
