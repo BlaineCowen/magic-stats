@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { SimpleDataTable } from "@/components/simple-data-table";
+import { SimpleDataTable, formatColumnHeader, formatValue } from "@/components/simple-data-table";
+import { copyTextToClipboard } from "@/lib/copy-to-clipboard";
 
 type QueryResult = Record<string, string | number | boolean | null>;
 
@@ -11,29 +12,6 @@ interface ApiResponse {
   error?: string;
   r_code?: string;
   note?: string;
-}
-
-// Utility function to convert camelCase to human-readable format
-function formatColumnHeader(header: string): string {
-  return header
-    .replace(/([A-Z])/g, " $1") // Add space before capital letters
-    .replace(/^./, (str) => str.toUpperCase()) // Capitalize first letter
-    .trim();
-}
-
-// Utility function to format values for display
-function formatValue(value: string | number | boolean | null): string {
-  if (value === null || value === undefined) return "N/A";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") {
-    // Check if it's a decimal number
-    if (Number.isInteger(value)) {
-      return value.toString();
-    } else {
-      return value.toFixed(2);
-    }
-  }
-  return value.toString();
 }
 
 export default function Home() {
@@ -69,7 +47,15 @@ export default function Home() {
     setError("");
     setRCode("");
     setHasExecuted(false);
-
+    
+    // Safety timeout to ensure loading state doesn't get stuck
+    const loadingTimeout = setTimeout(() => {
+      console.warn("Loading state stuck for >30s, forcing reset");
+      setIsLoading(false);
+      setError("Request timed out after 30 seconds");
+      setHasExecuted(true);
+    }, 30000);
+    
     try {
       const response = await fetch("/api/query", {
         method: "POST",
@@ -100,26 +86,21 @@ export default function Home() {
       setHasExecuted(true);
     } finally {
       setIsLoading(false);
+      clearTimeout(loadingTimeout);
     }
   };
 
   const copyToClipboard = async () => {
     const message = `User Query: ${query}\n\nR Code Generated: ${rCode}\n\nNo results were returned. Please help debug this query.`;
-    try {
-      await navigator.clipboard.writeText(message);
-    } catch (err) {
-      console.error("Failed to copy to clipboard:", err);
-    }
+    const ok = await copyTextToClipboard(message);
+    if (ok) toast.success("Debug info copied");
+    else toast.error("Could not copy (try HTTPS or click the page first)");
   };
 
   const copyExampleQuery = async (exampleQuery: string) => {
-    try {
-      await navigator.clipboard.writeText(exampleQuery);
-      toast.success("Example query copied to clipboard!");
-    } catch (err) {
-      console.error("Failed to copy to clipboard:", err);
-      toast.error("Failed to copy to clipboard");
-    }
+    const ok = await copyTextToClipboard(exampleQuery);
+    if (ok) toast.success("Example query copied to clipboard!");
+    else toast.error("Could not copy — select text manually if needed");
   };
 
   const downloadCSV = () => {

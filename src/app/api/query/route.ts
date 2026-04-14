@@ -7,7 +7,6 @@ import { join } from "path";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-
 // Simple in-memory cache for queries (works in Node.js server environment)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const queryCache = new Map<string, { data: any; timestamp: number }>();
@@ -25,43 +24,65 @@ function getCached(query: string) {
 function setCache(query: string, data: any) {
   queryCache.set(query.toLowerCase().trim(), {
     data,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
 }
 
-const API_BASE_URL = process.env.R_API_URL ?? "http://localhost:8000";
+const API_BASE_URL =
+  process.env.R_API_URL ?? "http://127.0.0.1:18080";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 type QueryRequest = {
   query: string;
 };
 
-// Initialize Gemini AI
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
-// Function to load AI prompt from external file
+function getOpenAIBaseUrl(): string {
+  const u =
+    process.env.LLM_BASE_URL ||
+    process.env.LMSTUDIO_BASE_URL ||
+    process.env.LM_STUDIO_URL ||
+    process.env.OPENAI_BASE_URL ||
+    "";
+  return u.replace(/\/$/, "");
+}
+
+/** Prefer local OpenAI-compatible (LM Studio, vLLM) when a base URL is set or explicitly requested. */
+function getAIProvider(): "gemini" | "openai-compatible" {
+  const p = process.env.MAGIC_STATS_AI_PROVIDER?.toLowerCase();
+  if (p === "gemini") return "gemini";
+  if (
+    p === "openai" ||
+    p === "local" ||
+    p === "openai-compatible" ||
+    p === "lmstudio"
+  ) {
+    return "openai-compatible";
+  }
+  if (
+    process.env.LLM_BASE_URL ||
+    process.env.LMSTUDIO_BASE_URL ||
+    process.env.OPENAI_BASE_URL
+  ) {
+    return "openai-compatible";
+  }
+  return "gemini";
+}
+
+function useMultiStepPipeline(): boolean {
+  return process.env.AI_PIPELINE !== "single";
+}
+
 function loadAIPrompt(): string {
   try {
-    // Read the AI script from the markdown file
     const scriptPath = join(process.cwd(), "src", "ai_script.md");
-    console.log("Loading AI prompt from:", scriptPath);
     const scriptContent = readFileSync(scriptPath, "utf-8");
-    console.log("Script content length:", scriptContent.length);
-
-    // Read the data dictionaries
     const dictPath = join(process.cwd(), "src", "nflReadRDicts.md");
-    console.log("Loading data dictionaries from:", dictPath);
     const dictContent = readFileSync(dictPath, "utf-8");
-    console.log("Dictionary content length:", dictContent.length);
-
-    // Combine the AI script with the data dictionaries
-    const combinedPrompt = `${scriptContent.trim()}\n\n## DATA DICTIONARIES:\n\n${dictContent.trim()}`;
-    console.log("Combined prompt length:", combinedPrompt.length);
-
-    return combinedPrompt;
+    return `${scriptContent.trim()}\n\n## DATA DICTIONARIES:\n\n${dictContent.trim()}`;
   } catch (error) {
     console.error("Error loading AI prompt:", error);
-    // Fallback to a minimal prompt if file can't be read
     return `You are an expert at converting natural language queries about NFL statistics into R code using the nflreadr package.
 
 IMPORTANT: Return ONLY the R code, no markdown formatting, no backticks, no explanations.
@@ -76,15 +97,27 @@ Return ONLY the R code, no markdown formatting, no backticks, no explanations.`;
   }
 }
 
-// Load AI prompt from external file (will be called fresh each time)
-console.log("AI_PROMPT will be loaded fresh for each request");
+function loadCompactPrompt(): string {
+  try {
+    const p = join(process.cwd(), "src", "ai_compact.md");
+    return readFileSync(p, "utf-8");
+  } catch (e) {
+    console.error("ai_compact.md missing, using truncated fallback", e);
+    return loadAIPrompt().slice(0, 12000);
+  }
+}
 
-// Generate a simple, natural interpretation of the query
+function promptForGemini(): string {
+  const mode = process.env.MAGIC_STATS_PROMPT_MODE?.toLowerCase();
+  if (mode === "compact") return loadCompactPrompt();
+  return loadAIPrompt();
+}
+
+console.log("AI prompts: compact file + optional full dict for Gemini");
+
 function generateSimpleInterpretation(query: string, rCode: string): string {
-  // Extract key information from the R code to create a natural description
   const lowerQuery = query.toLowerCase();
 
-  // Common patterns for different types of queries
   if (rCode.includes("load_player_stats") && rCode.includes("arrange(desc(")) {
     if (lowerQuery.includes("top") || lowerQuery.includes("leader")) {
       const match = /head\((\d+)\)/.exec(rCode);
@@ -130,11 +163,9 @@ function generateSimpleInterpretation(query: string, rCode: string): string {
     return `Play-by-play data`;
   }
 
-  // Default fallback - clean up the original query
   return query.replace(/[?]/g, "").trim();
 }
 
-// Helper function to call R API with custom code
 async function executeRCode(rCode: string) {
   const response = await fetch(`${API_BASE_URL}/execute`, {
     method: "POST",
@@ -148,47 +179,163 @@ async function executeRCode(rCode: string) {
   return response.json() as Promise<unknown>;
 }
 
-// Convert natural language to R code using AI
-async function convertToRCode(
-  query: string,
-  errorContext?: { rCode: string; error: string },
-): Promise<{ rCode: string; usageMetadata?: any }> {
-  if (!GEMINI_API_KEY || !genAI) {
-    throw new Error("Gemini API key not configured");
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+async function openaiCompatibleChat(
+  messages: ChatMessage[],
+  opts: { model: string; maxTokens: number },
+): Promise<string> {
+  const baseUrl = getOpenAIBaseUrl();
+  const apiKey = process.env.LLM_API_KEY ?? "lm-studio";
+  const url = baseUrl.endsWith("/v1")
+    ? `${baseUrl}/chat/completions`
+    : `${baseUrl}/v1/chat/completions`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      messages,
+      max_tokens: opts.maxTokens,
+      temperature: 0.15,
+    }),
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`LLM HTTP ${res.status}: ${t.slice(0, 800)}`);
   }
 
-  // Load AI prompt fresh each time
-  const aiPrompt = loadAIPrompt();
-  console.log("AI_PROMPT loaded fresh, length:", aiPrompt.length);
-  console.log(
-    "DEFAULT: Regular season only':",
-    aiPrompt.includes("DEFAULT: Regular season only"),
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("LLM returned empty content");
+  return content;
+}
+
+function stripRCodeFence(raw: string): string {
+  return raw
+    .trim()
+    .replace(/```r?\n?/gi, "")
+    .replace(/```\n?/g, "")
+    .replace(/^R\s*\n?/i, "")
+    .trim();
+}
+
+/**
+ * Step 1: small JSON plan (local models handle this better than 130k tokens of dict + R in one shot).
+ */
+async function planQueryOpenAI(
+  query: string,
+  model: string,
+): Promise<string | null> {
+  if (!useMultiStepPipeline()) return null;
+
+  const system = `You are a planner for NFL nflreadr (R) queries. Reply with ONE JSON object only (no markdown fences), keys:
+{"datasets":["load_player_stats"|"load_pbp"|"load_schedules"|"load_rosters"],"seasons":[2024],"season_type":"REG"|"POST"|"any","pbp_max_seasons":1,"task":"one short sentence"}
+Rules: use at most 2 seasons for load_pbp; prefer 2024 if year unspecified.`;
+
+  const raw = await openaiCompatibleChat(
+    [
+      { role: "system", content: system },
+      { role: "user", content: query },
+    ],
+    { model, maxTokens: 400 },
   );
+  return raw.trim();
+}
+
+async function convertToRCodeOpenAI(
+  query: string,
+  errorContext?: { rCode: string; error: string },
+): Promise<{ rCode: string; usageMetadata?: unknown }> {
+  const baseUrl = getOpenAIBaseUrl();
+  if (!baseUrl) {
+    throw new Error(
+      "Set LLM_BASE_URL (OpenAI-compatible API base, e.g. http://127.0.0.1:1234/v1 for LM Studio)",
+    );
+  }
+
+  const model =
+    process.env.LLM_MODEL ??
+    process.env.LMSTUDIO_MODEL_ID ??
+    "local-model";
+
+  const compact = loadCompactPrompt();
+
+  let plan: string | null = null;
+  if (!errorContext) {
+    try {
+      plan = await planQueryOpenAI(query, model);
+    } catch (e) {
+      console.warn("Plan step failed, continuing with single-shot:", e);
+    }
+  }
+
+  const parts: string[] = [];
+  if (plan) parts.push(`QUERY_PLAN_JSON:\n${plan}`);
+  parts.push(`USER_QUERY:\n${query}`);
+  if (errorContext) {
+    parts.push(
+      `PREVIOUS_R:\n${errorContext.rCode}\n\nERROR:\n${errorContext.error}`,
+    );
+  }
+
+  const system = `${compact}
+
+Return ONLY valid R code. No markdown, no backticks, no commentary.`;
+
+  const rRaw = await openaiCompatibleChat(
+    [
+      { role: "system", content: system },
+      { role: "user", content: parts.join("\n\n") },
+    ],
+    { model, maxTokens: 4096 },
+  );
+
+  const rCode = stripRCodeFence(rRaw);
+  console.log("Generated R code (openai-compatible):", rCode);
+
+  return {
+    rCode,
+    usageMetadata: {
+      provider: "openai-compatible",
+      model,
+      baseUrl: baseUrl.slice(0, 48),
+    },
+  };
+}
+
+async function convertToRCodeGemini(
+  query: string,
+  errorContext?: { rCode: string; error: string },
+): Promise<{ rCode: string; usageMetadata?: unknown }> {
+  if (!GEMINI_API_KEY || !genAI) {
+    throw new Error(
+      "Gemini API key not configured (GEMINI_API_KEY), or switch to local LLM with LLM_BASE_URL + MAGIC_STATS_AI_PROVIDER=openai-compatible",
+    );
+  }
+
+  const aiPrompt = promptForGemini();
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-001" });
 
   let prompt: string;
   if (errorContext) {
-    // Error correction mode
     prompt = `${aiPrompt}\n\nYou just attempted to fill a user's request with ${errorContext.rCode} based on their query "${query}". The server returned this error: ${errorContext.error}. Based on your knowledge of nflReadR, please correct the mistake with the R code only.`;
   } else {
-    // Normal mode
     prompt = `${aiPrompt}\n\nUser query: ${query}`;
   }
 
   const result = await model.generateContent(prompt);
-  const response = result.response;
-  let rCode = response.text().trim();
+  const rCode = stripRCodeFence(result.response.text());
 
-  // Clean up any markdown formatting and language prefixes
-  rCode = rCode
-    .replace(/```r?\n?/g, "")
-    .replace(/```\n?/g, "")
-    .replace(/^R\s*\n?/i, "") // Remove "R" prefix
-    .trim();
-
-  console.log("Generated R code:", rCode);
-  console.log("Usage metadata:", result.response.usageMetadata);
+  console.log("Generated R code (Gemini):", rCode);
 
   return {
     rCode,
@@ -196,9 +343,20 @@ async function convertToRCode(
   };
 }
 
+async function convertToRCode(
+  query: string,
+  errorContext?: { rCode: string; error: string },
+): Promise<{ rCode: string; usageMetadata?: unknown }> {
+  const provider = getAIProvider();
+  if (provider === "openai-compatible") {
+    return convertToRCodeOpenAI(query, errorContext);
+  }
+  return convertToRCodeGemini(query, errorContext);
+}
+
 export async function POST(request: Request) {
   try {
-    console.log("API_BASE_URL:", API_BASE_URL);
+    console.log("API_BASE_URL:", API_BASE_URL, "AI:", getAIProvider());
 
     const body = (await request.json()) as QueryRequest & {
       useAIScript?: boolean;
@@ -209,16 +367,13 @@ export async function POST(request: Request) {
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
-    
-    // Check cache first
+
     const cachedResponse = getCached(query);
     if (cachedResponse) {
       console.log("Serving query from cache:", query);
       return NextResponse.json({ ...cachedResponse, cached: true });
     }
 
-
-    // If useAIScript is false, skip AI and return canned response
     if (!useAIScript) {
       const dummyRCode = `# AI script disabled for testing\n# Query: ${query}\nhead(data.frame(test_col = c('testing mode'), query = c('${query}')))`;
       return NextResponse.json({
@@ -230,49 +385,54 @@ export async function POST(request: Request) {
 
     console.log("Processing query:", query);
 
-    // Convert natural language to R code using AI
     let aiResult = await convertToRCode(query);
     let rCode = aiResult.rCode;
     let retryCount = 0;
-    const maxRetries = 1; // Only retry once to avoid infinite loops
-    let vpsResponse: unknown = null;
+    const maxRetries = getAIProvider() === "openai-compatible" ? 2 : 1;
     let vpsData: { success?: boolean[]; error?: string[]; result?: unknown } =
       {};
 
     while (retryCount <= maxRetries) {
-      // Execute the R code on the VPS
       console.log(`Executing R code on VPS (attempt ${retryCount + 1})...`);
       console.log("R code to execute:", rCode);
 
-      vpsResponse = await executeRCode(rCode);
+      const vpsResponse = await executeRCode(rCode);
       console.log("VPS response:", JSON.stringify(vpsResponse, null, 2));
 
-      // Check if the VPS response indicates an error
       vpsData = vpsResponse as {
         success?: boolean[];
         error?: string[];
         result?: unknown;
       };
 
-      // Check for various error conditions
-      if (vpsData.success?.[0] === false) {
-        const errorMessage = vpsData.error?.[0] ?? "R code execution failed";
+      const raw = vpsResponse as Record<string, unknown>;
+      const succ = raw.success;
+      const failed =
+        succ === false ||
+        (Array.isArray(succ) && succ[0] === false);
+      if (failed) {
+        const errRaw = raw.error;
+        const errorMessage =
+          (Array.isArray(errRaw) ? errRaw[0] : errRaw) ??
+          "R code execution failed";
+        const errorMessageStr =
+          typeof errorMessage === "string"
+            ? errorMessage
+            : String(errorMessage);
 
-        // If we haven't retried yet, try to correct the error
         if (retryCount < maxRetries) {
           console.log("R code failed, attempting error correction...");
           aiResult = await convertToRCode(query, {
             rCode,
-            error: errorMessage,
+            error: errorMessageStr,
           });
           rCode = aiResult.rCode;
           retryCount++;
           continue;
         } else {
-          // Final attempt failed, return error
           return NextResponse.json(
             {
-              error: errorMessage,
+              error: errorMessageStr,
               r_code: rCode,
               usage_metadata: aiResult.usageMetadata,
             },
@@ -281,12 +441,10 @@ export async function POST(request: Request) {
         }
       }
 
-      // If we get here, the code executed successfully
       break;
     }
 
-    // Check if result is null or empty
-    const rawResult = vpsData.result ?? vpsResponse;
+    const rawResult = vpsData.result;
     if (
       rawResult === null ||
       rawResult === undefined ||
@@ -303,18 +461,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Transform the result to match frontend expectations
-    // If it's an object with arrays, convert to array of objects
     let results;
     if (
       rawResult &&
       typeof rawResult === "object" &&
       !Array.isArray(rawResult)
     ) {
-      // Check if values are arrays (like {"total_tds": [15]})
       const firstValue = Object.values(rawResult)[0];
       if (Array.isArray(firstValue)) {
-        // Convert {"total_tds": [15]} to [{"total_tds": 15}]
         const keys = Object.keys(rawResult);
         const length = firstValue.length;
         results = Array.from({ length }, (_, i) => {
@@ -326,21 +480,21 @@ export async function POST(request: Request) {
           return obj;
         });
       } else {
-        // Convert {"total_tds": 15} to [{"total_tds": 15}]
         results = [rawResult];
       }
     } else {
       results = rawResult;
     }
 
-    // Generate a simple, natural interpretation
     const interpretation = generateSimpleInterpretation(query, rCode);
 
-    // Check if play-by-play data was used and add a note
     const usesPlayByPlay = rCode.includes("load_pbp");
+    const dataSourceNote =
+      "Data: nflreadr → R executor (not Postgres). PBP coverage follows nflverse releases; for warehouse SQL use a separate DB route.";
+
     const note = usesPlayByPlay
-      ? "Note: Play-by-play queries are limited to 2 seasons at a time for optimal performance."
-      : null;
+      ? `Note: Play-by-play queries use small season windows. ${dataSourceNote}`
+      : dataSourceNote;
 
     const responseData = {
       results: results,
@@ -350,10 +504,9 @@ export async function POST(request: Request) {
       note: note,
       usage_metadata: aiResult.usageMetadata,
     };
-    
-    // Save to cache
+
     setCache(query, responseData);
-    
+
     return NextResponse.json(responseData);
   } catch (error) {
     console.error("Query error:", error);
