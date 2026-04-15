@@ -68,6 +68,7 @@ export default function Home() {
     setIsLoading(true);
     setError("");
     setRCode("");
+    setNote("");
     setHasExecuted(false);
 
     try {
@@ -305,6 +306,12 @@ No results were returned. Please help debug this query.`);
               No Results Found
             </h3>
             <div className="space-y-4">
+              {note && (
+                <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                  <div className="font-medium">Note:</div>
+                  <p>{note}</p>
+                </div>
+              )}
               <div>
                 <h4 className="mb-2 text-sm font-medium text-yellow-700 sm:text-base">
                   User Query:
