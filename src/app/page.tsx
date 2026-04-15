@@ -290,6 +290,12 @@ No results were returned. Please help debug this query.`);
               </button>
             </div>
             <SimpleDataTable data={results} />
+            {note && (
+              <div className="mt-4 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                <div className="font-medium">Note:</div>
+                <p>{note}</p>
+              </div>
+            )}
           </div>
         )}
 

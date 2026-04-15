@@ -9,7 +9,6 @@ import { join } from "path";
 
 
 // Simple in-memory cache for queries (works in Node.js server environment)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const queryCache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
 
