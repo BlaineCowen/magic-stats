@@ -119,7 +119,7 @@ export default function MuscleConfigPage() {
           .filter(e => e.translations[0]?.name)
           .map(e => ({
             id: e.id,
-            name: e.translations[0].name,
+            name: e.translations[0]!.name,
             muscles: e.muscles.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
             muscles_secondary: e.muscles_secondary.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
           }))
