@@ -1,10 +1,9 @@
 // src/components/workout/MuscleMap.tsx
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { MouseEvent } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { muscleActivation, type WorkoutRow } from "@/lib/workout"
-import { MUSCLE_LABEL, type MuscleId, type MuscleTarget } from "@/lib/muscleMap"
+import { MUSCLE_TO_LIB_SLUG, LIB_SLUG_LABEL, type MuscleId, type MuscleTarget, type LibMuscleSlug } from "@/lib/muscleMap"
 import MuscleSvg from "@/components/workout/MuscleSvg"
 
 const ACCENT = "#00aaff"
@@ -25,9 +24,7 @@ export default function MuscleMap({ rows, user }: Props) {
   const [mappings, setMappings] = useState<Record<string, MuscleTarget>>({})
   const [loadingMap, setLoadingMap] = useState(true)
   const [metric, setMetric] = useState<"sets" | "volume">("sets")
-  const [hovered, setHovered] = useState<MuscleId | null>(null)
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [selected, setSelected] = useState<LibMuscleSlug | null>(null)
 
   useEffect(() => {
     setLoadingMap(true)
@@ -57,19 +54,21 @@ export default function MuscleMap({ rows, user }: Props) {
     return result
   }, [activation, metric])
 
-  function handleHover(id: MuscleId | null, e?: MouseEvent<SVGElement>) {
-    setHovered(id)
-    if (e && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect()
-      setTooltipPos({ x: e.clientX - rect.left + 14, y: e.clientY - rect.top - 24 })
-    }
+  function handleSelect(slug: LibMuscleSlug | null) {
+    setSelected(slug)
   }
 
-  function formatStat(id: MuscleId): string {
-    const v = activation.get(id)
-    if (!v) return "0 sets"
-    if (metric === "sets") return `${v.sets.toFixed(1)} sets`
-    return `${Math.round(v.volume).toLocaleString()} lbs`
+  function formatStat(slug: LibMuscleSlug): string {
+    let totalSets = 0
+    let totalVolume = 0
+    for (const [id, v] of activation) {
+      if (MUSCLE_TO_LIB_SLUG[id] === slug) {
+        totalSets += v.sets
+        totalVolume += v.volume
+      }
+    }
+    if (metric === "sets") return `${totalSets.toFixed(1)} sets`
+    return `${Math.round(totalVolume).toLocaleString()} lbs`
   }
 
   if (loadingMap) {
@@ -81,7 +80,7 @@ export default function MuscleMap({ rows, user }: Props) {
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }}>
+    <div style={{ position: "relative" }}>
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", gap: "4px" }}>
@@ -116,35 +115,23 @@ export default function MuscleMap({ rows, user }: Props) {
       <div style={{ display: "flex", gap: "3rem", justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Front</p>
-          <MuscleSvg view="front" intensities={intensities} onHover={handleHover} />
+          <MuscleSvg view="front" intensities={intensities} selected={selected} onSelect={handleSelect} />
         </div>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Back</p>
-          <MuscleSvg view="back" intensities={intensities} onHover={handleHover} />
+          <MuscleSvg view="back" intensities={intensities} selected={selected} onSelect={handleSelect} />
         </div>
       </div>
 
-      {/* Tooltip */}
-      {hovered && (
-        <div
-          style={{
-            position: "absolute",
-            left: tooltipPos.x,
-            top: tooltipPos.y,
-            background: "#1a1f2e",
-            border: "1px solid #2d3748",
-            borderRadius: "6px",
-            padding: "6px 10px",
-            fontSize: "0.82rem",
-            color: "#e2e8f0",
-            pointerEvents: "none",
-            whiteSpace: "nowrap",
-            zIndex: 20,
-          }}
-        >
-          <span style={{ color: ACCENT, fontWeight: 600 }}>{MUSCLE_LABEL[hovered]}</span>
-          {" — "}
-          {formatStat(hovered)}
+      {/* Selected muscle stats */}
+      {selected && (
+        <div style={{ textAlign: "center", marginTop: "1.5rem", padding: "10px 16px", background: "#1a1f2e", border: "1px solid #2d3748", borderRadius: "8px", display: "inline-block", margin: "1.5rem auto 0", width: "100%" }}>
+          <span style={{ color: "#00aaff", fontWeight: 600, fontSize: "0.9rem" }}>
+            {LIB_SLUG_LABEL[selected]}
+          </span>
+          <span style={{ color: "#94a3b8", marginLeft: "8px", fontSize: "0.85rem" }}>
+            — {formatStat(selected)}
+          </span>
         </div>
       )}
     </div>

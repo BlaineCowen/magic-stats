@@ -97,3 +97,50 @@ export function tokenOverlap(a: string, b: string): number {
   const union = new Set([...wordsA, ...wordsB]).size
   return intersection / union
 }
+
+// Library muscle slugs from react-muscle-highlighter
+export type LibMuscleSlug =
+  | "abs" | "biceps" | "calves" | "chest" | "deltoids" | "forearm"
+  | "gluteal" | "hamstring" | "lower-back" | "obliques" | "quadriceps"
+  | "trapezius" | "triceps" | "upper-back"
+
+// Maps our MuscleIds to library slugs (null = no visual equivalent)
+export const MUSCLE_TO_LIB_SLUG: Record<MuscleId, LibMuscleSlug | null> = {
+  "upper-chest": "chest",
+  "lower-chest": "chest",
+  "ant-deltoid": "deltoids",
+  "lat-deltoid": "deltoids",
+  "post-deltoid": "deltoids",
+  "lats": "upper-back",
+  "upper-back": "upper-back",
+  "lower-back": "lower-back",
+  "traps": "trapezius",
+  "biceps": "biceps",
+  "triceps": "triceps",
+  "forearms": "forearm",
+  "upper-abs": "abs",
+  "lower-abs": "abs",
+  "obliques": "obliques",
+  "glutes": "gluteal",
+  "quads": "quadriceps",
+  "hamstrings": "hamstring",
+  "calves": "calves",
+  "hip-flexors": null,
+}
+
+export const LIB_SLUG_LABEL: Record<LibMuscleSlug, string> = {
+  "abs": "Abs",
+  "biceps": "Biceps",
+  "calves": "Calves",
+  "chest": "Chest",
+  "deltoids": "Deltoids",
+  "forearm": "Forearms",
+  "gluteal": "Glutes",
+  "hamstring": "Hamstrings",
+  "lower-back": "Lower Back",
+  "obliques": "Obliques",
+  "quadriceps": "Quads",
+  "trapezius": "Traps",
+  "triceps": "Triceps",
+  "upper-back": "Upper Back / Lats",
+}
