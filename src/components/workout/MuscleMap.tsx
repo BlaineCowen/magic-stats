@@ -105,7 +105,7 @@ export default function MuscleMap({ rows, user }: Props) {
           ))}
         </div>
         <a
-          href="/workout/muscle-config"
+          href={`/workout/muscle-config?user=${user}`}
           style={{ fontSize: "0.8rem", color: MUTED, textDecoration: "none" }}
         >
           ⚙ Review Mappings

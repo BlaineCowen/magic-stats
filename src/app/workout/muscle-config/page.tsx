@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { MUSCLE_LABEL, type MuscleId } from "@/lib/muscleMap"
 
 const ACCENT = "#00aaff"
@@ -36,6 +37,9 @@ const PILL_BASE = {
 }
 
 export default function MuscleConfigPage() {
+  const searchParams = useSearchParams()
+  const user = searchParams.get("user") ?? "blaine"
+
   const [rows, setRows] = useState<MappingRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>("review")
@@ -45,18 +49,19 @@ export default function MuscleConfigPage() {
   // Edit state
   const [editPrimary, setEditPrimary] = useState<Set<MuscleId>>(new Set())
   const [editSecondary, setEditSecondary] = useState<Set<MuscleId>>(new Set())
+  const [editWgerId, setEditWgerId] = useState<number | null>(null)
   const [wgerSearch, setWgerSearch] = useState("")
   const [wgerResults, setWgerResults] = useState<WgerResult[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/workout/muscles")
+    fetch(`/api/workout/muscles?user=${user}`)
       .then(r => r.json())
       .then((d: { mappings?: MappingRow[] }) => setRows(d.mappings ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   const filtered = rows
     .filter(r => {
@@ -76,6 +81,7 @@ export default function MuscleConfigPage() {
     setEditId(row.exerciseName)
     setEditPrimary(new Set(row.primary))
     setEditSecondary(new Set(row.secondary))
+    setEditWgerId(row.wgerId ?? null)
     setWgerSearch(row.wgerName ?? "")
     setWgerResults([])
   }
@@ -114,6 +120,7 @@ export default function MuscleConfigPage() {
 
   function pickWgerResult(r: WgerResult) {
     setWgerSearch(r.name)
+    setEditWgerId(r.id)
     setEditPrimary(new Set(r.muscles))
     setEditSecondary(new Set(r.muscles_secondary))
     setWgerResults([])
@@ -130,6 +137,7 @@ export default function MuscleConfigPage() {
           primary: [...editPrimary],
           secondary: [...editSecondary],
           wgerName: wgerSearch || null,
+          wgerId: editWgerId ?? undefined,
         }),
       })
       setRows(prev =>
