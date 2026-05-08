@@ -19,7 +19,7 @@ const MAPPINGS_PATH = `${DATA_DIR}/muscle_mappings.json`
 
 // exerciseinfo returns muscles as objects and name via translations[]
 interface WgerMuscleRef { id: number }
-interface WgerTranslation { name: string }
+interface WgerTranslation { language: number; name: string }
 interface WgerExercise {
   id: number
   muscles: WgerMuscleRef[]
@@ -95,9 +95,9 @@ export async function GET(req: Request) {
     // 2. Fetch Wger exercises (exerciseinfo includes names + muscle objects)
     const wgerExercises = await fetchWgerExercises()
 
-    // Pre-normalize Wger names once; name lives in translations[0]
+    // Pre-normalize Wger names once; use the English (language=2) translation
     const normalized = wgerExercises
-      .map(e => ({ ...e, name: e.translations[0]?.name ?? "" }))
+      .map(e => ({ ...e, name: e.translations.find(t => t.language === 2)?.name ?? "" }))
       .filter(e => e.name)
       .map(e => ({ ...e, norm: normalizeExerciseName(e.name) }))
 

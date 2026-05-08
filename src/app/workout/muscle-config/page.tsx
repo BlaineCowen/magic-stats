@@ -110,16 +110,17 @@ export default function MuscleConfigPage() {
           id: number
           muscles: { id: number }[]
           muscles_secondary: { id: number }[]
-          translations: { name: string }[]
+          translations: { language: number; name: string }[]
         }[]
       }
       const { WGER_MUSCLE_MAP } = await import("@/lib/muscleMap")
       setWgerResults(
         data.results
-          .filter(e => e.translations[0]?.name)
+          .map(e => ({ ...e, enName: e.translations.find(t => t.language === 2)?.name ?? "" }))
+          .filter(e => e.enName)
           .map(e => ({
             id: e.id,
-            name: e.translations[0]!.name,
+            name: e.enName,
             muscles: e.muscles.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
             muscles_secondary: e.muscles_secondary.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
           }))
