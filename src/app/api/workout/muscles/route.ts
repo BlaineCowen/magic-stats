@@ -93,11 +93,13 @@ export async function GET(req: Request) {
     // 2. Fetch Wger exercises
     const wgerExercises = await fetchWgerExercises()
 
-    // Pre-normalize Wger names once
-    const normalized = wgerExercises.map(e => ({
-      ...e,
-      norm: normalizeExerciseName(e.name),
-    }))
+    // Pre-normalize Wger names once (skip entries with no name)
+    const normalized = wgerExercises
+      .filter(e => e.name)
+      .map(e => ({
+        ...e,
+        norm: normalizeExerciseName(e.name),
+      }))
 
     // 3. Load saved overrides
     const overrides = loadOverrides()
