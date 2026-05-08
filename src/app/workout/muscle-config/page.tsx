@@ -52,6 +52,8 @@ export default function MuscleConfigPage() {
   const [editWgerId, setEditWgerId] = useState<number | null>(null)
   const [wgerSearch, setWgerSearch] = useState("")
   const [wgerResults, setWgerResults] = useState<WgerResult[]>([])
+  const [allWgerExercises, setAllWgerExercises] = useState<WgerResult[]>([])
+  const [wgerLoaded, setWgerLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
 
@@ -84,6 +86,16 @@ export default function MuscleConfigPage() {
     setEditWgerId(row.wgerId ?? null)
     setWgerSearch(row.wgerName ?? "")
     setWgerResults([])
+    // Load all Wger exercises once for local search
+    if (!wgerLoaded) {
+      fetch("/api/workout/muscles/exercises")
+        .then(r => r.json())
+        .then((d: { exercises?: WgerResult[] }) => {
+          setAllWgerExercises(d.exercises ?? [])
+          setWgerLoaded(true)
+        })
+        .catch(() => {})
+    }
   }
 
   function toggleMuscle(
@@ -97,35 +109,15 @@ export default function MuscleConfigPage() {
     setter(next)
   }
 
-  async function searchWger(q: string) {
+  function searchWger(q: string) {
     setWgerSearch(q)
-    if (q.length < 3) { setWgerResults([]); return }
-    try {
-      // exerciseinfo returns muscles as objects and name via translations[]
-      const res = await fetch(
-        `https://wger.de/api/v2/exerciseinfo/?format=json&language=2&limit=8&name=${encodeURIComponent(q)}`
-      )
-      const data = (await res.json()) as {
-        results: {
-          id: number
-          muscles: { id: number }[]
-          muscles_secondary: { id: number }[]
-          translations: { language: number; name: string }[]
-        }[]
-      }
-      const { WGER_MUSCLE_MAP } = await import("@/lib/muscleMap")
-      setWgerResults(
-        data.results
-          .map(e => ({ ...e, enName: e.translations.find(t => t.language === 2)?.name ?? "" }))
-          .filter(e => e.enName)
-          .map(e => ({
-            id: e.id,
-            name: e.enName,
-            muscles: e.muscles.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
-            muscles_secondary: e.muscles_secondary.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
-          }))
-      )
-    } catch { /* ignore */ }
+    if (q.length < 2) { setWgerResults([]); return }
+    const lower = q.toLowerCase()
+    setWgerResults(
+      allWgerExercises
+        .filter(e => e.name.toLowerCase().includes(lower))
+        .slice(0, 8)
+    )
   }
 
   function pickWgerResult(r: WgerResult) {
