@@ -7,6 +7,7 @@ import { MUSCLE_TO_LIB_SLUG, type MuscleId, type LibMuscleSlug } from "@/lib/mus
 
 interface Props {
   view: "front" | "back"
+  gender: "male" | "female"
   intensities: Map<MuscleId, number>   // 0–1 normalized
   selected: LibMuscleSlug | null
   onSelect: (slug: LibMuscleSlug | null) => void
@@ -27,7 +28,7 @@ const MAPPED_SLUGS = new Set<string>([
   "trapezius", "triceps", "upper-back",
 ])
 
-export default function MuscleSvg({ view, intensities, selected, onSelect }: Props) {
+export default function MuscleSvg({ view, gender, intensities, selected, onSelect }: Props) {
   // Aggregate intensities per library slug (take max across merged MuscleIds)
   const slugIntensities = new Map<LibMuscleSlug, number>()
   for (const [id, v] of intensities) {
@@ -54,7 +55,7 @@ export default function MuscleSvg({ view, intensities, selected, onSelect }: Pro
     <Body
       data={data}
       side={view}
-      gender="male"
+      gender={gender}
       defaultFill="#1e2535"
       defaultStroke="#2d3748"
       scale={1.2}

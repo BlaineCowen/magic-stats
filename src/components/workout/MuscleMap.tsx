@@ -25,6 +25,10 @@ export default function MuscleMap({ rows, user }: Props) {
   const [loadingMap, setLoadingMap] = useState(true)
   const [metric, setMetric] = useState<"sets" | "volume">("sets")
   const [selected, setSelected] = useState<LibMuscleSlug | null>(null)
+  const [gender, setGender] = useState<"male" | "female">(() => {
+    if (typeof window === "undefined") return "male"
+    return (localStorage.getItem(`muscle-gender-${user}`) as "male" | "female") ?? "male"
+  })
 
   useEffect(() => {
     setLoadingMap(true)
@@ -83,25 +87,51 @@ export default function MuscleMap({ rows, user }: Props) {
     <div style={{ position: "relative" }}>
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", gap: "4px" }}>
-          {(["sets", "volume"] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => setMetric(m)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: "6px",
-                border: `1px solid ${metric === m ? ACCENT : "#2d3748"}`,
-                background: metric === m ? "rgba(0,170,255,0.15)" : "transparent",
-                color: metric === m ? ACCENT : MUTED,
-                fontSize: "0.8rem",
-                cursor: "pointer",
-                fontWeight: metric === m ? 600 : 400,
-              }}
-            >
-              {m === "sets" ? "Sets" : "Volume"}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "4px" }}>
+            {(["sets", "volume"] as const).map(m => (
+              <button
+                key={m}
+                onClick={() => setMetric(m)}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  border: `1px solid ${metric === m ? ACCENT : "#2d3748"}`,
+                  background: metric === m ? "rgba(0,170,255,0.15)" : "transparent",
+                  color: metric === m ? ACCENT : MUTED,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  fontWeight: metric === m ? 600 : 400,
+                }}
+              >
+                {m === "sets" ? "Sets" : "Volume"}
+              </button>
+            ))}
+          </div>
+          <div style={{ width: "1px", height: "20px", background: "#2d3748" }} />
+          <div style={{ display: "flex", gap: "4px" }}>
+            {(["male", "female"] as const).map(g => (
+              <button
+                key={g}
+                onClick={() => {
+                  setGender(g)
+                  localStorage.setItem(`muscle-gender-${user}`, g)
+                }}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  border: `1px solid ${gender === g ? ACCENT : "#2d3748"}`,
+                  background: gender === g ? "rgba(0,170,255,0.15)" : "transparent",
+                  color: gender === g ? ACCENT : MUTED,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  fontWeight: gender === g ? 600 : 400,
+                }}
+              >
+                {g === "male" ? "Male" : "Female"}
+              </button>
+            ))}
+          </div>
         </div>
         <a
           href={`/workout/muscle-config?user=${user}`}
@@ -115,11 +145,11 @@ export default function MuscleMap({ rows, user }: Props) {
       <div style={{ display: "flex", gap: "3rem", justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Front</p>
-          <MuscleSvg view="front" intensities={intensities} selected={selected} onSelect={handleSelect} />
+          <MuscleSvg view="front" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} />
         </div>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Back</p>
-          <MuscleSvg view="back" intensities={intensities} selected={selected} onSelect={handleSelect} />
+          <MuscleSvg view="back" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} />
         </div>
       </div>
 
