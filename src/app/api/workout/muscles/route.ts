@@ -17,25 +17,27 @@ const MAPPINGS_PATH = `${DATA_DIR}/muscle_mappings.json`
 
 // ── Wger cache ────────────────────────────────────────────────────────────────
 
+// exerciseinfo returns muscles as objects and name via translations[]
+interface WgerMuscleRef { id: number }
+interface WgerTranslation { name: string }
 interface WgerExercise {
   id: number
-  name: string
-  muscles: number[]
-  muscles_secondary: number[]
+  muscles: WgerMuscleRef[]
+  muscles_secondary: WgerMuscleRef[]
+  translations: WgerTranslation[]
 }
 interface WgerCache { exercises: WgerExercise[]; fetchedAt: number }
 
 let wgerCache: WgerCache | null = null
 
 async function fetchWgerExercises(): Promise<WgerExercise[]> {
-  // Cache for 1 hour (Wger data changes rarely)
   if (wgerCache && Date.now() - wgerCache.fetchedAt < 3_600_000) {
     return wgerCache.exercises
   }
 
   const exercises: WgerExercise[] = []
   let url: string | null =
-    "https://wger.de/api/v2/exercise/?format=json&language=2&limit=100"
+    "https://wger.de/api/v2/exerciseinfo/?format=json&language=2&limit=100"
 
   while (url) {
     const res = await fetch(url, { next: { revalidate: 0 } })
@@ -54,8 +56,8 @@ async function fetchWgerExercises(): Promise<WgerExercise[]> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function mapWgerMuscles(ids: number[]): MuscleId[] {
-  return ids.flatMap(id => WGER_MUSCLE_MAP[id] ?? [])
+function mapWgerMuscles(muscles: WgerMuscleRef[]): MuscleId[] {
+  return muscles.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? [])
 }
 
 function loadOverrides(): Record<string, MuscleTarget & { wgerId?: number; wgerName?: string; override: boolean }> {
@@ -73,7 +75,7 @@ export async function GET(req: Request) {
   try {
     const user = new URL(req.url).searchParams.get("user") ?? "blaine"
 
-    // 1. Collect exercise names
+    // 1. Collect exercise names from CSV
     let exerciseNames: string[] = []
     const csvPath = user === "blaine"
       ? `${DATA_DIR}/strong_workouts.csv`
@@ -90,23 +92,20 @@ export async function GET(req: Request) {
       exerciseNames = [...seen]
     }
 
-    // 2. Fetch Wger exercises
+    // 2. Fetch Wger exercises (exerciseinfo includes names + muscle objects)
     const wgerExercises = await fetchWgerExercises()
 
-    // Pre-normalize Wger names once (skip entries with no name)
+    // Pre-normalize Wger names once; name lives in translations[0]
     const normalized = wgerExercises
+      .map(e => ({ ...e, name: e.translations[0]?.name ?? "" }))
       .filter(e => e.name)
-      .map(e => ({
-        ...e,
-        norm: normalizeExerciseName(e.name),
-      }))
+      .map(e => ({ ...e, norm: normalizeExerciseName(e.name) }))
 
     // 3. Load saved overrides
     const overrides = loadOverrides()
 
     // 4. Match each exercise
     const results = exerciseNames.map(exerciseName => {
-      // Override wins immediately
       if (overrides[exerciseName]) {
         const o = overrides[exerciseName]
         return {
@@ -120,7 +119,6 @@ export async function GET(req: Request) {
         }
       }
 
-      // Fuzzy match
       const normStrong = normalizeExerciseName(exerciseName)
       let best = { score: 0, ex: null as (typeof normalized)[0] | null }
       for (const ex of normalized) {

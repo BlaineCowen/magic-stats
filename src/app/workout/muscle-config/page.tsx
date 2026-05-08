@@ -101,19 +101,28 @@ export default function MuscleConfigPage() {
     setWgerSearch(q)
     if (q.length < 3) { setWgerResults([]); return }
     try {
+      // exerciseinfo returns muscles as objects and name via translations[]
       const res = await fetch(
-        `https://wger.de/api/v2/exercise/?format=json&language=2&limit=8&name=${encodeURIComponent(q)}`
+        `https://wger.de/api/v2/exerciseinfo/?format=json&language=2&limit=8&name=${encodeURIComponent(q)}`
       )
-      const data = (await res.json()) as { results: { id: number; name: string; muscles: number[]; muscles_secondary: number[] }[] }
-      // We need to map Wger muscle IDs here — import the map
+      const data = (await res.json()) as {
+        results: {
+          id: number
+          muscles: { id: number }[]
+          muscles_secondary: { id: number }[]
+          translations: { name: string }[]
+        }[]
+      }
       const { WGER_MUSCLE_MAP } = await import("@/lib/muscleMap")
       setWgerResults(
-        data.results.map(e => ({
-          id: e.id,
-          name: e.name,
-          muscles: e.muscles.flatMap(id => WGER_MUSCLE_MAP[id] ?? []) as MuscleId[],
-          muscles_secondary: e.muscles_secondary.flatMap(id => WGER_MUSCLE_MAP[id] ?? []) as MuscleId[],
-        }))
+        data.results
+          .filter(e => e.translations[0]?.name)
+          .map(e => ({
+            id: e.id,
+            name: e.translations[0].name,
+            muscles: e.muscles.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
+            muscles_secondary: e.muscles_secondary.flatMap(m => WGER_MUSCLE_MAP[m.id] ?? []) as MuscleId[],
+          }))
       )
     } catch { /* ignore */ }
   }
