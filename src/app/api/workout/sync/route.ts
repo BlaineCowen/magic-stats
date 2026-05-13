@@ -31,11 +31,11 @@ export async function POST(req: Request) {
         return Response.json({ error: "Could not parse workout text" }, { status: 400 });
       }
 
-      // Deduplication: substring match avoids fragile comma-splitting of quoted CSV
-      // (workout names like "Chest, Shoulder" break field-indexed parsing)
-      const existingLines = existsSync(DATA_PATH)
-        ? readFileSync(DATA_PATH, "utf-8").split(/\r?\n/)
-        : [];
+      // Read existing content (used for both dedup and newline check)
+      const existingContent = existsSync(DATA_PATH)
+        ? readFileSync(DATA_PATH, "utf-8")
+        : "";
+      const existingLines = existingContent.split(/\r?\n/);
 
       const dedupedRows = newRows.filter(
         (r) =>
@@ -51,12 +51,14 @@ export async function POST(req: Request) {
         return Response.json({ ok: true, appended: 0, message: "No new sets (already synced)" });
       }
 
-      // Ensure file exists with header
-      if (!existsSync(DATA_PATH)) {
-        writeFileSync(DATA_PATH, CSV_HEADER + "\n", "utf-8");
+      // Ensure file exists with header (no trailing newline — the append adds it)
+      if (!existingContent) {
+        writeFileSync(DATA_PATH, CSV_HEADER, "utf-8");
       }
 
-      appendFileSync(DATA_PATH, "\n" + rowsToCsvLines(dedupedRows), "utf-8");
+      // Prefix with \n only if file exists but doesn't end with a newline
+      const prefix = existingContent.length > 0 && !existingContent.endsWith("\n") ? "\n" : "";
+      appendFileSync(DATA_PATH, prefix + rowsToCsvLines(dedupedRows) + "\n", "utf-8");
 
       return Response.json({ ok: true, appended: dedupedRows.length });
     } else {
