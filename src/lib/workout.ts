@@ -283,3 +283,102 @@ export function muscleActivation(
 
   return result
 }
+
+// ── Trend & Forecast ─────────────────────────────────────────────────────────
+
+export interface ExtendedChartPoint {
+  date: string
+  maxWeight: number | null
+  bestEst1rm: number | null
+  maxReps: number | null
+  trend: number | null
+  forecast: number | null
+}
+
+// Ordinary least squares log regression: fits y = a·ln(t) + b
+// t must be > 0 (use 1-indexed days). Returns null if degenerate.
+export function logRegression(
+  points: { t: number; y: number }[],
+): { a: number; b: number } | null {
+  const n = points.length
+  if (n < 2) return null
+
+  let sumU = 0, sumY = 0, sumUU = 0, sumUY = 0
+  for (const { t, y } of points) {
+    const u = Math.log(t)
+    sumU  += u
+    sumY  += y
+    sumUU += u * u
+    sumUY += u * y
+  }
+
+  const denom = n * sumUU - sumU * sumU
+  if (Math.abs(denom) < 1e-10) return null
+
+  const a = (n * sumUY - sumU * sumY) / denom
+  const b = (sumY - a * sumU) / n
+  return { a, b }
+}
+
+// Extends session data with trend overlay and optional forecast points.
+// forecastDays=0 skips forecast. Requires ≥3 sessions for regression.
+export function addTrendAndForecast(
+  sessions: { date: string; maxWeight: number; bestEst1rm: number; maxReps: number }[],
+  metricKey: "maxWeight" | "bestEst1rm" | "maxReps",
+  forecastDays: number,
+): ExtendedChartPoint[] {
+  if (sessions.length === 0) return []
+
+  const firstMs = new Date(sessions[0]!.date + "T00:00:00").getTime()
+
+  // t = days from first session + 1 (1-indexed, so ln(t) is never ln(0))
+  const pts = sessions.map(s => ({
+    t: Math.round((new Date(s.date + "T00:00:00").getTime() - firstMs) / 86_400_000) + 1,
+    y: s[metricKey],
+  }))
+
+  const fit = sessions.length >= 3 ? logRegression(pts) : null
+
+  const result: ExtendedChartPoint[] = sessions.map((s, i) => {
+    const t = pts[i]!.t
+    const raw = fit ? fit.a * Math.log(t) + fit.b : null
+    return {
+      date: s.date,
+      maxWeight: s.maxWeight,
+      bestEst1rm: s.bestEst1rm,
+      maxReps: s.maxReps,
+      trend: raw !== null ? Math.max(0, raw) : null,
+      forecast: null,
+    }
+  })
+
+  if (forecastDays > 0 && fit) {
+    const lastDate = new Date(sessions[sessions.length - 1]!.date + "T00:00:00")
+    const lastT = pts[pts.length - 1]!.t
+    const N = 12 // points spread over forecastDays
+
+    for (let i = 0; i <= N; i++) {
+      const daysAhead = Math.round((forecastDays / N) * i)
+      const t = lastT + daysAhead
+      const val = Math.max(0, fit.a * Math.log(t) + fit.b)
+
+      if (i === 0) {
+        // Set forecast on the last real point so the line connects with no gap
+        result[result.length - 1]!.forecast = val
+      } else {
+        const d = new Date(lastDate)
+        d.setDate(lastDate.getDate() + daysAhead)
+        result.push({
+          date: d.toISOString().slice(0, 10),
+          maxWeight: null,
+          bestEst1rm: null,
+          maxReps: null,
+          trend: null,
+          forecast: val,
+        })
+      }
+    }
+  }
+
+  return result
+}
