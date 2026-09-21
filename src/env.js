@@ -10,8 +10,10 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-    R_API_URL: z.string().url().optional(),
     GEMINI_API_KEY: z.string().optional(),
+    LLM_BASE_URL: z.string().url().optional(),
+    LLM_MODEL: z.string().optional(),
+    NFL_DATA_DIR: z.string().optional(),
   },
 
   /**
@@ -29,8 +31,10 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
-    R_API_URL: process.env.R_API_URL ?? "http://68.183.98.17:8000",
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    LLM_BASE_URL: process.env.LLM_BASE_URL,
+    LLM_MODEL: process.env.LLM_MODEL,
+    NFL_DATA_DIR: process.env.NFL_DATA_DIR,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
