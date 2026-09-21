@@ -46,6 +46,7 @@ export default function Home() {
   const [hasExecuted, setHasExecuted] = useState(false);
   const [queryCount, setQueryCount] = useState(0);
   const [isLimitReached, setIsLimitReached] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ provider: string; online: boolean } | null>(null);
 
   // Load query count from localStorage on component mount
   useEffect(() => {
@@ -53,6 +54,13 @@ export default function Home() {
     const count = savedCount ? parseInt(savedCount, 10) : 0;
     setQueryCount(count);
     setIsLimitReached(count >= 50);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/ai-status")
+      .then((r) => r.json())
+      .then((d: { provider: string; online: boolean }) => setAiStatus(d))
+      .catch(() => setAiStatus({ provider: "openai-compatible", online: false }));
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -186,6 +194,12 @@ No results were returned. Please help debug this query.`);
         <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
           NFL Stats Query
         </h1>
+
+        {aiStatus?.provider === "openai-compatible" && !aiStatus.online && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            ⚠ Local AI (LM Studio) is not responding. Queries may fail.
+          </div>
+        )}
 
         {queryCount > 0 && (
           <div className="mb-4 text-center text-sm text-gray-600">

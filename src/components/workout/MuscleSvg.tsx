@@ -11,6 +11,7 @@ interface Props {
   intensities: Map<MuscleId, number>   // 0–1 normalized
   selected: LibMuscleSlug | null
   onSelect: (slug: LibMuscleSlug | null) => void
+  scale?: number
 }
 
 // Blend from dark body color to accent blue based on intensity
@@ -25,10 +26,10 @@ function intensityToHex(intensity: number): string {
 const MAPPED_SLUGS = new Set<string>([
   "abs", "biceps", "calves", "chest", "deltoids", "forearm",
   "gluteal", "hamstring", "lower-back", "obliques", "quadriceps",
-  "trapezius", "triceps", "upper-back",
+  "trapezius", "triceps", "upper-back", "adductors",
 ])
 
-export default function MuscleSvg({ view, gender, intensities, selected, onSelect }: Props) {
+export default function MuscleSvg({ view, gender, intensities, selected, onSelect, scale = 1.2 }: Props) {
   // Aggregate intensities per library slug (take max across merged MuscleIds)
   const slugIntensities = new Map<LibMuscleSlug, number>()
   for (const [id, v] of intensities) {
@@ -58,7 +59,7 @@ export default function MuscleSvg({ view, gender, intensities, selected, onSelec
       gender={gender}
       defaultFill="#1e2535"
       defaultStroke="#2d3748"
-      scale={1.2}
+      scale={scale}
       onBodyPartPress={(part: ExtendedBodyPart) => {
         const slug = part.slug as LibMuscleSlug | undefined
         if (!slug || !MAPPED_SLUGS.has(slug)) return

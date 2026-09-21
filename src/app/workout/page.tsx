@@ -7,17 +7,18 @@ import ExerciseExplorer from "@/components/workout/ExerciseExplorer"
 import WorkoutLog from "@/components/workout/WorkoutLog"
 import PersonalRecords from "@/components/workout/PersonalRecords"
 import MuscleMap from "@/components/workout/MuscleMap"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 const ACCENT = "#00aaff"
 const MUTED = "#94a3b8"
 
 type Tab = "overview" | "explorer" | "workouts" | "records" | "muscles"
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "explorer", label: "Exercise Explorer" },
-  { id: "workouts", label: "Workouts" },
-  { id: "records", label: "Personal Records" },
-  { id: "muscles", label: "Muscle Map" },
+const TABS: { id: Tab; label: string; short: string }[] = [
+  { id: "overview", label: "Overview",          short: "Overview" },
+  { id: "explorer", label: "Exercise Explorer", short: "Explorer" },
+  { id: "workouts", label: "Workouts",          short: "Workouts" },
+  { id: "records",  label: "Personal Records",  short: "Records"  },
+  { id: "muscles",  label: "Muscle Map",        short: "Muscles"  },
 ]
 
 function displayName(username: string): string {
@@ -27,6 +28,7 @@ function displayName(username: string): string {
 }
 
 export default function WorkoutPage() {
+  const isMobile = useIsMobile()
   const [rows, setRows] = useState<WorkoutRow[]>([])
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState("")
@@ -34,6 +36,7 @@ export default function WorkoutPage() {
   const [activeTab, setActiveTab] = useState<Tab>("overview")
   const [selectedExercise, setSelectedExercise] = useState<string | null>(null)
   const [metric, setMetric] = useState<"weight" | "1rm" | "reps">("weight")
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const mtimeRef = useRef(0)
 
   // Multi-user state
@@ -194,86 +197,113 @@ export default function WorkoutPage() {
         background: "#0a0d13",
         borderBottom: "1px solid #2d3748",
         padding: "10px 20px",
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        flexWrap: "wrap",
       }}>
-        {/* User selector + delete */}
-        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-          <select
-            value={user}
-            onChange={e => {
-              if (e.target.value === "__new__") { setShowUpload(true); return }
-              setDeleteConfirm(null)
-              setUser(e.target.value)
-            }}
-            style={{
-              padding: "4px 8px",
-              background: "#1a1f2e",
-              border: `1px solid ${ACCENT}`,
-              borderRadius: "6px",
-              color: "#e2e8f0",
-              fontSize: "0.88rem",
-              fontWeight: 700,
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            {users.map(u => (
-              <option key={u} value={u}>{displayName(u)}</option>
-            ))}
-            <option value="__new__">+ Add User…</option>
-          </select>
+        {/* Main row */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          {/* User selector + delete */}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            <select
+              value={user}
+              onChange={e => {
+                if (e.target.value === "__new__") { setShowUpload(true); return }
+                setDeleteConfirm(null)
+                setUser(e.target.value)
+              }}
+              style={{
+                padding: "4px 8px",
+                background: "#1a1f2e",
+                border: `1px solid ${ACCENT}`,
+                borderRadius: "6px",
+                color: "#e2e8f0",
+                fontSize: "0.88rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              {users.map(u => (
+                <option key={u} value={u}>{displayName(u)}</option>
+              ))}
+              <option value="__new__">+ Add User…</option>
+            </select>
 
-          {/* Delete button — only for non-Blaine users */}
-          {user !== "blaine" && (
-            deleteConfirm === user ? (
-              <>
+            {/* Delete button — only for non-Blaine users */}
+            {user !== "blaine" && (
+              deleteConfirm === user ? (
+                <>
+                  <button
+                    onClick={() => handleDelete(user)}
+                    style={{ padding: "3px 10px", borderRadius: "6px", border: "1px solid #ef4444", background: "rgba(239,68,68,0.15)", color: "#ef4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(null)}
+                    style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #2d3748", background: "transparent", color: MUTED, fontSize: "0.78rem", cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
                 <button
-                  onClick={() => handleDelete(user)}
-                  style={{ padding: "3px 10px", borderRadius: "6px", border: "1px solid #ef4444", background: "rgba(239,68,68,0.15)", color: "#ef4444", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
+                  onClick={() => setDeleteConfirm(user)}
+                  title={`Delete ${displayName(user)}`}
+                  style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #2d3748", background: "transparent", color: "#ef4444", fontSize: "0.82rem", cursor: "pointer", lineHeight: 1 }}
                 >
-                  Confirm delete
+                  🗑
                 </button>
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #2d3748", background: "transparent", color: MUTED, fontSize: "0.78rem", cursor: "pointer" }}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setDeleteConfirm(user)}
-                title={`Delete ${displayName(user)}`}
-                style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #2d3748", background: "transparent", color: "#ef4444", fontSize: "0.82rem", cursor: "pointer", lineHeight: 1 }}
-              >
-                🗑
-              </button>
-            )
+              )
+            )}
+          </div>
+
+          {!isMobile && <span style={{ fontWeight: 600, fontSize: "0.95rem", color: "#64748b" }}>💪 Workout Dashboard</span>}
+
+          {/* Presets + date inputs — always on desktop, toggleable on mobile */}
+          {(!isMobile || filtersOpen) && (
+            <>
+              <div style={{ display: "flex", gap: "4px" }}>
+                {(["all", "1y", "6m"] as const).map(p => (
+                  <button key={p} onClick={() => setPreset(p)} style={NAV_BTN()}>
+                    {p.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={DATE_INPUT} />
+                <span style={{ color: MUTED }}>→</span>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={DATE_INPUT} />
+              </div>
+            </>
           )}
-        </div>
 
-        <span style={{ fontWeight: 600, fontSize: "0.95rem", color: "#64748b" }}>💪 Workout Dashboard</span>
-
-        {/* Presets */}
-        <div style={{ display: "flex", gap: "4px" }}>
-          {(["all", "1y", "6m"] as const).map(p => (
-            <button key={p} onClick={() => setPreset(p)} style={NAV_BTN()}>
-              {p.toUpperCase()}
+          {/* Status + refresh + mobile filter toggle */}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ color: MUTED, fontSize: "0.8rem" }}>{status}</span>
+            <button
+              onClick={() => void fetchData(true, user)}
+              title="Refresh data"
+              style={{ padding: "3px 8px", borderRadius: "6px", border: "1px solid #2d3748", background: "transparent", color: MUTED, fontSize: "0.82rem", cursor: "pointer", lineHeight: 1 }}
+            >
+              ↺
             </button>
-          ))}
+            {isMobile && (
+              <button
+                onClick={() => setFiltersOpen(f => !f)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "6px",
+                  border: `1px solid ${filtersOpen ? ACCENT : "#2d3748"}`,
+                  background: filtersOpen ? "rgba(0,170,255,0.15)" : "transparent",
+                  color: filtersOpen ? ACCENT : MUTED,
+                  fontSize: "0.78rem",
+                  cursor: "pointer",
+                }}
+              >
+                {filtersOpen ? "▲ Filters" : "▼ Filters"}
+              </button>
+            )}
+          </div>
         </div>
-
-        {/* Date inputs */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={DATE_INPUT} />
-          <span style={{ color: MUTED }}>→</span>
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={DATE_INPUT} />
-        </div>
-
-        <span style={{ marginLeft: "auto", color: MUTED, fontSize: "0.8rem" }}>{status}</span>
       </nav>
 
       {/* Upload panel */}
@@ -391,23 +421,24 @@ export default function WorkoutPage() {
       )}
 
       {/* Tab bar */}
-      <div style={{ borderBottom: "1px solid #2d3748", padding: "0 20px", display: "flex", gap: "0" }}>
+      <div style={{ borderBottom: "1px solid #2d3748", padding: "0 20px", display: "flex", gap: "0", overflowX: "auto" }}>
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             style={{
-              padding: "12px 18px",
+              padding: isMobile ? "10px 10px" : "12px 18px",
               border: "none",
               borderBottom: activeTab === tab.id ? `2px solid ${ACCENT}` : "2px solid transparent",
               background: "transparent",
               color: activeTab === tab.id ? ACCENT : MUTED,
-              fontSize: "0.88rem",
+              fontSize: isMobile ? "0.78rem" : "0.88rem",
               fontWeight: activeTab === tab.id ? 600 : 400,
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
-            {tab.label}
+            {isMobile ? tab.short : tab.label}
           </button>
         ))}
       </div>

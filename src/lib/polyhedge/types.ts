@@ -75,8 +75,20 @@ export type PolyScanMarket = {
   no_token_id?: string | null;
   yes_outcome_label?: string | null;
   no_outcome_label?: string | null;
+  // Last-trade / Gamma-cached price. NOT a tradeable price — on thin books
+  // these can be 50-80¢ away from the actual ask. Show as reference only.
   yes_last_price?: number | null;
   no_last_price?: number | null;
+  // Tradeable ask prices, derived from `bestAsk` / `1 - bestBid` on the
+  // YES token book. These are what you'd actually PAY to BUY each side
+  // right now — use these for combined-cost / arb math, not last_price.
+  yes_ask_dollars?: number | null;
+  no_ask_dollars?: number | null;
+  yes_bid_dollars?: number | null;
+  no_bid_dollars?: number | null;
+  // YES-side bid-ask spread. A wide spread (e.g. > $0.20) means the
+  // displayed prices are unreliable — the book is essentially dead.
+  yes_spread_dollars?: number | null;
   seconds_delay?: number | null;
 };
 
@@ -180,6 +192,14 @@ export type ManualArbPair = {
   open_bet_count?: number;
   settled_bet_count?: number;
   realized_pnl_dollars?: number | null;
+  // Server returns the original event URLs the user pasted when creating
+  // the pair. The dashboard uses them to surface the EVENT context (not
+  // just the candidate name) — preventing the cross-event-collision bug
+  // where two pairs labelled "Robert F. Kennedy Jr." but bound to entirely
+  // different questions (Trump-admin-leave vs 2028 primary) get visually
+  // conflated.
+  kalshi_event_url?: string | null;
+  poly_event_url?: string | null;
 };
 
 export type ManualArbsListResponse = { pairs: ManualArbPair[] };
@@ -369,4 +389,213 @@ export type RtBetsResponse = {
     total_pnl?: number | null;
   };
   outcomes?: Record<string, number>;
+};
+
+// ── Arb discovery (scanner-proposed pairs awaiting human review) ────────────
+
+export type ArbSeverity = "BLOCK" | "WARN" | "INFO";
+export type ArbCandidateStatus =
+  | "pending"
+  | "approving"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "stale";
+export type ArbRejectReason =
+  | "rules_differ"
+  | "different_event"
+  | "outcome_mismatch"
+  | "thin_market"
+  | "live_delay"
+  | "not_interesting"
+  | "other";
+
+export type ArbFlag = {
+  id: string;
+  code: string;
+  severity: ArbSeverity;
+  message: string;
+  kalshi_excerpt?: string;
+  poly_excerpt?: string;
+};
+
+export type ArbSpan = {
+  start: number;
+  end: number;
+  term: string;
+  kind: string;
+  one_sided?: boolean;
+};
+
+export type ArbHighlights = {
+  kalshi: ArbSpan[];
+  poly: ArbSpan[];
+  /** Exact strings the spans index into (server-provided). */
+  kalshi_text?: string;
+  poly_text?: string;
+};
+
+export type ArbCoverage = {
+  unmatched_kalshi?: string[];
+  unmatched_poly?: string[];
+  poly_other?: string[];
+};
+
+export type ArbEdge = {
+  contracts?: number | null;
+  best_direction?: string | null;
+  roi_pct?: number | null;
+  profit_dollars?: number | null;
+  error?: string;
+};
+
+export type ArbKalshiSnapshot = {
+  event_ticker?: string;
+  event_title?: string;
+  event_sub_title?: string;
+  market_ticker: string;
+  outcome_label: string;
+  rules_primary: string;
+  rules_secondary: string;
+  settlement_sources?: { name?: string; url?: string }[];
+  expected_expiration_time?: string | null;
+  close_time?: string | null;
+  can_close_early?: boolean;
+  early_close_condition?: string;
+  mutually_exclusive?: boolean | null;
+  status?: string;
+  yes_ask?: number | null;
+  no_ask?: number | null;
+  event_url?: string;
+};
+
+export type ArbPolySnapshot = {
+  event_slug?: string;
+  event_title?: string;
+  condition_id?: string;
+  question?: string;
+  outcome_label: string;
+  yes_token_id?: string | null;
+  no_token_id?: string | null;
+  description: string;
+  resolution_source?: string;
+  end_date?: string | null;
+  neg_risk?: boolean | null;
+  seconds_delay?: number | null;
+  fees_enabled?: boolean | null;
+  game_start_time?: string | null;
+  event_start_time?: string | null;
+  clear_book_on_start?: boolean | null;
+  yes_ask?: number | null;
+  no_ask?: number | null;
+  event_url?: string;
+};
+
+export type ArbCandidateRow = {
+  id: number;
+  dedupe_key: string;
+  /** Approval is bound to exactly this text version. */
+  rules_hash: string;
+  check_version: number;
+  series_ticker: string;
+  category: string | null;
+  kalshi_event_ticker: string;
+  kalshi_market_ticker: string;
+  kalshi_event_title: string | null;
+  kalshi_outcome_label: string | null;
+  poly_event_title: string | null;
+  poly_outcome_label: string | null;
+  poly_seconds_delay: number | null;
+  outcome_match_method: string | null;
+  max_severity: ArbSeverity | "NONE" | null;
+  block_count: number | null;
+  warn_count: number | null;
+  edge_contracts: number | null;
+  edge_roi_pct: number | null;
+  status: ArbCandidateStatus;
+  rules_changed_since_review: number;
+  first_seen_at: string;
+  last_checked_at: string | null;
+  /** Codes of the WARN flags, for a glance in the table (full flags in detail). */
+  warn_codes: string[];
+  promoted_pair_ids: number[];
+};
+
+export type ArbAuditEntry = {
+  id: number;
+  ts: string;
+  action: string;
+  actor: string;
+  detail: unknown;
+};
+
+export type ArbCandidateDetail = ArbCandidateRow & {
+  flags: ArbFlag[];
+  coverage: ArbCoverage;
+  edge: ArbEdge;
+  current_check_version: number;
+  confirm_phrase: string;
+  last_viewed_at: string | null;
+  snapshot: { kalshi: ArbKalshiSnapshot; poly: ArbPolySnapshot };
+  highlights: ArbHighlights;
+  audit: ArbAuditEntry[];
+};
+
+export type ArbCandidatesResponse = { candidates: ArbCandidateRow[] };
+
+export type ArbScanRun = {
+  id: number;
+  finished_at: string | null;
+  complete: number;
+  errors: string[];
+  unmatched: string[];
+};
+
+export type ArbSummary = {
+  counts: Record<ArbCandidateStatus, number>;
+  last_run: ArbScanRun | null;
+  promote_mode: string;
+  approvals_enabled: boolean;
+  approvals_today: number;
+  max_approvals_per_day: number;
+};
+
+export type ArbApproveBody = {
+  rules_hash: string;
+  check_version: number;
+  note?: string;
+};
+
+export type ArbApproveEventBody = {
+  items: { id: number; rules_hash: string }[];
+  check_version: number;
+  note?: string;
+};
+
+export type ArbApproveEventResponse = {
+  results: {
+    id: number;
+    ok: boolean;
+    status_code: number;
+    pair_ids: number[];
+    error: string | null;
+  }[];
+  approved: number;
+  pair_ids: number[];
+};
+
+export type ArbApproveResponse = {
+  ok: boolean;
+  pair_ids: number[];
+  auto_execute: false;
+  mode: string;
+  message: string;
+};
+
+export type ArbRejectBody = { reason_code: ArbRejectReason; note?: string };
+
+export type ArbFilters = {
+  status: ArbCandidateStatus | "";
+  series: string;
+  hideBlocked: boolean;
 };

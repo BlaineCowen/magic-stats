@@ -7,6 +7,7 @@ export type MuscleId =
   | "biceps" | "triceps" | "forearms"
   | "upper-abs" | "lower-abs" | "obliques"
   | "glutes" | "quads" | "hamstrings" | "calves" | "hip-flexors"
+  | "hip-adductors" | "hip-abductors"
 
 export const MUSCLE_LABEL: Record<MuscleId, string> = {
   "upper-chest": "Upper Chest",
@@ -29,6 +30,8 @@ export const MUSCLE_LABEL: Record<MuscleId, string> = {
   "hamstrings": "Hamstrings",
   "calves": "Calves",
   "hip-flexors": "Hip Flexors",
+  "hip-adductors": "Hip Adductors",
+  "hip-abductors": "Hip Abductors",
 }
 
 export interface MuscleTarget {
@@ -37,29 +40,27 @@ export interface MuscleTarget {
 }
 
 // Maps Wger muscle IDs → our MuscleIds.
-// Wger muscles: 1=Biceps, 2=Ant.Deltoid, 3=Serratus, 4=Pec.Major, 5=Triceps,
-// 6=Biceps femoris, 7=Gastrocnemius, 8=Glutes, 9=Quads, 10=Rectus abdominis,
-// 11=Brachialis, 12=Obliques, 13=Post.Deltoid, 14=Trapezius,
-// 15=Tibialis, 16=Rhomboids, 17=Lats, 18=Soleus
+// Verified from /api/v2/muscle/ — Wger has exactly 15 muscles (IDs 1–15):
+// 1=Biceps brachii, 2=Anterior deltoid, 3=Serratus anterior, 4=Pectoralis major,
+// 5=Triceps brachii, 6=Rectus abdominis, 7=Gastrocnemius, 8=Gluteus maximus,
+// 9=Trapezius, 10=Quadriceps femoris, 11=Biceps femoris, 12=Latissimus dorsi,
+// 13=Brachialis, 14=Obliquus externus abdominis, 15=Soleus
 export const WGER_MUSCLE_MAP: Record<number, MuscleId[]> = {
   1: ["biceps"],
   2: ["ant-deltoid"],
-  3: [],                            // serratus — no mapping
+  3: [],                             // serratus anterior — no visual mapping
   4: ["upper-chest", "lower-chest"],
   5: ["triceps"],
-  6: ["hamstrings"],
-  7: ["calves"],
+  6: ["upper-abs", "lower-abs"],     // rectus abdominis
+  7: ["calves"],                     // gastrocnemius
   8: ["glutes"],
-  9: ["quads"],
-  10: ["upper-abs", "lower-abs"],
-  11: ["biceps"],                   // brachialis groups with biceps
-  12: ["obliques"],
-  13: ["post-deltoid"],
-  14: ["traps"],
-  15: [],                           // tibialis — no mapping
-  16: ["upper-back"],
-  17: ["lats"],
-  18: ["calves"],                   // soleus groups with calves
+  9: ["traps"],                      // trapezius
+  10: ["quads"],                     // quadriceps femoris
+  11: ["hamstrings"],                // biceps femoris
+  12: ["lats"],                      // latissimus dorsi
+  13: ["biceps"],                    // brachialis groups with biceps
+  14: ["obliques"],                  // obliquus externus abdominis
+  15: ["calves"],                    // soleus groups with calves
 }
 
 // Expands common Strong abbreviations before fuzzy matching.
@@ -102,7 +103,7 @@ export function tokenOverlap(a: string, b: string): number {
 export type LibMuscleSlug =
   | "abs" | "biceps" | "calves" | "chest" | "deltoids" | "forearm"
   | "gluteal" | "hamstring" | "lower-back" | "obliques" | "quadriceps"
-  | "trapezius" | "triceps" | "upper-back"
+  | "trapezius" | "triceps" | "upper-back" | "adductors"
 
 // Maps our MuscleIds to library slugs (null = no visual equivalent)
 export const MUSCLE_TO_LIB_SLUG: Record<MuscleId, LibMuscleSlug | null> = {
@@ -126,6 +127,8 @@ export const MUSCLE_TO_LIB_SLUG: Record<MuscleId, LibMuscleSlug | null> = {
   "hamstrings": "hamstring",
   "calves": "calves",
   "hip-flexors": null,
+  "hip-adductors": "adductors",
+  "hip-abductors": "gluteal",
 }
 
 export const LIB_SLUG_LABEL: Record<LibMuscleSlug, string> = {
@@ -143,4 +146,5 @@ export const LIB_SLUG_LABEL: Record<LibMuscleSlug, string> = {
   "trapezius": "Traps",
   "triceps": "Triceps",
   "upper-back": "Upper Back / Lats",
+  "adductors": "Hip Adductors",
 }

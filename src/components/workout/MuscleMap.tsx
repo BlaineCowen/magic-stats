@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { muscleActivation, type WorkoutRow } from "@/lib/workout"
 import { MUSCLE_TO_LIB_SLUG, LIB_SLUG_LABEL, type MuscleId, type MuscleTarget, type LibMuscleSlug } from "@/lib/muscleMap"
 import MuscleSvg from "@/components/workout/MuscleSvg"
+import { useIsMobile } from "@/hooks/useIsMobile"
 
 const ACCENT = "#00aaff"
 const MUTED = "#94a3b8"
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function MuscleMap({ rows, user }: Props) {
+  const isMobile = useIsMobile()
   const [mappings, setMappings] = useState<Record<string, MuscleTarget>>({})
   const [loadingMap, setLoadingMap] = useState(true)
   const [metric, setMetric] = useState<"sets" | "volume">("sets")
@@ -145,11 +147,11 @@ export default function MuscleMap({ rows, user }: Props) {
       <div style={{ display: "flex", gap: "3rem", justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Front</p>
-          <MuscleSvg view="front" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} />
+          <MuscleSvg view="front" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} scale={isMobile ? 0.85 : 1.2} />
         </div>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: "0.72rem", color: MUTED, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>Back</p>
-          <MuscleSvg view="back" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} />
+          <MuscleSvg view="back" gender={gender} intensities={intensities} selected={selected} onSelect={handleSelect} scale={isMobile ? 0.85 : 1.2} />
         </div>
       </div>
 

@@ -111,30 +111,48 @@ export function MarketMatcher({ scan, urls }: Props) {
       >
         <Column
           title="Kalshi"
-          markets={scan.kalshi_markets.map((m) => ({
-            id: m.ticker,
-            title: m.title || m.ticker,
-            sub: m.ticker,
-            yes: m.yes_ask_dollars,
-            no: m.no_ask_dollars,
-            disabledReason: null,
-          }))}
+          markets={[...scan.kalshi_markets]
+            .sort((a, b) => (b.yes_ask_dollars ?? 0) - (a.yes_ask_dollars ?? 0))
+            .map((m) => ({
+              id: m.ticker,
+              title: m.title || m.ticker,
+              sub: m.ticker,
+              yes: m.yes_ask_dollars,
+              no: m.no_ask_dollars,
+              disabledReason: null,
+            }))}
           selectedId={selKTicker}
           onPick={setSelKTicker}
         />
         <Column
           title="Polymarket"
-          markets={scan.poly_markets.map((m) => ({
-            id: m.condition_id,
-            title: m.group_item_title || m.question || m.condition_id,
-            sub: (m.condition_id ?? "").slice(0, 14) + "…",
-            yes: m.yes_last_price,
-            no: m.no_last_price,
-            disabledReason:
-              (m.seconds_delay ?? 0) > 0
-                ? `BLOCKED · ${m.seconds_delay}s live delay`
-                : null,
-          }))}
+          markets={[...scan.poly_markets]
+            // Sort by tradeable ask, not last_price (avoid stale Gamma).
+            .sort(
+              (a, b) =>
+                (b.yes_ask_dollars ?? b.yes_last_price ?? 0) -
+                (a.yes_ask_dollars ?? a.yes_last_price ?? 0),
+            )
+            .map((m) => {
+              const yes = m.yes_ask_dollars ?? m.yes_last_price;
+              const no = m.no_ask_dollars ?? m.no_last_price;
+              const spread = m.yes_spread_dollars ?? null;
+              const wideSpread = spread != null && spread > 0.2;
+              let disabled: string | null = null;
+              if ((m.seconds_delay ?? 0) > 0) {
+                disabled = `BLOCKED · ${m.seconds_delay}s live delay`;
+              } else if (wideSpread) {
+                disabled = `WIDE SPREAD · $${spread!.toFixed(2)} — thin book, prices unreliable`;
+              }
+              return {
+                id: m.condition_id,
+                title: m.group_item_title || m.question || m.condition_id,
+                sub: (m.condition_id ?? "").slice(0, 14) + "…",
+                yes,
+                no,
+                disabledReason: disabled,
+              };
+            })}
           selectedId={selPCondId}
           onPick={setSelPCondId}
         />

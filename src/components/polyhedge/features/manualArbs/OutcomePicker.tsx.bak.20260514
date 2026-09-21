@@ -1,0 +1,434 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Button } from "@/components/polyhedge/ui/Button";
+import { cn } from "@/components/polyhedge/cn";
+import { dollars, clamp } from "@/lib/polyhedge/format";
+import type {
+  KalshiScanMarket,
+  ManualArbScanResponse,
+  ManualArbSaveBody,
+  PolyScanMarket,
+  Side,
+} from "@/lib/polyhedge/types";
+import { useManualArbSave } from "./hooks";
+
+interface Props {
+  scan: ManualArbScanResponse;
+  urls: { kalshi_url: string; poly_url: string };
+}
+
+type Sort = "price" | "alpha";
+
+interface ConfirmInfo {
+  id: number;
+  kLabel: string;
+  pLabel: string;
+  kSide: Side;
+  pSide: Side;
+  kPrice: number | null;
+  pPrice: number | null;
+  combined: number | null;
+}
+
+export function OutcomePicker({ scan, urls }: Props) {
+  const [kSort, setKSort] = useState<Sort>("price");
+  const [pSort, setPSort] = useState<Sort>("price");
+  const [selKTicker, setSelKTicker] = useState<string | null>(null);
+  const [selKSide, setSelKSide] = useState<Side | null>(null);
+  const [selPCondId, setSelPCondId] = useState<string | null>(null);
+  const [selPSide, setSelPSide] = useState<Side | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmInfo | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const save = useManualArbSave();
+
+  const kalshiSorted = useMemo(
+    () => sortKalshi(scan.kalshi_markets, kSort),
+    [scan, kSort],
+  );
+  const polySorted = useMemo(
+    () => sortPoly(scan.poly_markets, pSort),
+    [scan, pSort],
+  );
+
+  function pickKalshi(ticker: string, side?: Side) {
+    if (side) {
+      setSelKTicker(ticker);
+      setSelKSide(side);
+    } else if (selKTicker !== ticker) {
+      setSelKTicker(ticker);
+      setSelKSide(null);
+    }
+    queueAutoSave({
+      ticker,
+      side,
+      polyConditionId: selPCondId,
+      polySide: selPSide,
+    });
+  }
+
+  function pickPoly(condId: string, side?: Side) {
+    if (side) {
+      setSelPCondId(condId);
+      setSelPSide(side);
+    } else if (selPCondId !== condId) {
+      setSelPCondId(condId);
+      setSelPSide(null);
+    }
+    queueAutoSave({
+      ticker: selKTicker,
+      side: selKSide,
+      polyConditionId: condId,
+      polySide: side ?? selPSide,
+    });
+  }
+
+  async function queueAutoSave(args: {
+    ticker?: string | null;
+    side?: Side | null;
+    polyConditionId?: string | null;
+    polySide?: Side | null;
+  }) {
+    const t = args.ticker ?? selKTicker;
+    const ks = args.side ?? selKSide;
+    const cid = args.polyConditionId ?? selPCondId;
+    const ps = args.polySide ?? selPSide;
+    if (!t || !ks || !cid || !ps) return;
+    const kMkt = scan.kalshi_markets.find((m) => m.ticker === t);
+    const pMkt = scan.poly_markets.find((m) => m.condition_id === cid);
+    if (!kMkt || !pMkt) return;
+    const polyTokenId = pMkt.yes_token_id;
+    if (!polyTokenId) {
+      setErrMsg("Polymarket market missing token id for that side");
+      return;
+    }
+    setErrMsg(null);
+    const polyOutcomeLabel =
+      ps === "YES" ? pMkt.yes_outcome_label : pMkt.no_outcome_label;
+    const kLabel = kMkt.title || kMkt.ticker;
+    const pLabel =
+      pMkt.group_item_title || pMkt.question || pMkt.condition_id;
+    const autoLabel = `${kLabel} / ${pLabel}`.slice(0, 120);
+    const body: ManualArbSaveBody = {
+      label: autoLabel,
+      kalshi_event_url: urls.kalshi_url,
+      poly_event_url: urls.poly_url,
+      kalshi_market_ticker: kMkt.ticker,
+      kalshi_side: ks,
+      poly_condition_id: pMkt.condition_id,
+      poly_token_id: polyTokenId,
+      poly_outcome_label: polyOutcomeLabel ?? null,
+      poly_side: ps,
+    };
+    try {
+      const r = await save.mutateAsync(body);
+      const kPrice = ks === "YES" ? kMkt.yes_ask_dollars : kMkt.no_ask_dollars;
+      const pPrice = ps === "YES" ? pMkt.yes_last_price : pMkt.no_last_price;
+      const combined =
+        kPrice != null && pPrice != null ? kPrice + pPrice : null;
+      setConfirm({
+        id: r.id,
+        kLabel,
+        pLabel,
+        kSide: ks,
+        pSide: ps,
+        kPrice: kPrice ?? null,
+        pPrice: pPrice ?? null,
+        combined,
+      });
+      setSelKTicker(null);
+      setSelKSide(null);
+      setSelPCondId(null);
+      setSelPSide(null);
+    } catch (e) {
+      setErrMsg("Save failed: " + (e as Error).message);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: "0 10px 10px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      {errMsg && (
+        <div className="ph-neg" style={{ fontSize: 11 }}>
+          {errMsg}
+        </div>
+      )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 12,
+        }}
+      >
+        <Column
+          title="Kalshi outcomes"
+          sort={kSort}
+          onSort={setKSort}
+          markets={kalshiSorted.map((m) => ({
+            id: m.ticker,
+            title: m.title || m.ticker,
+            sub: m.ticker,
+            yes: m.yes_ask_dollars,
+            no: m.no_ask_dollars,
+          }))}
+          selectedId={selKTicker}
+          selectedSide={selKSide}
+          onPick={pickKalshi}
+        />
+        <Column
+          title="Polymarket outcomes"
+          sort={pSort}
+          onSort={setPSort}
+          markets={polySorted.map((m) => ({
+            id: m.condition_id,
+            title: m.group_item_title || m.question || m.condition_id,
+            sub: (m.condition_id ?? "").slice(0, 14) + "…",
+            yes: m.yes_last_price,
+            no: m.no_last_price,
+          }))}
+          selectedId={selPCondId}
+          selectedSide={selPSide}
+          onPick={pickPoly}
+        />
+      </div>
+      {confirm && <ConfirmCard info={confirm} />}
+    </div>
+  );
+}
+
+function ConfirmCard({ info }: { info: ConfirmInfo }) {
+  const isOpposite = info.kSide !== info.pSide;
+  const overWarn = isOpposite && info.combined != null && info.combined > 1.05;
+  const underWarn = isOpposite && info.combined != null && info.combined < 0.8;
+  return (
+    <div
+      style={{
+        borderTop: "1px solid #2d3748",
+        paddingTop: 10,
+        fontSize: 11,
+      }}
+    >
+      <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
+        <span className="ph-text-2">Saved #{info.id}</span>
+        {info.combined != null && isOpposite && (
+          <span className="ph-text-2">
+            combined {info.combined > 1.0 ? "⚠ " : ""}$
+            {info.combined.toFixed(2)}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
+        <span className="ph-text-2" style={{ width: 16 }}>
+          K:
+        </span>
+        <span style={{ fontWeight: 600 }}>
+          {clamp(info.kLabel, 60)} — {info.kSide} {dollars(info.kPrice)}
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
+        <span className="ph-text-2" style={{ width: 16 }}>
+          P:
+        </span>
+        <span style={{ fontWeight: 600 }}>
+          {clamp(info.pLabel, 60)} — {info.pSide} {dollars(info.pPrice)}
+        </span>
+      </div>
+      {overWarn && (
+        <div
+          className="ph-warn-strong"
+          style={{ fontWeight: 600, marginTop: 4 }}
+        >
+          ⚠ Combined cost ${info.combined!.toFixed(2)} &gt; $1.00 — these
+          outcomes may not be equivalent, no arb possible
+        </div>
+      )}
+      {underWarn && (
+        <div
+          className="ph-warn-strong"
+          style={{ fontWeight: 600, marginTop: 4 }}
+        >
+          ⚠ Combined cost ${info.combined!.toFixed(2)} looks too cheap — check
+          prices are live
+        </div>
+      )}
+      {info.kSide === info.pSide && (
+        <div
+          className="ph-warn-strong"
+          style={{ fontWeight: 600, marginTop: 4 }}
+        >
+          ⚠ Both sides are {info.kSide} — directional bet, not an arb. Pick
+          opposite sides for an arb.
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ColumnProps {
+  title: string;
+  sort: Sort;
+  onSort: (s: Sort) => void;
+  markets: Array<{
+    id: string;
+    title: string;
+    sub: string;
+    yes?: number | null;
+    no?: number | null;
+  }>;
+  selectedId: string | null;
+  selectedSide: Side | null;
+  onPick: (id: string, side?: Side) => void;
+}
+
+function Column({
+  title,
+  sort,
+  onSort,
+  markets,
+  selectedId,
+  selectedSide,
+  onPick,
+}: ColumnProps) {
+  return (
+    <div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "6px 0",
+        }}
+      >
+        <h4
+          className="ph-muted-2"
+          style={{
+            fontSize: 10,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            fontWeight: 600,
+            margin: 0,
+          }}
+        >
+          {title}
+        </h4>
+        <div style={{ display: "flex", gap: 4 }}>
+          <Button
+            variant="toggle"
+            active={sort === "price"}
+            onClick={() => onSort("price")}
+          >
+            By price
+          </Button>
+          <Button
+            variant="toggle"
+            active={sort === "alpha"}
+            onClick={() => onSort("alpha")}
+          >
+            A–Z
+          </Button>
+        </div>
+      </div>
+      <div style={{ maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
+        {markets.length === 0 && (
+          <div className="ph-muted" style={{ fontSize: 11, padding: 8 }}>
+            No markets
+          </div>
+        )}
+        {markets.map((m) => {
+          const isSel = m.id === selectedId;
+          return (
+            <div
+              key={m.id}
+              className={cn("ph-pick-card", isSel && "ph-selected")}
+              onClick={() => onPick(m.id)}
+            >
+              <div className="ph-pick-title">
+                {m.title}
+                {isSel && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "#9f7aea",
+                      fontWeight: 700,
+                      marginLeft: 6,
+                    }}
+                  >
+                    ✓ SELECTED
+                  </span>
+                )}
+              </div>
+              <div className="ph-pick-meta">
+                <span className="ph-muted">{m.sub}</span>
+                <span className="ph-muted">·</span>
+                <span>YES {dollars(m.yes ?? null)}</span>
+                <span className="ph-muted">·</span>
+                <span>NO {dollars(m.no ?? null)}</span>
+                <span style={{ marginLeft: "auto", display: "inline-flex", gap: 4 }}>
+                  <Button
+                    variant="toggle"
+                    active={isSel && selectedSide === "YES"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPick(m.id, "YES");
+                    }}
+                  >
+                    YES
+                  </Button>
+                  <Button
+                    variant="toggle"
+                    active={isSel && selectedSide === "NO"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPick(m.id, "NO");
+                    }}
+                  >
+                    NO
+                  </Button>
+                </span>
+                {isSel && !selectedSide && (
+                  <span
+                    className="ph-warn-strong"
+                    style={{ fontSize: 10, fontWeight: 700 }}
+                  >
+                    ← pick YES or NO
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function sortKalshi(markets: KalshiScanMarket[], sort: Sort): KalshiScanMarket[] {
+  const ms = [...markets];
+  if (sort === "alpha") {
+    ms.sort((a, b) =>
+      (a.title || a.ticker).localeCompare(b.title || b.ticker),
+    );
+  } else {
+    ms.sort((a, b) => (b.yes_ask_dollars ?? 0) - (a.yes_ask_dollars ?? 0));
+  }
+  return ms;
+}
+
+function sortPoly(markets: PolyScanMarket[], sort: Sort): PolyScanMarket[] {
+  const label = (m: PolyScanMarket) =>
+    m.group_item_title || m.question || m.condition_id || "";
+  const ms = [...markets];
+  if (sort === "alpha") {
+    ms.sort((a, b) => label(a).localeCompare(label(b)));
+  } else {
+    ms.sort((a, b) => (b.yes_last_price ?? 0) - (a.yes_last_price ?? 0));
+  }
+  return ms;
+}
