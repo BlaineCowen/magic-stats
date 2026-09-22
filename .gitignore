@@ -22,3 +22,6 @@ data/livedraft/
 
 # nflverse parquet cache (scripts/refresh-nfl-data.mjs)
 data/nfl/
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
