@@ -117,8 +117,7 @@ export function validateSpec(
   const x = cols.get(pick.x);
   const y = cols.get(pick.y);
   if (!y?.numeric) return null;
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- "" must fall through
-  const firstText = infos.find((c) => c.text)?.name || "";
+  const firstText = infos.find((c) => c.text)?.name ?? "";
   const title = pick.title.trim();
 
   if (pick.type === "scatter") {
@@ -150,8 +149,7 @@ export function validateSpec(
       x: x.name,
       y: y.name,
       label: "",
-      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- "" must fall through
-      series: series?.name || "",
+      series: series?.name ?? "",
       title,
     };
   }
@@ -160,9 +158,7 @@ export function validateSpec(
     pick.label ||
     (x?.text ? x.name : "") ||
     firstText ||
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- "" must fall through
-    infos.find((c) => c.time)?.name ||
-    "";
+    (infos.find((c) => c.time)?.name ?? "");
   if (!label || label === y.name) return null;
   if (rows.filter((r) => isNum(r[y.name])).length < 2) return null;
   return { type: "bar", x: "", y: y.name, label, series: "", title };
