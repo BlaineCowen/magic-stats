@@ -1,7 +1,7 @@
 // src/app/workout/muscle-config/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { MUSCLE_LABEL, type MuscleId } from "@/lib/muscleMap"
 
@@ -36,7 +36,20 @@ const PILL_BASE = {
   border: "1px solid #2d3748",
 }
 
+/**
+ * `useSearchParams` must sit under a Suspense boundary or `next build` fails
+ * with "useSearchParams() should be wrapped in a suspense boundary", the same
+ * way /livedraft does it.
+ */
 export default function MuscleConfigPage() {
+  return (
+    <Suspense>
+      <MuscleConfigView />
+    </Suspense>
+  )
+}
+
+function MuscleConfigView() {
   const searchParams = useSearchParams()
   const user = searchParams.get("user") ?? "blaine"
 
