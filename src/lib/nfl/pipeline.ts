@@ -5,6 +5,7 @@ import {
   type NativeChatStats,
 } from "@/lib/magic-llm";
 import { dataVersion, runSafeSelect, type Row } from "./db";
+import { extractSqlBlock, parseFast } from "./llm-output";
 import { buildSystemPrompt, type PromptMode } from "./prompt";
 
 export type QueryMode = PromptMode;
@@ -60,29 +61,6 @@ const FAST_FORMAT = {
 };
 
 const MAX_ATTEMPTS = 3;
-
-/** Last ```sql block, else any fenced block, else the text itself if it looks like SQL. */
-export function extractSqlBlock(text: string): string | null {
-  const fenced = [...text.matchAll(/```(?:sql)?\s*([\s\S]*?)```/gi)];
-  const last = fenced.at(-1)?.[1]?.trim();
-  if (last) return last;
-  const bare = text.trim();
-  return /^(select|with)\b/i.test(bare) ? bare : null;
-}
-
-function parseFast(raw: string): { plan: string | null; sql: string | null } {
-  try {
-    const j = JSON.parse(raw) as { plan?: unknown; sql?: unknown };
-    return {
-      plan: typeof j.plan === "string" ? j.plan : null,
-      sql: typeof j.sql === "string" ? j.sql : null,
-    };
-  } catch {
-    // Truncated JSON: salvage the sql field if it closed.
-    const m = /"sql"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(raw);
-    return { plan: null, sql: m ? (JSON.parse(`"${m[1]}"`) as string) : null };
-  }
-}
 
 /** Extra guidance for errors the 9B model tends to repeat verbatim. */
 function errorHint(error: string, sql: string): string {
