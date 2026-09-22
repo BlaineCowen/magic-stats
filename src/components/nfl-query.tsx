@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { NflNav } from "@/components/nfl-nav";
 import { QueryChart } from "@/components/charts/query-chart";
@@ -8,11 +8,18 @@ import { SimpleDataTable } from "@/components/simple-data-table";
 import {
   inferSpec,
   type ChartPick,
+  type ChartRow,
   type ChartSource,
   type ChartSpec,
   type TeamColors,
 } from "@/lib/nfl/chart-spec";
 import { cn } from "@/lib/utils";
+
+// Stable references so an idle response doesn't hand QueryChart a new empty
+// array/object identity on every render (it's wrapped in React.memo).
+const EMPTY_ROWS: ChartRow[] = [];
+const EMPTY_COLUMNS: string[] = [];
+const EMPTY_COLORS: TeamColors = {};
 
 type QueryResult = Record<string, string | number | boolean | null>;
 type Mode = "fast" | "deep";
@@ -85,11 +92,13 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   const [error, setError] = useState("");
   const [queryCount, setQueryCount] = useState(0);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
-  // The chart on screen; a new `key` remounts QueryChart so its controls reset.
+  // The chart on screen; a new `key` remounts QueryChart so its controls
+  // reset. `question` is the question it answers, shown as the subtitle.
   const [chart, setChart] = useState<{
     spec: ChartSpec;
     key: number;
     hidden: boolean;
+    question: string;
   } | null>(null);
 
   const isLoading = loadingMode !== null;
@@ -97,13 +106,21 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   const results = hideIdColumns(response?.results ?? []);
   const chartShown = !!chart && !chart.hidden && !error && results.length > 0;
   // Offered as "Chart this" when the answer came back as a table only.
-  const inferred = useMemo(
-    () =>
-      !chart && response?.results?.length
-        ? inferSpec(lastQuery, response.results, response.columns ?? [])
-        : null,
-    [chart, response, lastQuery],
-  );
+  // inferSpec is a pile of heuristics over rows we don't control (LLM SQL
+  // output); guard it so a bug there can't blank the whole results card.
+  const inferred = useMemo(() => {
+    if (chart || !response?.results?.length) return null;
+    try {
+      return inferSpec(lastQuery, response.results, response.columns ?? []);
+    } catch (e) {
+      console.error("inferSpec failed:", e);
+      return null;
+    }
+  }, [chart, response, lastQuery]);
+
+  const hideChart = useCallback(() => {
+    setChart((c) => (c ? { ...c, hidden: true } : c));
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("nfl_query_count");
@@ -144,7 +161,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
       setResponse(data);
       setChart(
         data.chart
-          ? { spec: data.chart, key: Date.now(), hidden: false }
+          ? { spec: data.chart, key: Date.now(), hidden: false, question: text }
           : null,
       );
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch results");
@@ -395,13 +412,14 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
                     Show chart
                   </button>
                 )}
-                {inferred && (
+                {!isLoading && inferred && (
                   <button
                     onClick={() =>
                       setChart({
                         spec: inferred,
                         key: Date.now(),
                         hidden: false,
+                        question: lastQuery,
                       })
                     }
                     className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-3 sm:py-2 sm:text-sm"
@@ -418,16 +436,21 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
                 </button>
               </div>
             </div>
-            {chartShown && chart && (
-              <QueryChart
-                key={chart.key}
-                rows={response.results ?? []}
-                columns={response.columns ?? []}
-                initial={chart.spec}
-                teamColors={response.team_colors ?? {}}
-                subtitle={response.plan ?? lastQuery}
-                onHide={() => setChart({ ...chart, hidden: true })}
-              />
+            {/* Stays mounted while hidden so Hide/Show keeps the user's
+                control changes (X/Y/series/type); only its wrapper toggles. */}
+            {chart && (
+              <div className={chartShown ? undefined : "hidden"}>
+                <QueryChart
+                  key={chart.key}
+                  rows={response?.results ?? EMPTY_ROWS}
+                  columns={response?.columns ?? EMPTY_COLUMNS}
+                  initial={chart.spec}
+                  teamColors={response?.team_colors ?? EMPTY_COLORS}
+                  question={chart.question}
+                  truncated={response?.truncated}
+                  onHide={hideChart}
+                />
+              </div>
             )}
             <SimpleDataTable data={results} />
             {response.truncated && (
