@@ -13,7 +13,8 @@
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npx tsx --test src/lib/nfl/*.test.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",
