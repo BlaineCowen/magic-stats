@@ -24,6 +24,7 @@ import {
 } from "@/lib/nfl/chart-spec";
 import { cn } from "@/lib/utils";
 import { downloadSvgAsPng, type PlotProps } from "./chart-kit";
+import { LinePlot } from "./line-plot";
 import { ScatterPlot } from "./scatter-plot";
 
 const TYPE_LABEL: Record<ChartType, string> = {
@@ -32,9 +33,10 @@ const TYPE_LABEL: Record<ChartType, string> = {
   bar: "Bar",
 };
 
-// Line and bar are registered in the next two tasks.
+// Bar is registered in the next task.
 const PLOTS: Partial<Record<ChartType, ComponentType<PlotProps>>> = {
   scatter: ScatterPlot,
+  line: LinePlot,
 };
 
 class ChartBoundary extends Component<
