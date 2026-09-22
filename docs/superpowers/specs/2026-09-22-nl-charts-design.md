@@ -242,7 +242,7 @@ Every plot drops rows with null values in the plotted columns and notes "N rows 
    - Plot Josh Allen passing yards by week in 2025: line, x `/week/`.
 4. **Gate:** after the prompt change, the original 18 cases must pass at least at the baseline rate, and the chart cases should mostly pass. A drop on the original cases means the prompt gets reworked before shipping.
 5. **Manual:**
-   - In the preview (`:3001`), run the three prompt examples and "Chart this" on a plain leaderboard.
+   - In the preview (`:3002`), run the three prompt examples and "Chart this" on a plain leaderboard.
    - Change axes and type, and download a PNG.
    - Take a Playwright screenshot of each chart type.
 6. `npm run check` passes.
@@ -267,3 +267,29 @@ Every plot drops rows with null values in the plotted columns and notes "N rows 
 | `src/components/nfl-query.tsx` | response types, chart placement, widening, Chart this |
 | `scripts/eval-nfl-queries.mts` | chart expectations + 6 chart cases |
 | `package.json` | `test` script |
+
+---
+
+## Revisions During Planning (2026-09-22)
+
+These supersede the sections above where they differ.
+
+- **Preview port** is `:3002` (the `magic-stats-preview` container).
+- **`team_colors`** comes back with every successful answer, not only chart answers, so "Chart this" can color a table-only result.
+- **Pure helpers live in `chart-spec.ts`**, not `chart-kit.tsx`, so they're unit-tested: `humanize`, `chartTitle`, `shortLabel`, `formatCell`, `teamCode`, `labelsAreTeams`, `plotRows`.
+- **Model-output parsing** (`parseFast`, `extractSqlBlock`, `extractChartBlock`, `toChartPick`) moves to a new pure `src/lib/nfl/llm-output.ts`, also unit-tested.
+- **Line x must be numeric** (season, week, year). Date strings aren't supported.
+- **Bars are capped at 30.** Bars keep row order when the rows are already sorted by `y`; otherwise they're sorted descending. This covers both "Chart this" and a changed Y.
+- **Dataviz rules for the new charts:**
+  - Label text uses ink colors, never the series color.
+  - Bars don't print a value on every bar; hover and the table give exact values.
+  - Bars have a 4px rounded data end and a gap between bars.
+  - Lines are 2px with 8px markers and a crosshair tooltip.
+  - Line charts with 2 or more series get a legend; end-of-line labels only when there are 4 or fewer series.
+  - Non-team series use the validated categorical palette in fixed order: `#2a78d6 #eb6834 #1baf7a #eda100 #e87ba4 #008300 #4a3aa7 #e34948`.
+- **Chart placement:** directly under the Results header, above the table. "How this was answered" stays at the bottom where it is today.
+- **Inference:**
+  - "Chart this" passes the question text to `inferSpec`, so intent words still count.
+  - Shape-based line detection requires the time column to be sorted, so a season-mixed leaderboard isn't drawn as lines.
+  - `chooseChart` tries the model's chart type first when its columns were wrong.
+- **Eval:** existing cases 13 (Lions home vs away) and 15 (Mahomes EPA by season) accept any chart. The other existing cases must return no chart.
