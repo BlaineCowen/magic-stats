@@ -1,0 +1,23 @@
+export const qk = {
+  status: ["ph", "status"] as const,
+  games: ["ph", "games"] as const,
+  bets: ["ph", "bets"] as const,
+  betsRecent: (limit: number) => ["ph", "bets", "recent", limit] as const,
+  betsBacktest: ["ph", "bets", "backtest"] as const,
+  manualArbsList: ["ph", "manual-arbs", "list"] as const,
+  manualArbsHistory: ["ph", "manual-arbs", "history"] as const,
+  tempArbsList: ["ph", "temp-arbs", "list"] as const,
+  tempArbsHistory: ["ph", "temp-arbs", "history"] as const,
+  rtMovies: ["ph", "rt-middles", "movies"] as const,
+  rtLive: ["ph", "rt-middles", "live"] as const,
+  rtBets: ["ph", "rt-middles", "bets"] as const,
+  openBets: ["ph", "open-bets"] as const,
+  settledBets: (limit: number) => ["ph", "settled-bets", limit] as const,
+  pnlSummary: ["ph", "pnl", "summary"] as const,
+  pnlFills: ["ph", "pnl", "fills"] as const,
+  arbSummary: ["ph", "arb", "summary"] as const,
+  arbList: ["ph", "arb", "list"] as const,
+  arbCandidates: (status: string, series: string, hideBlocked: boolean) =>
+    ["ph", "arb", "list", status, series, hideBlocked] as const,
+  arbCandidate: (id: number) => ["ph", "arb", "detail", id] as const,
+};
