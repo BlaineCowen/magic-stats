@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+  asksForChart,
+  chartIntent,
+  chooseChart,
   classifyColumns,
+  inferSpec,
   isSorted,
   validateSpec,
   type ChartPick,
@@ -253,6 +257,171 @@ describe("validateSpec", () => {
         QB_COLS,
       )?.title,
       "QBs",
+    );
+  });
+});
+
+describe("inferSpec", () => {
+  test("CPOE vs EPA puts the named stats on the axes, never dropbacks", () => {
+    const s = inferSpec(
+      "QB CPOE vs EPA/play over the last 2 seasons",
+      QB_ROWS,
+      QB_COLS,
+    );
+    assert.deepEqual(
+      [s?.type, s?.x, s?.y, s?.label],
+      ["scatter", "cpoe", "epa_per_play", "passer_full_name"],
+    );
+  });
+
+  test("with no question, two metrics make a scatter in column order", () => {
+    const s = inferSpec("", QB_ROWS, QB_COLS);
+    assert.deepEqual(
+      [s?.type, s?.x, s?.y],
+      ["scatter", "cpoe", "epa_per_play"],
+    );
+  });
+
+  test("seasons by team make a line with a series", () => {
+    const s = inferSpec(
+      "Chart the Bills and Chiefs point differential by season since 2018",
+      LINE_ROWS,
+      LINE_COLS,
+    );
+    assert.deepEqual(
+      [s?.type, s?.x, s?.y, s?.series],
+      ["line", "season", "point_diff", "team"],
+    );
+  });
+
+  test("a single team's seasons make one line", () => {
+    const kc = LINE_ROWS.filter((r) => r.team === "KC");
+    const s = inferSpec("Chiefs point differential by season", kc, LINE_COLS);
+    assert.deepEqual([s?.type, s?.series], ["line", ""]);
+  });
+
+  test("a ranking makes a bar on the sorted column", () => {
+    const s = inferSpec(
+      "Top 15 running backs by rushing EPA per carry, bar chart",
+      BAR_ROWS,
+      BAR_COLS,
+    );
+    assert.deepEqual(
+      [s?.type, s?.y, s?.label],
+      ["bar", "epa_per_carry", "player_display_name"],
+    );
+  });
+
+  test("a leaderboard with an unsorted season column is not a line", () => {
+    const rows: ChartRow[] = [
+      { player_display_name: "T.J. Watt", season: 2021, sacks: 22.5 },
+      { player_display_name: "Michael Strahan", season: 2001, sacks: 22.5 },
+      { player_display_name: "Jared Allen", season: 2011, sacks: 22 },
+    ];
+    const s = inferSpec("", rows, ["player_display_name", "season", "sacks"]);
+    assert.deepEqual([s?.type, s?.y], ["bar", "sacks"]);
+  });
+
+  test("sample-size columns are used when there is nothing else", () => {
+    const rows: ChartRow[] = [
+      { team: "KC", games: 20 },
+      { team: "BUF", games: 19 },
+      { team: "DET", games: 18 },
+    ];
+    assert.deepEqual(inferSpec("", rows, ["team", "games"]), {
+      type: "bar",
+      x: "",
+      y: "games",
+      label: "team",
+      series: "",
+      title: "",
+    });
+  });
+
+  test("a single row can't be charted", () => {
+    assert.equal(inferSpec("plot it", QB_ROWS.slice(0, 1), QB_COLS), null);
+  });
+});
+
+describe("asksForChart / chartIntent", () => {
+  test("chart words", () => {
+    for (const q of [
+      "Plot Josh Allen passing yards by week",
+      "QB CPOE vs EPA",
+      "rushing trend since 2015",
+      "graph the Ravens",
+      "Visualize team EPA",
+    ]) {
+      assert.equal(asksForChart(q), true, q);
+    }
+    for (const q of [
+      "Who led the league in rushing yards in 2024?",
+      "Most sacks in a single season since 2010",
+      "Chiefs record each season since 2020",
+    ]) {
+      assert.equal(asksForChart(q), false, q);
+    }
+  });
+
+  test("intent", () => {
+    assert.equal(chartIntent("Top 15 WRs by yards as a bar chart"), "bar");
+    assert.equal(chartIntent("CPOE vs EPA"), "scatter");
+    assert.equal(chartIntent("Chiefs EPA by season"), "line");
+    assert.equal(chartIntent("Points per game in 2024"), null);
+  });
+});
+
+describe("chooseChart", () => {
+  test("uses a valid model pick", () => {
+    const r = chooseChart(
+      "anything",
+      pick({ type: "scatter", x: "cpoe", y: "epa_per_play" }),
+      QB_ROWS,
+      QB_COLS,
+    );
+    assert.equal(r.chart_source, "model");
+  });
+
+  test("falls back to rules when the pick names a missing column", () => {
+    const r = chooseChart(
+      "QB CPOE vs EPA",
+      pick({ type: "scatter", x: "cpoe", y: "epa" }),
+      QB_ROWS,
+      QB_COLS,
+    );
+    assert.deepEqual(
+      [r.chart_source, r.chart?.y],
+      ["inferred", "epa_per_play"],
+    );
+  });
+
+  test("keeps the model's chart type when inferring", () => {
+    const r = chooseChart(
+      "Bills and Chiefs point differential",
+      pick({ type: "line", x: "year", y: "point_diff" }),
+      LINE_ROWS,
+      LINE_COLS,
+    );
+    assert.deepEqual(
+      [r.chart?.type, r.chart?.x, r.chart?.series],
+      ["line", "season", "team"],
+    );
+  });
+
+  test("infers when the model said none but the question asks for a plot", () => {
+    assert.equal(
+      chooseChart("Plot CPOE vs EPA", pick({}), QB_ROWS, QB_COLS).chart_source,
+      "inferred",
+    );
+  });
+
+  test("no chart when neither the model nor the question wants one", () => {
+    assert.deepEqual(
+      chooseChart("Best QBs by EPA in 2024", pick({}), QB_ROWS, QB_COLS),
+      {
+        chart: null,
+        chart_source: null,
+      },
     );
   });
 });
