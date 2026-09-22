@@ -23,6 +23,7 @@ import {
   type TeamColors,
 } from "@/lib/nfl/chart-spec";
 import { cn } from "@/lib/utils";
+import { BarPlot } from "./bar-plot";
 import { downloadSvgAsPng, type PlotProps } from "./chart-kit";
 import { LinePlot } from "./line-plot";
 import { ScatterPlot } from "./scatter-plot";
@@ -33,10 +34,10 @@ const TYPE_LABEL: Record<ChartType, string> = {
   bar: "Bar",
 };
 
-// Bar is registered in the next task.
-const PLOTS: Partial<Record<ChartType, ComponentType<PlotProps>>> = {
+const PLOTS: Record<ChartType, ComponentType<PlotProps>> = {
   scatter: ScatterPlot,
   line: LinePlot,
+  bar: BarPlot,
 };
 
 class ChartBoundary extends Component<
@@ -101,10 +102,8 @@ function QueryChartBody({
   // Keep the current columns when switching type if they fit; else infer.
   // Changing any field drops the model's title, which may no longer apply.
   const forType = (t: ChartType) =>
-    PLOTS[t]
-      ? (validateSpec({ ...spec, type: t, title: "" }, rows, columns) ??
-        inferSpecOfType(t, "", rows, columns))
-      : null;
+    validateSpec({ ...spec, type: t, title: "" }, rows, columns) ??
+    inferSpecOfType(t, "", rows, columns);
   const withField = (field: "x" | "y" | "series", value: string) =>
     validateSpec(
       field === "x"
@@ -219,23 +218,17 @@ function QueryChartBody({
         </div>
       </div>
       <ChartBoundary key={JSON.stringify(spec)}>
-        {Plot ? (
-          <Plot
-            rows={plotted}
-            columns={visible}
-            spec={spec}
-            teamColors={teamColors}
-            title={title}
-            subtitle={subtitle}
-            footnote={footnote}
-            showLabels={showLabels}
-            svgRef={svgRef}
-          />
-        ) : (
-          <p className="rounded bg-gray-50 p-4 text-sm text-gray-600">
-            {TYPE_LABEL[spec.type]} charts aren&apos;t available yet.
-          </p>
-        )}
+        <Plot
+          rows={plotted}
+          columns={visible}
+          spec={spec}
+          teamColors={teamColors}
+          title={title}
+          subtitle={subtitle}
+          footnote={footnote}
+          showLabels={showLabels}
+          svgRef={svgRef}
+        />
       </ChartBoundary>
     </div>
   );
