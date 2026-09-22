@@ -329,9 +329,10 @@ export function inferSpec(
 }
 
 /**
- * The chart to return with an answer: the model's pick if it fits, else the
- * rules (trying the model's type first) when the model or the question wanted
- * a chart. Never throws.
+ * The chart to return with an answer. Only questions that ask for a chart
+ * ever get one: the model's pick only chooses which columns to plot, it
+ * doesn't decide whether to plot at all. Every other answer comes back with
+ * no chart, and the UI offers "Chart this" instead. Never throws.
  */
 export function chooseChart(
   question: string,
@@ -340,10 +341,10 @@ export function chooseChart(
   columns: string[],
 ): { chart: ChartSpec | null; chart_source: ChartSource | null } {
   try {
-    const fromModel = validateSpec(pick, rows, columns);
-    if (fromModel) return { chart: fromModel, chart_source: "model" };
-    const wanted = pick && pick.type !== "none" ? pick.type : null;
-    if (wanted ?? asksForChart(question)) {
+    if (asksForChart(question)) {
+      const fromModel = validateSpec(pick, rows, columns);
+      if (fromModel) return { chart: fromModel, chart_source: "model" };
+      const wanted = pick && pick.type !== "none" ? pick.type : null;
       const inferred =
         (wanted && inferSpecOfType(wanted, question, rows, columns)) ??
         inferSpec(question, rows, columns);

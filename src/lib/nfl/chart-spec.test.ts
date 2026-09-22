@@ -382,7 +382,7 @@ describe("asksForChart / chartIntent", () => {
 describe("chooseChart", () => {
   test("uses a valid model pick", () => {
     const r = chooseChart(
-      "anything",
+      "Plot CPOE vs EPA per play",
       pick({ type: "scatter", x: "cpoe", y: "epa_per_play" }),
       QB_ROWS,
       QB_COLS,
@@ -405,7 +405,7 @@ describe("chooseChart", () => {
 
   test("keeps the model's chart type when inferring", () => {
     const r = chooseChart(
-      "Bills and Chiefs point differential",
+      "Chart the Bills and Chiefs point differential",
       pick({ type: "line", x: "year", y: "point_diff" }),
       LINE_ROWS,
       LINE_COLS,
@@ -426,6 +426,21 @@ describe("chooseChart", () => {
   test("no chart when neither the model nor the question wants one", () => {
     assert.deepEqual(
       chooseChart("Best QBs by EPA in 2024", pick({}), QB_ROWS, QB_COLS),
+      {
+        chart: null,
+        chart_source: null,
+      },
+    );
+  });
+
+  test("ignores the model's pick when the question doesn't ask for a chart", () => {
+    assert.deepEqual(
+      chooseChart(
+        "Best QBs by EPA in 2024",
+        pick({ type: "scatter", x: "cpoe", y: "epa_per_play" }),
+        QB_ROWS,
+        QB_COLS,
+      ),
       {
         chart: null,
         chart_source: null,
