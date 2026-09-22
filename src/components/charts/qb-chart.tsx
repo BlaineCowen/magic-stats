@@ -9,83 +9,16 @@ import {
 import {
   ChartSvg,
   fmt,
+  LABEL_PX,
   makeAxis,
   pct,
-  PLOT,
+  placeLabels,
+  regression,
   signed,
   TipRow,
   useChartTooltip,
   weightedMean,
 } from "./chart-kit";
-
-const LABEL_PX = 12;
-// Rough glyph width for the label font; only used to avoid overlaps.
-const CHAR_W = 6.8;
-
-type Box = { x0: number; y0: number; x1: number; y1: number };
-type Label = { x: number; y: number; anchor: "start" | "middle" | "end" };
-
-const overlaps = (a: Box, b: Box) =>
-  a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
-
-function labelBox(l: Label, text: string): Box {
-  const w = text.length * CHAR_W;
-  const x0 =
-    l.anchor === "start" ? l.x : l.anchor === "end" ? l.x - w : l.x - w / 2;
-  return { x0, y0: l.y - LABEL_PX, x1: x0 + w, y1: l.y + 2 };
-}
-
-/** Greedy placement: above, below, right, left; first spot that's free wins. */
-function placeLabels(
-  points: { key: string; name: string; cx: number; cy: number; r: number }[],
-): Map<string, Label> {
-  const taken: Box[] = points.map((p) => ({
-    x0: p.cx - p.r,
-    y0: p.cy - p.r,
-    x1: p.cx + p.r,
-    y1: p.cy + p.r,
-  }));
-  const placed = new Map<string, Label>();
-  for (const p of points) {
-    const options: Label[] = [
-      { x: p.cx, y: p.cy - p.r - 4, anchor: "middle" },
-      { x: p.cx, y: p.cy + p.r + LABEL_PX + 2, anchor: "middle" },
-      { x: p.cx + p.r + 4, y: p.cy + 4, anchor: "start" },
-      { x: p.cx - p.r - 4, y: p.cy + 4, anchor: "end" },
-    ];
-    // Every option sits outside the point's own bubble, so it can be checked
-    // against all taken boxes.
-    const fits = (l: Label) => {
-      const b = labelBox(l, p.name);
-      return (
-        b.x0 >= PLOT.x0 &&
-        b.x1 <= PLOT.x1 + 20 &&
-        b.y0 >= PLOT.y0 - 16 &&
-        !taken.some((t) => overlaps(b, t))
-      );
-    };
-    const pick = options.find(fits) ?? options[0]!;
-    placed.set(p.key, pick);
-    taken.push(labelBox(pick, p.name));
-  }
-  return placed;
-}
-
-function regression(qbs: QbPoint[]) {
-  const n = qbs.length;
-  if (n < 3) return null;
-  const mx = qbs.reduce((s, q) => s + q.cpoe, 0) / n;
-  const my = qbs.reduce((s, q) => s + q.epa, 0) / n;
-  let sxy = 0;
-  let sxx = 0;
-  for (const q of qbs) {
-    sxy += (q.cpoe - mx) * (q.epa - my);
-    sxx += (q.cpoe - mx) ** 2;
-  }
-  if (sxx === 0) return null;
-  const slope = sxy / sxx;
-  return (v: number) => my + slope * (v - mx);
-}
 
 /** CPOE (x) against EPA/play (y), bubbles sized by plays, like rbsdm.com. */
 export function QbChart({
@@ -116,7 +49,7 @@ export function QbChart({
     (q) => q.epa,
     (q) => q.plays,
   );
-  const fit = regression(qbs);
+  const fit = regression(qbs.map((q) => ({ x: q.cpoe, y: q.epa })));
   const maxPlays = Math.max(1, ...qbs.map((q) => q.plays));
   const radius = (q: QbPoint) => 6 + 10 * Math.sqrt(q.plays / maxPlays);
   // Big bubbles first so small ones stay visible on top.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type ReactNode, type Ref } from "react";
+import type { ChartRow, ChartSpec, TeamColors } from "@/lib/nfl/chart-spec";
 
 /**
  * Small SVG chart toolkit. Everything inside the <svg> uses presentation
@@ -10,6 +11,7 @@ import { useId, useRef, useState, type ReactNode, type Ref } from "react";
 export const W = 1000;
 export const H = 680;
 export const PLOT = { x0: 84, x1: 976, y0: 92, y1: 606 };
+export type Plot = typeof PLOT;
 export const FONT =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
@@ -41,18 +43,31 @@ function decimalsFor(step: number): number {
 export function makeAxis(
   values: number[],
   label: string,
-  opts: { invert?: boolean; minDecimals?: number; pad?: number } = {},
+  opts: {
+    invert?: boolean;
+    minDecimals?: number;
+    pad?: number;
+    /** Whole-number ticks (seasons, weeks). */
+    integer?: boolean;
+    /** Bars: the axis reaches 0, with no padding past it. */
+    includeZero?: boolean;
+  } = {},
 ): Axis {
   let min = values.length ? Math.min(...values) : -0.1;
   let max = values.length ? Math.max(...values) : 0.1;
+  if (opts.includeZero) {
+    min = Math.min(min, 0);
+    max = Math.max(max, 0);
+  }
   if (max - min < 1e-9) {
     min -= 0.1;
     max += 0.1;
   }
   const pad = (max - min) * (opts.pad ?? 0.08);
-  const lo = min - pad;
-  const hi = max + pad;
-  const step = niceStep((hi - lo) / 8);
+  const lo = opts.includeZero && min === 0 ? 0 : min - pad;
+  const hi = opts.includeZero && max === 0 ? 0 : max + pad;
+  const raw = niceStep((hi - lo) / 8);
+  const step = opts.integer ? Math.max(1, Math.ceil(raw)) : raw;
   const ticks: number[] = [];
   for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) {
     ticks.push(Number(t.toFixed(10)));
@@ -68,14 +83,14 @@ export function makeAxis(
   };
 }
 
-export function scales(x: Axis, y: Axis) {
+export function scales(x: Axis, y: Axis, plot: Plot = PLOT) {
   const sx = (v: number) =>
-    PLOT.x0 + ((v - x.lo) / (x.hi - x.lo)) * (PLOT.x1 - PLOT.x0);
+    plot.x0 + ((v - x.lo) / (x.hi - x.lo)) * (plot.x1 - plot.x0);
   const sy = (v: number) => {
     const t = (v - y.lo) / (y.hi - y.lo);
     return y.invert
-      ? PLOT.y0 + t * (PLOT.y1 - PLOT.y0)
-      : PLOT.y1 - t * (PLOT.y1 - PLOT.y0);
+      ? plot.y0 + t * (plot.y1 - plot.y0)
+      : plot.y1 - t * (plot.y1 - plot.y0);
   };
   return { sx, sy };
 }
@@ -113,6 +128,8 @@ export function ChartSvg({
   x,
   y,
   footnote,
+  plot,
+  yCategories,
   children,
 }: {
   svgRef: Ref<SVGSVGElement>;
@@ -121,12 +138,17 @@ export function ChartSvg({
   x: Axis;
   y: Axis;
   footnote: string;
-  children: (s: Scales & { clip: string }) => ReactNode;
+  /** Override plot-area edges, e.g. a wider left margin for bar names. */
+  plot?: Partial<Plot>;
+  /** Names drawn as y ticks instead of numbers (horizontal bars; y runs 0..n, inverted). */
+  yCategories?: string[];
+  children: (s: Scales & { clip: string; plot: Plot }) => ReactNode;
 }) {
   // useId output contains characters that break url(#...) references.
   const clipId = `plot-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const s = scales(x, y);
-  const { x0, x1, y0, y1 } = PLOT;
+  const p: Plot = { ...PLOT, ...plot };
+  const s = scales(x, y, p);
+  const { x0, x1, y0, y1 } = p;
   return (
     <svg
       ref={svgRef}
@@ -166,20 +188,39 @@ export function ChartSvg({
           </text>
         </g>
       ))}
-      {y.ticks.map((t) => (
-        <g key={`y${t}`}>
-          <line x1={x0} x2={x1} y1={s.sy(t)} y2={s.sy(t)} stroke="#ffffff" />
-          <text
-            x={x0 - 10}
-            y={s.sy(t) + 4}
-            fontSize={12}
-            textAnchor="end"
-            fill="#6b7280"
-          >
-            {fmt(t, y.decimals)}
-          </text>
-        </g>
-      ))}
+      {yCategories
+        ? yCategories.map((name, i) => (
+            <text
+              key={`c${i}`}
+              x={x0 - 10}
+              y={s.sy(i + 0.5) + 4}
+              fontSize={12}
+              textAnchor="end"
+              fill="#374151"
+            >
+              {name}
+            </text>
+          ))
+        : y.ticks.map((t) => (
+            <g key={`y${t}`}>
+              <line
+                x1={x0}
+                x2={x1}
+                y1={s.sy(t)}
+                y2={s.sy(t)}
+                stroke="#ffffff"
+              />
+              <text
+                x={x0 - 10}
+                y={s.sy(t) + 4}
+                fontSize={12}
+                textAnchor="end"
+                fill="#6b7280"
+              >
+                {fmt(t, y.decimals)}
+              </text>
+            </g>
+          ))}
 
       <text
         x={(x0 + x1) / 2}
@@ -204,7 +245,7 @@ export function ChartSvg({
         {footnote}
       </text>
 
-      {children({ ...s, clip: `url(#${clipId})` })}
+      {children({ ...s, clip: `url(#${clipId})`, plot: p })}
     </svg>
   );
 }
@@ -244,6 +285,121 @@ export function TipRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+export const LABEL_PX = 12;
+/** Rough glyph width for the label font; only used to avoid overlaps. */
+export const CHAR_W = 6.8;
+
+type Box = { x0: number; y0: number; x1: number; y1: number };
+export type Label = {
+  x: number;
+  y: number;
+  anchor: "start" | "middle" | "end";
+};
+
+const overlaps = (a: Box, b: Box) =>
+  a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+function labelBox(l: Label, text: string): Box {
+  const w = text.length * CHAR_W;
+  const x0 =
+    l.anchor === "start" ? l.x : l.anchor === "end" ? l.x - w : l.x - w / 2;
+  return { x0, y0: l.y - LABEL_PX, x1: x0 + w, y1: l.y + 2 };
+}
+
+/**
+ * Greedy placement: above, below, right, left; first spot that's free wins.
+ * With `dropCrowded`, a point with no free spot gets no label rather than an
+ * overlapping one.
+ */
+export function placeLabels(
+  points: { key: string; name: string; cx: number; cy: number; r: number }[],
+  plot: Plot = PLOT,
+  opts: { dropCrowded?: boolean } = {},
+): Map<string, Label> {
+  const taken: Box[] = points.map((p) => ({
+    x0: p.cx - p.r,
+    y0: p.cy - p.r,
+    x1: p.cx + p.r,
+    y1: p.cy + p.r,
+  }));
+  const placed = new Map<string, Label>();
+  for (const p of points) {
+    const options: Label[] = [
+      { x: p.cx, y: p.cy - p.r - 4, anchor: "middle" },
+      { x: p.cx, y: p.cy + p.r + LABEL_PX + 2, anchor: "middle" },
+      { x: p.cx + p.r + 4, y: p.cy + 4, anchor: "start" },
+      { x: p.cx - p.r - 4, y: p.cy + 4, anchor: "end" },
+    ];
+    // Every option sits outside the point's own bubble, so it can be checked
+    // against all taken boxes.
+    const fits = (l: Label) => {
+      const b = labelBox(l, p.name);
+      return (
+        b.x0 >= plot.x0 &&
+        b.x1 <= plot.x1 + 20 &&
+        b.y0 >= plot.y0 - 16 &&
+        !taken.some((t) => overlaps(b, t))
+      );
+    };
+    const pick =
+      options.find(fits) ?? (opts.dropCrowded ? undefined : options[0]);
+    if (!pick) continue;
+    placed.set(p.key, pick);
+    taken.push(labelBox(pick, p.name));
+  }
+  return placed;
+}
+
+/** Least-squares line through the points; null with fewer than 3 or no x spread. */
+export function regression(
+  points: { x: number; y: number }[],
+): ((v: number) => number) | null {
+  const n = points.length;
+  if (n < 3) return null;
+  const mx = points.reduce((s, p) => s + p.x, 0) / n;
+  const my = points.reduce((s, p) => s + p.y, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  for (const p of points) {
+    sxy += (p.x - mx) * (p.y - my);
+    sxx += (p.x - mx) ** 2;
+  }
+  if (sxx === 0) return null;
+  const slope = sxy / sxx;
+  return (v) => my + slope * (v - mx);
+}
+
+/**
+ * Categorical colors for series that aren't teams, in fixed order (never
+ * cycled; line charts cap at 8 series). Validated for colorblind separation
+ * on a white surface.
+ */
+export const PALETTE: readonly string[] = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#4a3aa7",
+  "#e34948",
+];
+
+/** Props shared by the charts drawn from query results. */
+export type PlotProps = {
+  /** Already filtered and capped by plotRows(). */
+  rows: ChartRow[];
+  /** Visible columns, for tooltips. */
+  columns: string[];
+  spec: ChartSpec;
+  teamColors: TeamColors;
+  title: string;
+  subtitle: string;
+  footnote: string;
+  showLabels: boolean;
+  svgRef: Ref<SVGSVGElement>;
+};
 
 async function toDataUrl(href: string): Promise<string> {
   const blob = await (await fetch(href)).blob();
