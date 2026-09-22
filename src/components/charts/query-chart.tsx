@@ -67,25 +67,27 @@ const slug = (s: string) =>
 const button =
   "rounded border border-gray-300 bg-white px-2.5 py-1 text-sm text-gray-700 hover:bg-gray-50";
 
-/**
- * A chart of query rows with controls to re-pick its type and columns. Every
- * change redraws from the rows already loaded. Remount (new `key`) to reset.
- */
-export function QueryChart({
-  rows,
-  columns,
-  initial,
-  teamColors,
-  subtitle,
-  onHide,
-}: {
+type QueryChartProps = {
   rows: ChartRow[];
   columns: string[];
   initial: ChartSpec;
   teamColors: TeamColors;
   subtitle: string;
   onHide: () => void;
-}) {
+};
+
+/**
+ * A chart of query rows with controls to re-pick its type and columns. Every
+ * change redraws from the rows already loaded. Remount (new `key`) to reset.
+ */
+function QueryChartBody({
+  rows,
+  columns,
+  initial,
+  teamColors,
+  subtitle,
+  onHide,
+}: QueryChartProps) {
   const [spec, setSpec] = useState(initial);
   const [showLabels, setShowLabels] = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -234,5 +236,19 @@ export function QueryChart({
         )}
       </ChartBoundary>
     </div>
+  );
+}
+
+/**
+ * Wraps the whole chart — controls and derivations included, not just the
+ * plot — in a boundary, so a throw anywhere in QueryChartBody (e.g. from
+ * classifyColumns, chartTitle or plotRows) falls back to the table instead
+ * of crashing the Results card.
+ */
+export function QueryChart(props: QueryChartProps) {
+  return (
+    <ChartBoundary>
+      <QueryChartBody {...props} />
+    </ChartBoundary>
   );
 }
