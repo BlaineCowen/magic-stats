@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "/", label: "Ask a question" },
-  { href: "/charts", label: "Charts" },
+  { href: "/magic-stats", label: "Ask a question" },
+  { href: "/magic-stats/charts", label: "Charts" },
 ];
 
 export function NflNav() {
@@ -15,8 +15,8 @@ export function NflNav() {
     <nav className="mb-6 flex justify-center gap-6 border-b border-gray-200 text-sm">
       {LINKS.map((l) => {
         const active =
-          l.href === "/"
-            ? pathname === "/" || pathname === "/testing"
+          l.href === "/magic-stats"
+            ? pathname === "/magic-stats" || pathname === "/magic-stats/testing"
             : pathname.startsWith(l.href);
         return (
           <Link
