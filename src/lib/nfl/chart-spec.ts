@@ -101,23 +101,26 @@ export function isSorted(values: (Cell | undefined)[]): boolean {
 /**
  * The pick as a drawable spec, or null if it doesn't fit these rows: every
  * named column must exist (ids don't count), plotted columns must be numeric,
- * and there must be enough rows to be worth a chart.
+ * and there must be enough rows to be worth a chart. Pass `infos` (from a
+ * prior classifyColumns call) to skip reclassifying the columns — useful when
+ * a caller validates many picks against the same rows/columns.
  */
 export function validateSpec(
   pick: ChartPick | null | undefined,
   rows: ChartRow[],
   columns: string[],
+  infos?: ColumnInfo[],
 ): ChartSpec | null {
   if (!pick || !CHART_TYPES.includes(pick.type as ChartType)) return null;
-  const infos = classifyColumns(rows, columns);
-  const cols = new Map(infos.map((c) => [c.name, c]));
+  const infoList = infos ?? classifyColumns(rows, columns);
+  const cols = new Map(infoList.map((c) => [c.name, c]));
   for (const f of [pick.x, pick.y, pick.label, pick.series]) {
     if (f && !cols.has(f)) return null;
   }
   const x = cols.get(pick.x);
   const y = cols.get(pick.y);
   if (!y?.numeric) return null;
-  const firstText = infos.find((c) => c.text)?.name ?? "";
+  const firstText = infoList.find((c) => c.text)?.name ?? "";
   const title = pick.title.trim();
 
   if (pick.type === "scatter") {
@@ -135,12 +138,17 @@ export function validateSpec(
   }
 
   if (pick.type === "line") {
-    if (!x?.numeric || x.name === y.name || x.distinct < 2) return null;
+    if (!x?.numeric || x.name === y.name) return null;
     const series = cols.get(pick.series);
     if (pick.series && !(series?.text || series?.time)) return null;
     if (series?.name === x.name) return null;
+    // Only rows with both x and y actually plot; a line needs at least two
+    // distinct x positions among those, or there's nothing to draw a line
+    // through.
+    const pts = rows.filter((r) => isNum(r[x.name]) && isNum(r[y.name]));
+    if (new Set(pts.map((r) => r[x.name])).size < 2) return null;
     // Two rows at the same x on one line would zigzag.
-    const keys = rows.map(
+    const keys = pts.map(
       (r) => `${String(r[x.name])}|${series ? String(r[series.name]) : ""}`,
     );
     if (new Set(keys).size !== keys.length) return null;
@@ -158,7 +166,7 @@ export function validateSpec(
     pick.label ||
     (x?.text ? x.name : "") ||
     firstText ||
-    (infos.find((c) => c.time)?.name ?? "");
+    (infoList.find((c) => c.time)?.name ?? "");
   if (!label || label === y.name) return null;
   if (rows.filter((r) => isNum(r[y.name])).length < 2) return null;
   return { type: "bar", x: "", y: y.name, label, series: "", title };
@@ -251,21 +259,33 @@ export function chartIntent(question: string): ChartType | null {
   return null;
 }
 
+// A word that unambiguously asks for a picture. "chart" doesn't count right
+// after "depth" ("depth chart" is a roster, not a request to plot one).
+const EXPLICIT_CHART =
+  /\b(plot|graph|visuali[sz]e|scatter|trend)|(?<!depth )\bchart|over time/i;
+// "vs"/"versus" alone is weaker evidence: it also shows up in comparisons
+// ("Mahomes vs the Ravens") that aren't asking for a scatter of two columns.
+// chooseChart only infers a chart from this case when both the x and y it
+// picks are actually named in the question.
+const VERSUS = /\b(vs\.?|versus)(\s|$)/i;
+
 /** Does the question ask for a picture rather than a table? */
 export function asksForChart(question: string): boolean {
-  return /\b(chart|plot|graph|visuali[sz]e|scatter|trend)|over time|\b(vs\.?|versus)(\s|$)/i.test(
-    question,
-  );
+  return EXPLICIT_CHART.test(question) || VERSUS.test(question);
 }
 
-/** The best spec of one type for these rows, or null if that type can't be drawn. */
+/**
+ * The best spec of one type for these rows, or null if that type can't be
+ * drawn. Pass `infos` to reuse a prior classifyColumns call.
+ */
 export function inferSpecOfType(
   type: ChartType,
   question: string,
   rows: ChartRow[],
   columns: string[],
+  infos?: ColumnInfo[],
 ): ChartSpec | null {
-  const cols = classifyColumns(rows, columns);
+  const cols = infos ?? classifyColumns(rows, columns);
   const q = words(question);
   const numbers = rankNumbers(q, cols);
   const firstText = cols.find((c) => c.text)?.name ?? "";
@@ -277,6 +297,7 @@ export function inferSpecOfType(
       { ...blank, type, x, y, label: firstText },
       rows,
       columns,
+      cols,
     );
   }
   if (type === "line") {
@@ -287,19 +308,23 @@ export function inferSpecOfType(
       { ...blank, type, x, y, series: seriesFor(rows, cols, x) },
       rows,
       columns,
+      cols,
     );
   }
   // Bars follow the query's ORDER BY when they can find it.
   const y =
     numbers.find((n) => isSorted(rows.map((r) => r[n]))) ?? numbers[0] ?? "";
   const label = firstText || (cols.find((c) => c.time)?.name ?? "");
-  return validateSpec({ ...blank, type, y, label }, rows, columns);
+  return validateSpec({ ...blank, type, y, label }, rows, columns, cols);
 }
 
 /**
  * Rules for when the model's pick is missing or wrong. The question's wording
- * picks the type first; otherwise the shape does: a sorted time column means
- * a line, two metrics a scatter, else bars. Falls through the other types.
+ * picks the type first; otherwise the shape does, in order: a sorted time
+ * column means a line; else a sorted metric alongside a text column (a
+ * leaderboard, e.g. "Chart this" on query results already in rank order)
+ * means a bar; else two or more metrics means a scatter; else bars. Falls
+ * through the other types.
  */
 export function inferSpec(
   question: string,
@@ -314,15 +339,20 @@ export function inferSpec(
       c.distinct >= 2 &&
       isSorted(rows.map((r) => r[c.name])),
   );
+  const sortedLeaderboard =
+    cols.some((c) => c.text) &&
+    cols.some((c) => c.metric && isSorted(rows.map((r) => r[c.name])));
   const shape: ChartType[] = timeLine
     ? ["line", "scatter", "bar"]
-    : cols.filter((c) => c.metric).length >= 2
-      ? ["scatter", "bar", "line"]
-      : ["bar", "line", "scatter"];
+    : sortedLeaderboard
+      ? ["bar", "scatter", "line"]
+      : cols.filter((c) => c.metric).length >= 2
+        ? ["scatter", "bar", "line"]
+        : ["bar", "line", "scatter"];
   const intent = chartIntent(question);
   const order = intent ? [intent, ...shape.filter((t) => t !== intent)] : shape;
   for (const type of order) {
-    const spec = inferSpecOfType(type, question, rows, columns);
+    const spec = inferSpecOfType(type, question, rows, columns, cols);
     if (spec) return spec;
   }
   return null;
@@ -333,6 +363,14 @@ export function inferSpec(
  * ever get one: the model's pick only chooses which columns to plot, it
  * doesn't decide whether to plot at all. Every other answer comes back with
  * no chart, and the UI offers "Chart this" instead. Never throws.
+ *
+ * The gate has two tiers. An explicit chart word (EXPLICIT_CHART) is taken
+ * at face value: the model's pick wins if it's valid, else the rules infer
+ * one from the model's chart type (or from scratch), same as always. "vs"/
+ * "versus" alone (VERSUS) is weaker — it also shows up in "how did X do vs
+ * Y" comparisons that aren't asking for a scatter — so with no explicit word
+ * present, a rule-inferred scatter is only accepted when both the x and y it
+ * picked are actually named in the question; otherwise there's no chart.
  */
 export function chooseChart(
   question: string,
@@ -341,7 +379,7 @@ export function chooseChart(
   columns: string[],
 ): { chart: ChartSpec | null; chart_source: ChartSource | null } {
   try {
-    if (asksForChart(question)) {
+    if (EXPLICIT_CHART.test(question)) {
       const fromModel = validateSpec(pick, rows, columns);
       if (fromModel) return { chart: fromModel, chart_source: "model" };
       const wanted = pick && pick.type !== "none" ? pick.type : null;
@@ -349,6 +387,18 @@ export function chooseChart(
         (wanted && inferSpecOfType(wanted, question, rows, columns)) ??
         inferSpec(question, rows, columns);
       if (inferred) return { chart: inferred, chart_source: "inferred" };
+    } else if (VERSUS.test(question)) {
+      const fromModel = validateSpec(pick, rows, columns);
+      if (fromModel) return { chart: fromModel, chart_source: "model" };
+      const scatter = inferSpecOfType("scatter", question, rows, columns);
+      const q = words(question);
+      if (
+        scatter &&
+        Number.isFinite(mention(q, scatter.x)) &&
+        Number.isFinite(mention(q, scatter.y))
+      ) {
+        return { chart: scatter, chart_source: "inferred" };
+      }
     }
   } catch (e) {
     console.error("Chart selection failed:", e);
@@ -435,7 +485,7 @@ export function teamCode(
 ): string | null {
   for (const c of [spec.label, spec.series, ...TEAM_COLUMNS]) {
     const v = c ? row[c] : undefined;
-    if (typeof v === "string" && colors[v]) return v;
+    if (typeof v === "string" && Object.hasOwn(colors, v)) return v;
   }
   return null;
 }
@@ -451,7 +501,7 @@ export function labelsAreTeams(
     rows.length > 0 &&
     rows.every((r) => {
       const v = r[spec.label];
-      return typeof v === "string" && !!colors[v];
+      return typeof v === "string" && Object.hasOwn(colors, v);
     })
   );
 }

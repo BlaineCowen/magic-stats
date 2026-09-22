@@ -262,24 +262,31 @@ export async function getDataInfo(): Promise<DataInfo> {
 
 let colorsCache: { version: string; colors: TeamColors } | null = null;
 
-/** team_abbr -> colors from the teams view; empty if it isn't loaded. */
+/**
+ * team_abbr -> colors from the teams view; empty if it isn't loaded. Only a
+ * successful query is cached — a failure (e.g. an older data dir with no
+ * teams view yet) isn't, so a later refresh that adds the view is picked up
+ * on the next call instead of being stuck returning {} until the process
+ * restarts.
+ */
 export async function getTeamColors(): Promise<TeamColors> {
   const version = dataVersion();
   if (colorsCache?.version === version) return colorsCache.colors;
-  const colors: TeamColors = {};
   try {
     const { rows } = await runSafeSelect(
       "SELECT team_abbr, team_color, team_color2 FROM teams",
     );
+    const colors: TeamColors = {};
     for (const r of rows) {
       colors[String(r.team_abbr)] = {
         color: r.team_color == null ? null : String(r.team_color),
         color2: r.team_color2 == null ? null : String(r.team_color2),
       };
     }
+    colorsCache = { version, colors };
+    return colors;
   } catch {
     // No teams view (older data dir): charts fall back to neutral colors.
+    return {};
   }
-  colorsCache = { version, colors };
-  return colors;
 }

@@ -112,6 +112,47 @@ export const BAR_ROWS: ChartRow[] = [
   },
 ];
 
+// Same rows as QB_ROWS, reordered so cpoe/epa_per_play/success_rate are no
+// longer monotonic (QB_ROWS itself is a sorted leaderboard: F10).
+const QB_ROWS_UNSORTED: ChartRow[] = [
+  {
+    passer_id: "00-1",
+    passer_full_name: "Lamar Jackson",
+    team: "BAL",
+    dropbacks: 520,
+    cpoe: 4.1,
+    epa_per_play: 0.31,
+    success_rate: 0.52,
+  },
+  {
+    passer_id: "00-3",
+    passer_full_name: "Josh Allen",
+    team: "BUF",
+    dropbacks: 560,
+    cpoe: 1.1,
+    epa_per_play: 0.2,
+    success_rate: 0.49,
+  },
+  {
+    passer_id: "00-2",
+    passer_full_name: "Joe Burrow",
+    team: "CIN",
+    dropbacks: 700,
+    cpoe: 3.2,
+    epa_per_play: 0.22,
+    success_rate: 0.5,
+  },
+  {
+    passer_id: "00-4",
+    passer_full_name: "Bryce Young",
+    team: "CAR",
+    dropbacks: 480,
+    cpoe: -2.5,
+    epa_per_play: -0.05,
+    success_rate: 0.41,
+  },
+];
+
 const pick = (p: Partial<ChartPick>): ChartPick => ({
   type: "none",
   x: "",
@@ -252,6 +293,26 @@ describe("validateSpec", () => {
     );
   });
 
+  test("a line needs at least 2 rows with both x and y present (F3)", () => {
+    // season has 3 distinct values column-wide, but point_diff is only
+    // present for one of them: too few plottable (x, y) points for a line,
+    // even though the old x.distinct/keys checks (computed over all rows)
+    // wouldn't have caught it.
+    const rows: ChartRow[] = [
+      { season: 2019, team: "KC", point_diff: 5 },
+      { season: 2020, team: "KC", point_diff: null },
+      { season: 2021, team: "KC", point_diff: null },
+    ];
+    assert.equal(
+      validateSpec(
+        pick({ type: "line", x: "season", y: "point_diff" }),
+        rows,
+        LINE_COLS,
+      ),
+      null,
+    );
+  });
+
   test("trims the title", () => {
     assert.equal(
       validateSpec(
@@ -283,10 +344,18 @@ describe("inferSpec", () => {
   });
 
   test("with no question, two metrics make a scatter in column order", () => {
-    const s = inferSpec("", QB_ROWS, QB_COLS);
+    const s = inferSpec("", QB_ROWS_UNSORTED, QB_COLS);
     assert.deepEqual(
       [s?.type, s?.x, s?.y],
       ["scatter", "cpoe", "epa_per_play"],
+    );
+  });
+
+  test("a sorted leaderboard with no question makes a bar (F10)", () => {
+    const s = inferSpec("", QB_ROWS, QB_COLS);
+    assert.deepEqual(
+      [s?.type, s?.y, s?.label],
+      ["bar", "cpoe", "passer_full_name"],
     );
   });
 
@@ -371,6 +440,11 @@ describe("asksForChart / chartIntent", () => {
     }
   });
 
+  test("'depth chart' isn't an explicit chart word, but 'plot' still is (F1)", () => {
+    assert.equal(asksForChart("Chiefs depth chart"), false);
+    assert.equal(asksForChart("Plot the depth chart counts"), true);
+  });
+
   test("intent", () => {
     assert.equal(chartIntent("Top 15 WRs by yards as a bar chart"), "bar");
     assert.equal(chartIntent("CPOE vs EPA"), "scatter");
@@ -447,6 +521,63 @@ describe("chooseChart", () => {
       },
     );
   });
+
+  test("'vs' alone doesn't chart a non-scatter comparison (F1)", () => {
+    const rows: ChartRow[] = [
+      { week: 1, opponent_team: "BAL", passing_yards: 240, passing_tds: 2 },
+      { week: 2, opponent_team: "CIN", passing_yards: 180, passing_tds: 1 },
+      { week: 3, opponent_team: "DEN", passing_yards: 300, passing_tds: 3 },
+    ];
+    assert.deepEqual(
+      chooseChart("How did Mahomes do vs the Ravens?", pick({}), rows, [
+        "week",
+        "opponent_team",
+        "passing_yards",
+        "passing_tds",
+      ]),
+      { chart: null, chart_source: null },
+    );
+  });
+
+  test("'depth chart' doesn't gate a chart on its own (F1)", () => {
+    const rows: ChartRow[] = [
+      {
+        full_name: "Rashee Rice",
+        position: "WR",
+        jersey_number: 4,
+        height: 71,
+      },
+      {
+        full_name: "Xavier Worthy",
+        position: "WR",
+        jersey_number: 1,
+        height: 69,
+      },
+      {
+        full_name: "JuJu Smith-Schuster",
+        position: "WR",
+        jersey_number: 9,
+        height: 73,
+      },
+    ];
+    assert.deepEqual(
+      chooseChart("Chiefs depth chart at wide receiver", pick({}), rows, [
+        "full_name",
+        "position",
+        "jersey_number",
+        "height",
+      ]),
+      { chart: null, chart_source: null },
+    );
+  });
+
+  test("'vs' with both columns named infers a scatter (F1)", () => {
+    const r = chooseChart("QB CPOE vs EPA", pick({}), QB_ROWS, QB_COLS);
+    assert.deepEqual(
+      [r.chart_source, r.chart?.type, r.chart?.x, r.chart?.y],
+      ["inferred", "scatter", "cpoe", "epa_per_play"],
+    );
+  });
 });
 
 describe("presentation helpers", () => {
@@ -514,6 +645,9 @@ describe("presentation helpers", () => {
     };
     assert.equal(teamCode({ team: "KC" }, s, colors), "KC");
     assert.equal(teamCode({ team: "KC/NYJ" }, s, colors), null);
+    // Inherited Object.prototype members (e.g. "constructor") aren't own
+    // colors: F5.
+    assert.equal(teamCode({ team: "constructor" }, s, colors), null);
     assert.equal(
       teamCode(
         { player: "X", posteam: "BUF" },
