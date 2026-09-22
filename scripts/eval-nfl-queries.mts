@@ -7,6 +7,7 @@
  *   npx tsx scripts/eval-nfl-queries.mts [--mode deep] [--only 3,7] [--url http://localhost:3002]
  */
 import { runSafeSelect, type Row } from "../src/lib/nfl/db";
+import type { ChartType } from "../src/lib/nfl/chart-spec";
 
 type Expect = { strings?: string[]; oneOf?: string[]; numbers?: number[] };
 
@@ -16,14 +17,19 @@ const leaders = (r: Row[]): Expect => ({
   numbers: [Number(r[0]!.v)],
 });
 
+type ChartExpect = { type: ChartType; x?: RegExp; y?: RegExp; series?: RegExp };
+
 type Case = {
   q: string;
-  ref: string;
-  // Values from the reference rows that the answer must contain. `oneOf`:
-  // at least one must appear (for ties at the top of a leaderboard).
-  pick: (rows: Row[]) => Expect;
+  // Hand-written reference SQL and the values the answer must contain.
+  // Optional: chart cases may only check the chart.
+  ref?: string;
+  // `oneOf`: at least one must appear (for ties at the top of a leaderboard).
+  pick?: (rows: Row[]) => Expect;
   // "top1": expected values must be in the answer's first row; "any": anywhere.
-  scope: "top1" | "any";
+  scope?: "top1" | "any";
+  /** Omitted: the answer must come back without a chart. "any": not checked. */
+  chart?: ChartExpect | "any";
 };
 
 const CASES: Case[] = [
@@ -104,6 +110,7 @@ const CASES: Case[] = [
     ref: "SELECT AVG(CASE WHEN home_team='DET' THEN home_score END) h, AVG(CASE WHEN away_team='DET' THEN away_score END) a FROM games WHERE season=2024 AND game_type='REG' AND 'DET' IN (home_team, away_team)",
     pick: (r) => ({ numbers: [Number(r[0]!.h), Number(r[0]!.a)] }),
     scope: "any",
+    chart: "any",
   },
   {
     q: "Who leads the league in rushing yards this season?",
@@ -116,6 +123,7 @@ const CASES: Case[] = [
     ref: "SELECT ROUND(AVG(epa),3) v FROM pbp WHERE passer_full_name='Patrick Mahomes' AND qb_dropback=1 AND season=2022 AND season_type='REG'",
     pick: (r) => ({ numbers: [Number(r[0]!.v)] }),
     scope: "any",
+    chart: "any",
   },
   {
     q: "Which teams had the best third down conversion rate in 2023?",
@@ -134,6 +142,31 @@ const CASES: Case[] = [
     ref: "SELECT player_display_name n FROM player_week WHERE season=2024 AND season_type='REG' AND position='RB' GROUP BY player_id, n HAVING SUM(carries)>=100 ORDER BY SUM(rushing_epa)/SUM(carries) DESC LIMIT 1",
     pick: (r) => ({ strings: [String(r[0]!.n)] }),
     scope: "top1",
+  },
+  // Chart cases: the question asks for a chart; check its type and axes.
+  {
+    q: "QB CPOE vs EPA per play over the last 2 seasons",
+    chart: { type: "scatter", x: /cpoe/, y: /epa/ },
+  },
+  {
+    q: "Team offensive EPA per play vs defensive EPA per play in 2025",
+    chart: { type: "scatter", x: /epa/, y: /epa/ },
+  },
+  {
+    q: "Chart the Chiefs EPA per play by season since 2015",
+    chart: { type: "line", x: /season/, y: /epa/ },
+  },
+  {
+    q: "Graph the Ravens and Bengals points per game each season since 2019",
+    chart: { type: "line", x: /season/, series: /team/ },
+  },
+  {
+    q: "Top 15 wide receivers by receiving yards in 2025 as a bar chart",
+    chart: { type: "bar", y: /yard/ },
+  },
+  {
+    q: "Plot Josh Allen passing yards by week in 2025",
+    chart: { type: "line", x: /week/, y: /yard/ },
   },
 ];
 
@@ -183,13 +216,30 @@ function check(rows: Row[], exp: Expect, scope: Case["scope"]) {
   return missing;
 }
 
-let pass = 0;
-let total = 0;
+type ChartGot = { type: string; x: string; y: string; series: string } | null;
+
+function checkChart(got: ChartGot, want: Case["chart"]): string[] {
+  if (want === "any") return [];
+  if (!want) return got ? [`no chart (got ${got.type})`] : [];
+  if (!got) return [`${want.type} chart (got none)`];
+  const miss: string[] = [];
+  if (got.type !== want.type) miss.push(`${want.type} chart (got ${got.type})`);
+  for (const k of ["x", "y", "series"] as const) {
+    const re = want[k];
+    if (re && !re.test(got[k]))
+      miss.push(`${k} ~ ${String(re)} (got "${got[k]}")`);
+  }
+  return miss;
+}
+
+const tally = { sql: { pass: 0, total: 0 }, chart: { pass: 0, total: 0 } };
 const times: number[] = [];
 for (const [i, c] of CASES.entries()) {
   if (only && !only.includes(i + 1)) continue;
-  total++;
-  const exp = c.pick((await runSafeSelect(c.ref)).rows);
+  const kind = c.chart && c.chart !== "any" ? "chart" : "sql";
+  tally[kind].total++;
+  const exp =
+    c.ref && c.pick ? c.pick((await runSafeSelect(c.ref)).rows) : null;
   const t = Date.now();
   const res = await fetch(`${url}/api/query`, {
     method: "POST",
@@ -202,28 +252,42 @@ for (const [i, c] of CASES.entries()) {
     sql?: string;
     attempts?: unknown[];
     cached?: boolean;
+    chart?: ChartGot;
+    chart_source?: string | null;
   };
   const ms = Date.now() - t;
   times.push(ms);
   const missing = data.results
-    ? check(data.results, exp, c.scope)
+    ? [
+        ...(exp ? check(data.results, exp, c.scope ?? "any") : []),
+        ...checkChart(data.chart ?? null, c.chart),
+      ]
     : ["<error>"];
   const ok = missing.length === 0;
-  if (ok) pass++;
+  if (ok) tally[kind].pass++;
+  const chart = data.chart
+    ? `${data.chart.type}(${data.chart_source ?? "?"})`
+    : "none";
   console.log(
-    `${ok ? "PASS" : "FAIL"} ${String(i + 1).padStart(2)} ${(ms / 1000).toFixed(1).padStart(5)}s tries=${data.attempts?.length ?? "?"}${data.cached ? " (cached)" : ""}  ${c.q}`,
+    `${ok ? "PASS" : "FAIL"} ${String(i + 1).padStart(2)} ${(ms / 1000).toFixed(1).padStart(5)}s tries=${data.attempts?.length ?? "?"} chart=${chart}${data.cached ? " (cached)" : ""}  ${c.q}`,
   );
   if (!ok) {
     console.log(
-      `       expected ${JSON.stringify(exp)} missing ${JSON.stringify(missing)}`,
+      `       expected ${exp ? JSON.stringify(exp) : "-"} missing ${JSON.stringify(missing)}`,
     );
     if (data.error) console.log(`       error: ${data.error.split("\n")[0]}`);
     console.log(`       sql: ${data.sql}`);
+    if (data.chart) console.log(`       chart: ${JSON.stringify(data.chart)}`);
     if (data.results)
       console.log(`       got: ${JSON.stringify(data.results.slice(0, 2))}`);
   }
 }
 times.sort((a, b) => a - b);
+const pass = tally.sql.pass + tally.chart.pass;
+const total = tally.sql.total + tally.chart.total;
 console.log(
   `\n${pass}/${total} passed (${Math.round((100 * pass) / total)}%), median ${(times[Math.floor(times.length / 2)]! / 1000).toFixed(1)}s, max ${(times.at(-1)! / 1000).toFixed(1)}s`,
+);
+console.log(
+  `sql cases ${tally.sql.pass}/${tally.sql.total}, chart cases ${tally.chart.pass}/${tally.chart.total}`,
 );
