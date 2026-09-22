@@ -4,8 +4,15 @@ import {
   openaiCompatibleChat,
   type NativeChatStats,
 } from "@/lib/magic-llm";
-import { dataVersion, runSafeSelect, type Row } from "./db";
-import { extractSqlBlock, parseFast } from "./llm-output";
+import {
+  chooseChart,
+  type ChartPick,
+  type ChartSource,
+  type ChartSpec,
+  type TeamColors,
+} from "./chart-spec";
+import { dataVersion, getTeamColors, runSafeSelect, type Row } from "./db";
+import { extractChartBlock, extractSqlBlock, parseFast } from "./llm-output";
 import { buildSystemPrompt, type PromptMode } from "./prompt";
 
 export type QueryMode = PromptMode;
@@ -14,6 +21,7 @@ export type Attempt = {
   mode: QueryMode;
   sql: string;
   plan: string | null;
+  chart?: ChartPick | null;
   error?: string;
   rows?: number;
   llm_ms: number;
@@ -28,6 +36,9 @@ export type PipelineResult = {
   plan: string | null;
   mode: QueryMode;
   attempts: Attempt[];
+  chart: ChartSpec | null;
+  chart_source: ChartSource | null;
+  team_colors: TeamColors;
   timings: { llm_ms: number; db_ms: number; total_ms: number };
   data_version: string;
   llm_stats?: NativeChatStats;
@@ -44,6 +55,9 @@ export class PipelineError extends Error {
 
 // `plan` comes first so the model states its approach before writing SQL;
 // without it the 9B model skips reasoning entirely (no thinking under a grammar).
+// `chart` comes last so its column names can refer to the SQL's aliases.
+// Strict mode requires every property, so unused chart fields are "".
+const CHART_FIELD = { type: "string", maxLength: 60 } as const;
 const FAST_FORMAT = {
   type: "json_schema" as const,
   json_schema: {
@@ -54,8 +68,20 @@ const FAST_FORMAT = {
       properties: {
         plan: { type: "string", maxLength: 300 },
         sql: { type: "string" },
+        chart: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["none", "scatter", "line", "bar"] },
+            x: CHART_FIELD,
+            y: CHART_FIELD,
+            label: CHART_FIELD,
+            series: CHART_FIELD,
+            title: { type: "string", maxLength: 80 },
+          },
+          required: ["type", "x", "y", "label", "series", "title"],
+        },
       },
-      required: ["plan", "sql"],
+      required: ["plan", "sql", "chart"],
     },
   },
 };
@@ -111,13 +137,19 @@ async function generate(
 ): Promise<{
   sql: string | null;
   plan: string | null;
+  chart: ChartPick | null;
   stats?: NativeChatStats;
 }> {
   const system = await buildSystemPrompt(mode);
   const input = withFeedback(question, attempts);
   if (mode === "deep") {
     const r = await nativeChat({ systemPrompt: system, input });
-    return { sql: extractSqlBlock(r.content), plan: null, stats: r.stats };
+    return {
+      sql: extractSqlBlock(r.content),
+      plan: null,
+      chart: extractChartBlock(r.content),
+      stats: r.stats,
+    };
   }
   const raw = await openaiCompatibleChat(
     [
@@ -126,7 +158,7 @@ async function generate(
     ],
     {
       model: getLlmModelName(),
-      maxTokens: 900,
+      maxTokens: 1000,
       // Deterministic first try; a little variety on repairs so the model
       // doesn't hand back the same failing query.
       temperature: attempts.length ? 0.4 : 0,
@@ -159,6 +191,7 @@ export async function answerQuestion(
       mode: attemptMode,
       sql: gen.sql ?? "",
       plan: gen.plan,
+      chart: gen.chart,
       llm_ms: Date.now() - t0,
       db_ms: 0,
     };
@@ -179,6 +212,12 @@ export async function answerQuestion(
         retriedEmpty = true;
         continue;
       }
+      const { chart, chart_source } = chooseChart(
+        question,
+        gen.chart,
+        out.rows,
+        out.columns,
+      );
       return {
         results: out.rows,
         columns: out.columns,
@@ -187,6 +226,10 @@ export async function answerQuestion(
         plan: gen.plan ?? attempts.find((a) => a.plan)?.plan ?? null,
         mode,
         attempts,
+        chart,
+        chart_source,
+        // Sent with every answer so "Chart this" on a table can use them too.
+        team_colors: await getTeamColors(),
         timings: {
           llm_ms: attempts.reduce((s, a) => s + a.llm_ms, 0),
           db_ms: attempts.reduce((s, a) => s + a.db_ms, 0),

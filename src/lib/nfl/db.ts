@@ -6,6 +6,7 @@ import {
   StatementType,
   type DuckDBValue,
 } from "@duckdb/node-api";
+import type { TeamColors } from "./chart-spec";
 
 /**
  * Read-only DuckDB over the zstd parquet files written by
@@ -257,4 +258,28 @@ export async function getDataInfo(): Promise<DataInfo> {
     maxSeasonType: String(r.max_season_type),
   };
   return infoCache;
+}
+
+let colorsCache: { version: string; colors: TeamColors } | null = null;
+
+/** team_abbr -> colors from the teams view; empty if it isn't loaded. */
+export async function getTeamColors(): Promise<TeamColors> {
+  const version = dataVersion();
+  if (colorsCache?.version === version) return colorsCache.colors;
+  const colors: TeamColors = {};
+  try {
+    const { rows } = await runSafeSelect(
+      "SELECT team_abbr, team_color, team_color2 FROM teams",
+    );
+    for (const r of rows) {
+      colors[String(r.team_abbr)] = {
+        color: r.team_color == null ? null : String(r.team_color),
+        color2: r.team_color2 == null ? null : String(r.team_color2),
+      };
+    }
+  } catch {
+    // No teams view (older data dir): charts fall back to neutral colors.
+  }
+  colorsCache = { version, colors };
+  return colors;
 }
