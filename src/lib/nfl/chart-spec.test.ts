@@ -3,13 +3,21 @@ import { describe, test } from "node:test";
 import {
   asksForChart,
   chartIntent,
+  chartTitle,
   chooseChart,
   classifyColumns,
+  formatCell,
+  humanize,
   inferSpec,
   isSorted,
+  labelsAreTeams,
+  plotRows,
+  shortLabel,
+  teamCode,
   validateSpec,
   type ChartPick,
   type ChartRow,
+  type ChartSpec,
 } from "./chart-spec";
 
 const QB_COLS = [
@@ -422,6 +430,164 @@ describe("chooseChart", () => {
         chart: null,
         chart_source: null,
       },
+    );
+  });
+});
+
+describe("presentation helpers", () => {
+  test("humanize", () => {
+    assert.equal(humanize("epa_per_dropback"), "EPA per dropback");
+    assert.equal(humanize("completion_pct"), "Completion %");
+    assert.equal(humanize("cpoe"), "CPOE");
+    assert.equal(humanize("passing_yards"), "Passing yards");
+  });
+
+  test("chartTitle", () => {
+    const s: ChartSpec = {
+      type: "scatter",
+      x: "cpoe",
+      y: "epa_per_play",
+      label: "",
+      series: "",
+      title: "",
+    };
+    assert.equal(chartTitle(s), "EPA per play vs CPOE");
+    assert.equal(
+      chartTitle({ ...s, title: "QBs, 2024-2025" }),
+      "QBs, 2024-2025",
+    );
+    assert.equal(
+      chartTitle({ ...s, type: "line", x: "season" }),
+      "EPA per play by season",
+    );
+    assert.equal(chartTitle({ ...s, type: "bar", x: "" }), "EPA per play");
+  });
+
+  test("shortLabel shortens player names only", () => {
+    assert.equal(
+      shortLabel("passer_full_name", "Patrick Mahomes"),
+      "P.Mahomes",
+    );
+    assert.equal(
+      shortLabel("team_name", "Kansas City Chiefs"),
+      "Kansas City Chiefs",
+    );
+    assert.equal(shortLabel("team", "KC"), "KC");
+    assert.equal(shortLabel("", undefined), "");
+  });
+
+  test("formatCell", () => {
+    assert.equal(formatCell(0.12345), "0.123");
+    assert.equal(formatCell(12.345), "12.3");
+    assert.equal(formatCell(42), "42");
+    assert.equal(formatCell(null), "–");
+    assert.equal(formatCell(true), "Yes");
+  });
+
+  test("teamCode and labelsAreTeams", () => {
+    const colors = {
+      KC: { color: "#E31837", color2: "#FFB81C" },
+      BUF: { color: "#00338D", color2: "#C60C30" },
+    };
+    const s: ChartSpec = {
+      type: "bar",
+      x: "",
+      y: "point_diff",
+      label: "team",
+      series: "",
+      title: "",
+    };
+    assert.equal(teamCode({ team: "KC" }, s, colors), "KC");
+    assert.equal(teamCode({ team: "KC/NYJ" }, s, colors), null);
+    assert.equal(
+      teamCode(
+        { player: "X", posteam: "BUF" },
+        { ...s, label: "player" },
+        colors,
+      ),
+      "BUF",
+    );
+    assert.equal(
+      labelsAreTeams([{ team: "KC" }, { team: "BUF" }], s, colors),
+      true,
+    );
+    assert.equal(
+      labelsAreTeams([{ team: "KC" }, { team: "Other" }], s, colors),
+      false,
+    );
+  });
+});
+
+describe("plotRows", () => {
+  test("drops rows missing a plotted value, with a note", () => {
+    const rows: ChartRow[] = [
+      ...QB_ROWS,
+      { passer_full_name: "X", cpoe: null, epa_per_play: 0.1 },
+    ];
+    const spec: ChartSpec = {
+      type: "scatter",
+      x: "cpoe",
+      y: "epa_per_play",
+      label: "passer_full_name",
+      series: "",
+      title: "",
+    };
+    const out = plotRows(spec, rows);
+    assert.equal(out.rows.length, 4);
+    assert.deepEqual(out.notes, ["1 row without values not shown"]);
+  });
+
+  test("caps lines at 8 series", () => {
+    const rows: ChartRow[] = Array.from({ length: 10 }, (_, t) =>
+      [2020, 2021].map((season) => ({ season, team: `T${t}`, v: t })),
+    ).flat();
+    const out = plotRows(
+      {
+        type: "line",
+        x: "season",
+        y: "v",
+        label: "",
+        series: "team",
+        title: "",
+      },
+      rows,
+    );
+    assert.equal(new Set(out.rows.map((r) => r.team)).size, 8);
+    assert.deepEqual(out.notes, ["first 8 of 10 lines"]);
+  });
+
+  test("caps scatters at 100 points", () => {
+    const rows: ChartRow[] = Array.from({ length: 120 }, (_, i) => ({
+      n: `p${i}`,
+      a: i,
+      b: i * 2,
+    }));
+    const out = plotRows(
+      { type: "scatter", x: "a", y: "b", label: "n", series: "", title: "" },
+      rows,
+    );
+    assert.equal(out.rows.length, 100);
+    assert.deepEqual(out.notes, ["first 100 of 120 rows"]);
+  });
+
+  test("bars keep a sorted query order, else sort descending", () => {
+    const spec: ChartSpec = {
+      type: "bar",
+      x: "",
+      y: "epa_per_carry",
+      label: "player_display_name",
+      series: "",
+      title: "",
+    };
+    assert.deepEqual(
+      plotRows(spec, BAR_ROWS).rows.map((r) => r.epa_per_carry),
+      [0.103, 0.082, 0.07, 0.01],
+    );
+    assert.deepEqual(
+      plotRows({ ...spec, y: "rushing_yards" }, BAR_ROWS).rows.map(
+        (r) => r.rushing_yards,
+      ),
+      [1459, 1144, 1122, 1012],
     );
   });
 });

@@ -354,3 +354,148 @@ export function chooseChart(
   }
   return { chart: null, chart_source: null };
 }
+
+const TERMS: Record<string, string> = {
+  epa: "EPA",
+  cpoe: "CPOE",
+  wpa: "WPA",
+  pct: "%",
+  ypa: "Y/A",
+  ypc: "Y/C",
+  adot: "aDOT",
+  qb: "QB",
+  qbs: "QBs",
+  td: "TD",
+  tds: "TDs",
+  int: "INT",
+  ints: "INTs",
+  ppr: "PPR",
+  yac: "YAC",
+  fg: "FG",
+  pat: "PAT",
+  wopr: "WOPR",
+  racr: "RACR",
+};
+
+/** Column name as axis text: "epa_per_dropback" -> "EPA per dropback". */
+export function humanize(column: string): string {
+  const text = column
+    .split("_")
+    .filter(Boolean)
+    .map((w) => TERMS[w.toLowerCase()] ?? w.toLowerCase())
+    .join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The model's title, else "Y vs X" / "Y by x" / "Y". */
+export function chartTitle(spec: ChartSpec): string {
+  if (spec.title) return spec.title;
+  const y = humanize(spec.y);
+  if (spec.type === "scatter") return `${y} vs ${humanize(spec.x)}`;
+  if (spec.type === "line") return `${y} by ${humanize(spec.x).toLowerCase()}`;
+  return y;
+}
+
+const PERSON_COLUMN = /^(?!.*team).*(name|passer|rusher|receiver|player)/;
+
+/** "Patrick Mahomes" -> "P.Mahomes" in player-name columns, like nflfastR's pbp names. */
+export function shortLabel(column: string, value: Cell | undefined): string {
+  const s = value == null ? "" : String(value);
+  if (!PERSON_COLUMN.test(column)) return s;
+  const m = /^(\S)\S*\s+(.+)$/.exec(s);
+  return m ? `${m[1]}.${m[2]}` : s;
+}
+
+/** A cell for tooltips: integers as-is, small rates to 3 places, else 1. */
+export function formatCell(v: Cell | undefined): string {
+  if (v == null) return "–";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (typeof v === "number") {
+    if (Number.isInteger(v)) return String(v);
+    return v.toFixed(Math.abs(v) < 1 ? 3 : 1);
+  }
+  return v;
+}
+
+export const TEAM_COLUMNS: readonly string[] = [
+  "team",
+  "posteam",
+  "defteam",
+  "opponent_team",
+  "home_team",
+  "away_team",
+];
+
+/** The row's team code for colors: the label, the series, then any team column. */
+export function teamCode(
+  row: ChartRow,
+  spec: ChartSpec,
+  colors: TeamColors,
+): string | null {
+  for (const c of [spec.label, spec.series, ...TEAM_COLUMNS]) {
+    const v = c ? row[c] : undefined;
+    if (typeof v === "string" && colors[v]) return v;
+  }
+  return null;
+}
+
+/** Every row's label is a team code, so the chart can draw logos. */
+export function labelsAreTeams(
+  rows: ChartRow[],
+  spec: ChartSpec,
+  colors: TeamColors,
+): boolean {
+  return (
+    !!spec.label &&
+    rows.length > 0 &&
+    rows.every((r) => {
+      const v = r[spec.label];
+      return typeof v === "string" && !!colors[v];
+    })
+  );
+}
+
+export const CAPS = { scatter: 100, bar: 30, lines: 8 } as const;
+
+/**
+ * The rows to draw, plus footnote notes for anything left out. Bars keep the
+ * query's order when it's already sorted by y, else sort descending.
+ */
+export function plotRows(
+  spec: ChartSpec,
+  rows: ChartRow[],
+): { rows: ChartRow[]; notes: string[] } {
+  const needed = spec.type === "bar" ? [spec.y] : [spec.x, spec.y];
+  let out = rows.filter((r) => needed.every((c) => isNum(r[c])));
+  const notes: string[] = [];
+  const dropped = rows.length - out.length;
+  if (dropped) {
+    notes.push(
+      `${dropped} row${dropped === 1 ? "" : "s"} without values not shown`,
+    );
+  }
+  if (spec.type === "bar" && !isSorted(out.map((r) => r[spec.y]))) {
+    out = [...out].sort(
+      (a, b) => (b[spec.y] as number) - (a[spec.y] as number),
+    );
+  }
+  const cap =
+    spec.type === "scatter"
+      ? CAPS.scatter
+      : spec.type === "bar"
+        ? CAPS.bar
+        : Infinity;
+  if (out.length > cap) {
+    notes.push(`first ${cap} of ${out.length} rows`);
+    out = out.slice(0, cap);
+  }
+  if (spec.type === "line" && spec.series) {
+    const names = [...new Set(out.map((r) => String(r[spec.series])))];
+    if (names.length > CAPS.lines) {
+      const keep = new Set(names.slice(0, CAPS.lines));
+      out = out.filter((r) => keep.has(String(r[spec.series])));
+      notes.push(`first ${CAPS.lines} of ${names.length} lines`);
+    }
+  }
+  return { rows: out, notes };
+}
