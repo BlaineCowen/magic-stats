@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { NflNav } from "@/components/nfl-nav";
+import { QueryChart } from "@/components/charts/query-chart";
 import { SimpleDataTable } from "@/components/simple-data-table";
+import {
+  inferSpec,
+  type ChartPick,
+  type ChartSource,
+  type ChartSpec,
+  type TeamColors,
+} from "@/lib/nfl/chart-spec";
+import { cn } from "@/lib/utils";
 
 type QueryResult = Record<string, string | number | boolean | null>;
 type Mode = "fast" | "deep";
@@ -12,6 +21,7 @@ type Attempt = {
   mode: Mode;
   sql: string;
   plan: string | null;
+  chart?: ChartPick | null;
   error?: string;
   rows?: number;
   llm_ms: number;
@@ -29,6 +39,9 @@ interface ApiResponse {
   attempts?: Attempt[];
   timings?: { total_ms: number };
   cached?: boolean;
+  chart?: ChartSpec | null;
+  chart_source?: ChartSource | null;
+  team_colors?: TeamColors;
 }
 
 type AiStatus = { online: boolean; model: string; loaded: boolean };
@@ -72,10 +85,25 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   const [error, setError] = useState("");
   const [queryCount, setQueryCount] = useState(0);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  // The chart on screen; a new `key` remounts QueryChart so its controls reset.
+  const [chart, setChart] = useState<{
+    spec: ChartSpec;
+    key: number;
+    hidden: boolean;
+  } | null>(null);
 
   const isLoading = loadingMode !== null;
   const isLimitReached = !debug && queryCount >= QUERY_LIMIT;
   const results = hideIdColumns(response?.results ?? []);
+  const chartShown = !!chart && !chart.hidden && !error && results.length > 0;
+  // Offered as "Chart this" when the answer came back as a table only.
+  const inferred = useMemo(
+    () =>
+      !chart && response?.results?.length
+        ? inferSpec(lastQuery, response.results, response.columns ?? [])
+        : null,
+    [chart, response, lastQuery],
+  );
 
   useEffect(() => {
     const saved = localStorage.getItem("nfl_query_count");
@@ -105,6 +133,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
     setLoadingMode(mode);
     setError("");
     setLastQuery(text);
+    setChart(null);
     try {
       const res = await fetch("/api/query", {
         method: "POST",
@@ -113,6 +142,11 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
       });
       const data = (await res.json()) as ApiResponse;
       setResponse(data);
+      setChart(
+        data.chart
+          ? { spec: data.chart, key: Date.now(), hidden: false }
+          : null,
+      );
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch results");
       if (!debug) {
         const next = queryCount + 1;
@@ -192,6 +226,8 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
         {response.attempts &&
           response.attempts.length > 1 &&
           ` · ${response.attempts.length} attempts`}
+        {response.chart_source &&
+          ` · chart ${response.chart_source === "model" ? "picked by model" : "inferred"}`}
         {response.cached && " · cached"}
       </summary>
       {response.plan && <p className="mt-2 text-gray-700">{response.plan}</p>}
@@ -210,6 +246,11 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
               {a.rows !== undefined && ` · ${a.rows} rows`}
             </div>
             {a.error && <div className="mt-1 text-red-700">{a.error}</div>}
+            {a.chart && a.chart.type !== "none" && (
+              <div className="mt-1 text-gray-500">
+                chart: {JSON.stringify(a.chart)}
+              </div>
+            )}
             <pre className="mt-1 whitespace-pre-wrap text-gray-600">
               {a.sql}
             </pre>
@@ -220,120 +261,123 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
 
   return (
     <main className="container mx-auto px-4 py-8">
-      <div className="mx-auto max-w-3xl">
-        <NflNav />
-        <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
-          NFL Stats Query{debug && " - Testing"}
-        </h1>
+      <div className={cn("mx-auto", chartShown ? "max-w-5xl" : "max-w-3xl")}>
+        {/* Header, search and errors keep the narrow width when a chart widens the page. */}
+        <div className="mx-auto max-w-3xl">
+          <NflNav />
+          <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
+            NFL Stats Query{debug && " - Testing"}
+          </h1>
 
-        {aiStatus && !aiStatus.online && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            ⚠ The local AI (LM Studio on the Mac mini) is not responding.
-            Queries will fail until it&apos;s back.
-          </div>
-        )}
-        {aiStatus?.online && !aiStatus.loaded && (
-          <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-            {aiStatus.model} isn&apos;t loaded yet; the first query will take
-            longer while LM Studio loads it.
-          </div>
-        )}
-
-        {!debug && queryCount > 0 && (
-          <div className="mb-4 text-center text-sm text-gray-600">
-            Queries used: {queryCount}/{QUERY_LIMIT}
-            {isLimitReached && (
-              <span className="ml-2 font-medium text-red-600">
-                (Limit reached)
-              </span>
-            )}
-          </div>
-        )}
-
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask any question about NFL stats..."
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:px-4 sm:text-base"
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !query.trim() || isLimitReached}
-              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400 sm:gap-2 sm:px-4 sm:text-base"
-            >
-              {isLoading ? (
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-              ) : (
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7l5 5m0 0l-5 5m5-5H6"
-                  />
-                </svg>
-              )}
-              <span className="hidden sm:inline">
-                {isLoading ? seconds(elapsed) : "Execute"}
-              </span>
-            </button>
-          </div>
-          {isLoading && (
-            <p className="mt-2 text-sm text-gray-500">
-              {loadingMode === "deep"
-                ? `Thinking it through… ${seconds(elapsed)} (usually 2–3 minutes)`
-                : `Writing a query… ${seconds(elapsed)}`}
-            </p>
+          {aiStatus && !aiStatus.online && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              ⚠ The local AI (LM Studio on the Mac mini) is not responding.
+              Queries will fail until it&apos;s back.
+            </div>
           )}
-        </form>
+          {aiStatus?.online && !aiStatus.loaded && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              {aiStatus.model} isn&apos;t loaded yet; the first query will take
+              longer while LM Studio loads it.
+            </div>
+          )}
 
-        {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700">
-            <p className="whitespace-pre-wrap">{error}</p>
-            {queryDetails}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {thinkHarder}
+          {!debug && queryCount > 0 && (
+            <div className="mb-4 text-center text-sm text-gray-600">
+              Queries used: {queryCount}/{QUERY_LIMIT}
+              {isLimitReached && (
+                <span className="ml-2 font-medium text-red-600">
+                  (Limit reached)
+                </span>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={handleSearch} className="mb-8">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Ask any question about NFL stats..."
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:px-4 sm:text-base"
+              />
               <button
-                onClick={copyToClipboard}
-                className="rounded bg-yellow-600 px-3 py-1.5 text-sm text-white hover:bg-yellow-700"
+                type="submit"
+                disabled={isLoading || !query.trim() || isLimitReached}
+                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400 sm:gap-2 sm:px-4 sm:text-base"
               >
-                Copy Debug Info
-              </button>
-              <button
-                onClick={sendEmail}
-                className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
-              >
-                Email Debug Info
+                {isLoading ? (
+                  <svg
+                    className="h-4 w-4 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                ) : (
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                )}
+                <span className="hidden sm:inline">
+                  {isLoading ? seconds(elapsed) : "Execute"}
+                </span>
               </button>
             </div>
-          </div>
-        )}
+            {isLoading && (
+              <p className="mt-2 text-sm text-gray-500">
+                {loadingMode === "deep"
+                  ? `Thinking it through… ${seconds(elapsed)} (usually 2–3 minutes)`
+                  : `Writing a query… ${seconds(elapsed)}`}
+              </p>
+            )}
+          </form>
+
+          {error && (
+            <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700">
+              <p className="whitespace-pre-wrap">{error}</p>
+              {queryDetails}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {thinkHarder}
+                <button
+                  onClick={copyToClipboard}
+                  className="rounded bg-yellow-600 px-3 py-1.5 text-sm text-white hover:bg-yellow-700"
+                >
+                  Copy Debug Info
+                </button>
+                <button
+                  onClick={sendEmail}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
+                >
+                  Email Debug Info
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {!error && response && results.length > 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
@@ -343,6 +387,28 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
               </h2>
               <div className="flex items-center gap-2">
                 {thinkHarder}
+                {chart?.hidden && (
+                  <button
+                    onClick={() => setChart({ ...chart, hidden: false })}
+                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-3 sm:py-2 sm:text-sm"
+                  >
+                    Show chart
+                  </button>
+                )}
+                {inferred && (
+                  <button
+                    onClick={() =>
+                      setChart({
+                        spec: inferred,
+                        key: Date.now(),
+                        hidden: false,
+                      })
+                    }
+                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-3 sm:py-2 sm:text-sm"
+                  >
+                    Chart this
+                  </button>
+                )}
                 <button
                   onClick={downloadCSV}
                   className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-3 sm:py-2 sm:text-sm"
@@ -352,6 +418,17 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
                 </button>
               </div>
             </div>
+            {chartShown && chart && (
+              <QueryChart
+                key={chart.key}
+                rows={response.results ?? []}
+                columns={response.columns ?? []}
+                initial={chart.spec}
+                teamColors={response.team_colors ?? {}}
+                subtitle={response.plan ?? lastQuery}
+                onHide={() => setChart({ ...chart, hidden: true })}
+              />
+            )}
             <SimpleDataTable data={results} />
             {response.truncated && (
               <p className="mt-2 text-xs text-gray-500">
