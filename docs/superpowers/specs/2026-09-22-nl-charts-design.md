@@ -293,3 +293,4 @@ These supersede the sections above where they differ.
   - Shape-based line detection requires the time column to be sorted, so a season-mixed leaderboard isn't drawn as lines.
   - `chooseChart` tries the model's chart type first when its columns were wrong.
 - **Eval:** existing cases 13 (Lions home vs away) and 15 (Mahomes EPA by season) accept any chart. The other existing cases must return no chart.
+- **Chart gate:** a chart comes back only when the question asks for one (`asksForChart`: chart/plot/graph/visualize/scatter/trend/over time/vs). The model's pick only chooses the columns; other answers offer "Chart this". Added after the prompt alone couldn't stop the 9B model charting plain leaderboards.
