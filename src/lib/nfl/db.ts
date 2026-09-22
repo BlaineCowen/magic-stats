@@ -21,7 +21,7 @@ const MAX_ROWS = 500;
 const QUERY_TIMEOUT_MS = 20_000;
 
 // Bump when the view definitions below change, so a running server rebuilds.
-const VIEWS_REV = 2;
+const VIEWS_REV = 3;
 
 type DbState = { instance: DuckDBInstance; key: string };
 
@@ -95,6 +95,10 @@ async function createDb(): Promise<DbState> {
   );
   for (const ds of ["player_week", "team_week", "rosters"]) {
     if (has(ds)) await conn.run(viewSql(ds, `${dir}/${ds}/*.parquet`));
+  }
+  // Colors and logo URLs per team code (includes historical codes like OAK).
+  if (has("teams.parquet")) {
+    await conn.run(viewSql("teams", `${dir}/teams.parquet`));
   }
   // pbp names are abbreviated ("P.Mahomes"); join full names so a small model
   // can filter with ILIKE '%mahomes%' without knowing the abbreviation.

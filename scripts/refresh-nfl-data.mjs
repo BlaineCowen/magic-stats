@@ -70,7 +70,16 @@ const DATASETS = [
     url: () => `${RELEASES}/players/players.parquet`,
     order: ["gsis_id"],
   },
+  {
+    name: "teams",
+    single: true,
+    url: () => `${RELEASES}/teams/teams_colors_logos.parquet`,
+    order: ["team_abbr"],
+  },
 ];
+
+const LOGO_DIR = path.join(DATA_DIR, "logos");
+const LOGO_PX = 160;
 
 function parseArgs(argv) {
   const args = { force: false, from: FIRST_SEASON, to: currentSeason() };
@@ -168,6 +177,43 @@ async function mapLimit(items, limit, fn) {
 
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
+/**
+ * Team logos for the charts, as small PNGs (ESPN's resizer turns the 500px
+ * originals into ~6 KB files). Only fetches logos that are missing.
+ */
+async function refreshLogos(instance, force) {
+  const teamsFile = path.join(DATA_DIR, "teams.parquet");
+  if (!fs.existsSync(teamsFile)) return 0;
+  fs.mkdirSync(LOGO_DIR, { recursive: true });
+  const conn = await instance.connect();
+  const teams = (
+    await conn.runAndReadAll(
+      `SELECT team_abbr, team_logo_espn FROM read_parquet(${sqlStr(teamsFile)}) WHERE team_logo_espn IS NOT NULL`,
+    )
+  ).getRowObjectsJson();
+  conn.closeSync();
+  const todo = teams.filter(
+    (t) => force || !fs.existsSync(path.join(LOGO_DIR, `${t.team_abbr}.png`)),
+  );
+  let failed = 0;
+  await mapLimit(todo, 6, async (t) => {
+    const img = new URL(String(t.team_logo_espn)).pathname;
+    const url = `https://a.espncdn.com/combiner/i?img=${img}&h=${LOGO_PX}&w=${LOGO_PX}`;
+    const out = path.join(LOGO_DIR, `${t.team_abbr}.png`);
+    try {
+      await download(url, `${out}.tmp`);
+      fs.renameSync(`${out}.tmp`, out);
+    } catch (e) {
+      failed++;
+      console.warn(`! logo ${t.team_abbr}: ${e.message}`);
+      fs.rmSync(`${out}.tmp`, { force: true });
+    }
+  });
+  if (todo.length)
+    console.log(`logos: ${todo.length - failed}/${todo.length} fetched`);
+  return failed;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   fs.mkdirSync(TMP_DIR, { recursive: true });
@@ -239,6 +285,9 @@ async function main() {
 
   fs.writeFileSync(`${MANIFEST}.tmp`, JSON.stringify(manifest, null, 2));
   fs.renameSync(`${MANIFEST}.tmp`, MANIFEST);
+
+  // A missing logo only degrades the charts, so it doesn't fail the run.
+  await refreshLogos(instance, args.force);
 
   const totals = {};
   for (const [key, m] of Object.entries(manifest)) {

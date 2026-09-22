@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
+import { NflNav } from "@/components/nfl-nav";
 import { SimpleDataTable } from "@/components/simple-data-table";
 
 type QueryResult = Record<string, string | number | boolean | null>;
@@ -220,6 +221,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="mx-auto max-w-3xl">
+        <NflNav />
         <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
           NFL Stats Query{debug && " - Testing"}
         </h1>
