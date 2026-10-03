@@ -10,10 +10,12 @@ export type Tab =
   | "rt-middles"
   | "open-bets"
   | "settled"
-  | "pnl";
+  | "pnl"
+  | "maker";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "live-sports", label: "Live Sports" },
+  { id: "maker", label: "Maker Bot" },
   { id: "manual-arbs", label: "Manual Arbs" },
   { id: "discovery", label: "Discovery" },
   { id: "weather", label: "Weather" },

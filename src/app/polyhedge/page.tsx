@@ -11,6 +11,7 @@ import { RtMiddlesView } from "@/components/polyhedge/views/RtMiddles";
 import { OpenBetsView } from "@/components/polyhedge/views/OpenBets";
 import { SettledView } from "@/components/polyhedge/views/Settled";
 import { PnLView } from "@/components/polyhedge/views/PnL";
+import { MakerView } from "@/components/polyhedge/views/Maker";
 
 export default function PolyhedgePage() {
   // Always render with the default tab on both SSR and the first client render
@@ -48,6 +49,7 @@ export default function PolyhedgePage() {
         {tab === "open-bets" && <OpenBetsView />}
         {tab === "settled" && <SettledView />}
         {tab === "pnl" && <PnLView />}
+        {tab === "maker" && <MakerView />}
       </main>
     </>
   );
@@ -63,5 +65,6 @@ function validTab(s: string): boolean {
     "open-bets",
     "settled",
     "pnl",
+    "maker",
   ].includes(s);
 }

@@ -15,6 +15,7 @@ export const qk = {
   settledBets: (limit: number) => ["ph", "settled-bets", limit] as const,
   pnlSummary: ["ph", "pnl", "summary"] as const,
   pnlFills: ["ph", "pnl", "fills"] as const,
+  maker: (mode: string) => ["ph", "maker", mode] as const,
   arbSummary: ["ph", "arb", "summary"] as const,
   arbList: ["ph", "arb", "list"] as const,
   arbCandidates: (status: string, series: string, hideBlocked: boolean) =>
