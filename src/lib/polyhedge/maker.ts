@@ -100,7 +100,9 @@ export interface MakerUpcomingGame {
   volume: number | null;
   delay: number | null;
   loaded: boolean;
-  status: "real money" | "paper" | "loaded, not selected" | "recording only";
+  status: "real money" | "paper" | "loaded, not selected" | "not loaded";
+  start_exact: boolean; // false: kickoff estimated from Kalshi's expected end time
+  recorded: boolean;
 }
 
 export interface MakerUpcoming {

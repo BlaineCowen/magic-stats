@@ -1006,14 +1006,15 @@ const STATUS_STYLE: Record<MakerUpcomingGame["status"], string> = {
   "real money": "mk-pill mk-pill-live",
   paper: "mk-pill",
   "loaded, not selected": "mk-pill",
-  "recording only": "mk-pill mk-pill-dim",
+  "not loaded": "mk-pill mk-pill-dim",
 };
 const STATUS_LABEL: Record<MakerUpcomingGame["status"], string> = {
   "real money": "real money",
   paper: "paper",
   "loaded, not selected": "loaded · not on live list",
-  "recording only": "recording only",
+  "not loaded": "not loaded",
 };
+type UpView = "real" | "loaded" | "all";
 
 function money(v: number | null) {
   if (v == null) return "—";
@@ -1048,11 +1049,12 @@ function Upcoming() {
     queryFn: fetchMakerUpcoming,
     refetchInterval: 60_000,
   });
-  const [all, setAll] = useState(false);
+  const [view, setView] = useState<UpView>("real");
   const games = q.data?.games ?? [];
-  const loaded = games.filter((g) => g.loaded);
-  const shown = all ? games : loaded;
-  const realCount = games.filter((g) => g.status === "real money").length;
+  const real = games.filter((g) => g.status === "real money");
+  const loaded = games.filter((g) => g.loaded || g.status === "real money");
+  const shown = view === "real" ? real : view === "loaded" ? loaded : games;
+  const realCount = real.length;
   const now = q.data?.now ?? Date.now() / 1000;
 
   // group by day so a busy Saturday reads as one block
@@ -1087,28 +1089,33 @@ function Upcoming() {
             </span>
           )}
         </span>
-        <span style={{ display: "flex", gap: 6 }}>
-          <button
-            type="button"
-            className="ph-chip"
-            data-active={!all}
-            onClick={() => setAll(false)}
-          >
-            Bot&apos;s games · {loaded.length}
-          </button>
-          <button
-            type="button"
-            className="ph-chip"
-            data-active={all}
-            onClick={() => setAll(true)}
-          >
-            All recorded · {games.length}
-          </button>
+        <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(
+            [
+              ["real", `Real money · ${real.length}`],
+              ["loaded", `Bot loaded · ${loaded.length}`],
+              ["all", `All big games · ${games.length}`],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              className="ph-chip"
+              data-active={view === v}
+              onClick={() => setView(v)}
+            >
+              {label}
+            </button>
+          ))}
         </span>
       </div>
       {shown.length === 0 ? (
         <div className="mk-sub">
-          {q.isLoading ? "Loading…" : "Nothing scheduled in the next 48 hours."}
+          {q.isLoading
+            ? "Loading…"
+            : view === "real"
+              ? "No real-money games in the next 48 hours. Use the other views to see what's coming."
+              : "Nothing scheduled in the next 48 hours."}
         </div>
       ) : (
         <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
@@ -1139,7 +1146,16 @@ function Upcoming() {
                         {g.started ? (
                           <span className="ph-pos">● started</span>
                         ) : (
-                          when(g.start_ts, now).time
+                          <span
+                            title={
+                              g.start_exact
+                                ? undefined
+                                : "estimated from Kalshi's expected end time"
+                            }
+                          >
+                            {g.start_exact ? "" : "≈"}
+                            {when(g.start_ts, now).time}
+                          </span>
                         )}
                       </Td>
                       <Td>
