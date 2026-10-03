@@ -507,3 +507,9 @@ mark.ph-hl-num { background: rgba(214, 188, 250, 0.18); color: inherit; border-r
 .mk-tip { background: #0f131c; border: 1px solid #2d3748; border-radius: 6px; padding: 7px 9px; font-size: 11px; color: #e2e8f0; }
 .mk-tip-muted { color: #718096; font-size: 10px; }
 .mk-table thead th { position: static; }
+.mk-pill-dim { color: #4a5568; border-color: #232b3b; }
+.mk-day-row { color: #90cdf4 !important; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; background: #151a26; }
+.mk-bar { display: inline-block; width: 70px; height: 5px; border-radius: 3px; background: #232b3b; overflow: hidden; }
+.mk-bar > span { display: block; height: 100%; background: #90cdf4; opacity: .7; border-radius: 3px; }
+.mk-panel-title { flex-wrap: wrap; }
+.mk-panel-title .ph-chip { white-space: nowrap; }

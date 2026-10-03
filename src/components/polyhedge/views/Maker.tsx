@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Area,
@@ -21,6 +21,9 @@ import {
 import {
   fetchMakerGame,
   fetchMakerSummary,
+  fetchMakerUpcoming,
+  type MakerUpcoming,
+  type MakerUpcomingGame,
   type MakerFill,
   type MakerGame,
   type MakerGameDetail,
@@ -138,6 +141,7 @@ export function MakerView() {
         </div>
       )}
       <Kpis d={d} traded={traded} />
+      <Upcoming />
       {traded.length > 0 && (
         <Trends traded={traded} picked={picked} onPick={setPicked} />
       )}
@@ -993,6 +997,198 @@ function SimpleTip({
     <div className="mk-tip">
       <div className="mk-tip-muted">{clockS(label)}</div>
       <div>{fmtV(v)}</div>
+    </div>
+  );
+}
+
+// ─── upcoming games ──────────────────────────────────────────────────────
+const STATUS_STYLE: Record<MakerUpcomingGame["status"], string> = {
+  "real money": "mk-pill mk-pill-live",
+  paper: "mk-pill",
+  "loaded, not selected": "mk-pill",
+  "recording only": "mk-pill mk-pill-dim",
+};
+const STATUS_LABEL: Record<MakerUpcomingGame["status"], string> = {
+  "real money": "real money",
+  paper: "paper",
+  "loaded, not selected": "loaded · not on live list",
+  "recording only": "recording only",
+};
+
+function money(v: number | null) {
+  if (v == null) return "—";
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${Math.round(v / 1e3)}K`;
+  return `$${Math.round(v)}`;
+}
+
+function when(t: number, now: number) {
+  const d = new Date(t * 1000);
+  const today = new Date(now * 1000);
+  const tomorrow = new Date(now * 1000 + 86400_000);
+  const dayName =
+    d.toDateString() === today.toDateString()
+      ? "Today"
+      : d.toDateString() === tomorrow.toDateString()
+        ? "Tomorrow"
+        : d.toLocaleDateString([], {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          });
+  return {
+    dayName,
+    time: d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+  };
+}
+
+function Upcoming() {
+  const q = useQuery<MakerUpcoming>({
+    queryKey: qk.makerUpcoming,
+    queryFn: fetchMakerUpcoming,
+    refetchInterval: 60_000,
+  });
+  const [all, setAll] = useState(false);
+  const games = q.data?.games ?? [];
+  const loaded = games.filter((g) => g.loaded);
+  const shown = all ? games : loaded;
+  const realCount = games.filter((g) => g.status === "real money").length;
+  const now = q.data?.now ?? Date.now() / 1000;
+
+  // group by day so a busy Saturday reads as one block
+  const groups: { day: string; rows: MakerUpcomingGame[] }[] = [];
+  for (const g of shown) {
+    const { dayName } = when(g.start_ts, now);
+    const last = groups[groups.length - 1];
+    if (last && last.day === dayName) last.rows.push(g);
+    else groups.push({ day: dayName, rows: [g] });
+  }
+
+  return (
+    <div className="mk-panel">
+      <div className="mk-panel-title" style={{ alignItems: "center" }}>
+        <span>
+          Upcoming · next 48 h
+          {q.data && (
+            <span
+              className="mk-sub"
+              style={{
+                textTransform: "none",
+                letterSpacing: 0,
+                fontWeight: 400,
+                marginLeft: 8,
+              }}
+            >
+              {realCount > 0
+                ? `${realCount} with real money`
+                : q.data.bot_live
+                  ? "none on the real-money list yet"
+                  : "bot is in paper mode"}
+            </span>
+          )}
+        </span>
+        <span style={{ display: "flex", gap: 6 }}>
+          <button
+            type="button"
+            className="ph-chip"
+            data-active={!all}
+            onClick={() => setAll(false)}
+          >
+            Bot&apos;s games · {loaded.length}
+          </button>
+          <button
+            type="button"
+            className="ph-chip"
+            data-active={all}
+            onClick={() => setAll(true)}
+          >
+            All recorded · {games.length}
+          </button>
+        </span>
+      </div>
+      {shown.length === 0 ? (
+        <div className="mk-sub">
+          {q.isLoading ? "Loading…" : "Nothing scheduled in the next 48 hours."}
+        </div>
+      ) : (
+        <div style={{ overflowX: "auto", maxHeight: 420, overflowY: "auto" }}>
+          <Table className="mk-table">
+            <THead>
+              <Tr>
+                <Th>Start</Th>
+                <Th>Game · favourite first</Th>
+                <Th>Kalshi volume</Th>
+                <Th>Bot</Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {groups.map((grp) => (
+                <Fragment key={grp.day}>
+                  <Tr>
+                    <Td colSpan={4} className="mk-day-row">
+                      {grp.day} · {grp.rows.length} game
+                      {grp.rows.length === 1 ? "" : "s"}
+                    </Td>
+                  </Tr>
+                  {grp.rows.map((g) => (
+                    <Tr key={g.key}>
+                      <Td
+                        className="ph-muted-2"
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {g.started ? (
+                          <span className="ph-pos">● started</span>
+                        ) : (
+                          when(g.start_ts, now).time
+                        )}
+                      </Td>
+                      <Td>
+                        <span style={{ color: "#e2e8f0" }}>{g.team_a}</span>
+                        {g.fav_price != null && (
+                          <span className="ph-muted-2">
+                            {" "}
+                            {Math.round(g.fav_price * 100)}¢
+                          </span>
+                        )}
+                        <span className="ph-muted-2"> vs </span>
+                        {g.team_b}{" "}
+                        <span className="ph-badge">
+                          {g.league.toUpperCase()}
+                        </span>
+                      </Td>
+                      <Td>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <span style={{ minWidth: 44 }}>
+                            {money(g.volume)}
+                          </span>
+                          <span className="mk-bar">
+                            <span
+                              style={{
+                                width: `${Math.min(100, ((g.volume ?? 0) / 2e6) * 100)}%`,
+                              }}
+                            />
+                          </span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <span className={STATUS_STYLE[g.status]}>
+                          {STATUS_LABEL[g.status]}
+                        </span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Fragment>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

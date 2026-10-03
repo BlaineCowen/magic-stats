@@ -88,3 +88,27 @@ export interface MakerGameDetail {
 export function fetchMakerGame(mode: MakerMode, key: string): Promise<MakerGameDetail> {
   return api.get<MakerGameDetail>("/api/maker/game", { mode, key });
 }
+
+export interface MakerUpcomingGame {
+  key: string;
+  league: string;
+  start_ts: number;
+  started: boolean;
+  team_a: string; // the Kalshi favourite
+  team_b: string;
+  fav_price: number | null;
+  volume: number | null;
+  delay: number | null;
+  loaded: boolean;
+  status: "real money" | "paper" | "loaded, not selected" | "recording only";
+}
+
+export interface MakerUpcoming {
+  now: number;
+  bot_live: boolean;
+  games: MakerUpcomingGame[];
+}
+
+export function fetchMakerUpcoming(): Promise<MakerUpcoming> {
+  return api.get<MakerUpcoming>("/api/maker/upcoming");
+}

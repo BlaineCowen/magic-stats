@@ -16,6 +16,7 @@ export const qk = {
   pnlSummary: ["ph", "pnl", "summary"] as const,
   pnlFills: ["ph", "pnl", "fills"] as const,
   maker: (mode: string) => ["ph", "maker", mode] as const,
+  makerUpcoming: ["ph", "maker", "upcoming"] as const,
   makerGame: (mode: string, key: string) => ["ph", "maker", mode, key] as const,
   arbSummary: ["ph", "arb", "summary"] as const,
   arbList: ["ph", "arb", "list"] as const,
