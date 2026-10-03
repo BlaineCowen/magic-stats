@@ -14,6 +14,7 @@ export interface MakerGame {
   skip: boolean;
   stopped: boolean;
   kmid: number | null;
+  ref: number | null;
   poly: [number | null, number | null] | null;
   bid: number | null;
   ask: number | null;
@@ -25,6 +26,9 @@ export interface MakerGame {
   settled: number | null;
   pnl: number | null;
   winner: string | null;
+  official: boolean;
+  avg_edge_c: number | null;
+  game_t: number | null;
   pnl_60s: number | null;
   fills: number;
   shares: number;
@@ -39,6 +43,8 @@ export interface MakerFill {
   qty: number;
   fair: number | null;
   edge_c: number | null;
+  a_price: number;
+  a_dir: "buy" | "sell";
 }
 
 export interface MakerProblem {
@@ -61,12 +67,24 @@ export interface MakerSummary {
     running: number;
   };
   games: MakerGame[];
-  // [unix seconds, pnl marked to Kalshi, Kalshi mid of team A, net position (A − B)]
-  series: Record<string, [number, number | null, number | null, number | null][]>;
   fills: MakerFill[];
   problems: MakerProblem[];
 }
 
 export function fetchMakerSummary(mode: MakerMode): Promise<MakerSummary> {
   return api.get<MakerSummary>("/api/maker/summary", { mode });
+}
+
+export interface MakerGameDetail {
+  key: string;
+  team_a: string;
+  team_b: string;
+  // [unix seconds, P&L marked to Kalshi, Kalshi mid of team A, shares of A held, shares of B held]
+  series: [number, number | null, number | null, number | null, number | null][];
+  fills: MakerFill[];
+  problems: MakerProblem[];
+}
+
+export function fetchMakerGame(mode: MakerMode, key: string): Promise<MakerGameDetail> {
+  return api.get<MakerGameDetail>("/api/maker/game", { mode, key });
 }
