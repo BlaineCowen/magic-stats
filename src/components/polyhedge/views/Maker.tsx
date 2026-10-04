@@ -140,6 +140,7 @@ export function MakerView() {
           Could not load maker data: {String(q.error)}
         </div>
       )}
+      <Account d={d} />
       <Kpis d={d} traded={traded} />
       <Upcoming />
       {traded.length > 0 && (
@@ -1205,6 +1206,58 @@ function Upcoming() {
           </Table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── account (real money on Polymarket) ──────────────────────────────────
+function Account({ d }: { d?: MakerSummary }) {
+  const a = d?.account ?? {};
+  if (a.cash == null) return null;
+  const pos = a.positions_value ?? 0;
+  const won = a.unclaimed ?? 0;
+  const total = a.cash + pos + won;
+  const usd = (v: number) =>
+    `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const age = a.t && d ? d.now - a.t : null;
+  return (
+    <div className="mk-panel">
+      <div className="mk-panel-title">
+        <span>Polymarket account</span>
+        <span
+          className="mk-sub"
+          style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+        >
+          {age == null ? "" : `as of ${ago(age)} ago`}
+        </span>
+      </div>
+      <div className="mk-stats" style={{ margin: 0 }}>
+        <Stat
+          label="Total value"
+          value={
+            <span style={{ fontSize: 18, fontWeight: 700 }}>{usd(total)}</span>
+          }
+        />
+        <Stat label="Cash (free to trade)" value={usd(a.cash)} />
+        <Stat
+          label={`Open positions · ${a.n_positions ?? 0}`}
+          value={usd(pos)}
+        />
+        <Stat
+          label="Winnings to claim"
+          value={
+            <span style={{ color: won > 0.5 ? "#f6e05e" : undefined }}>
+              {usd(won)}
+              {won > 0.5 && (
+                <span className="mk-sub">
+                  {" "}
+                  · claim on Polymarket to free it up
+                </span>
+              )}
+            </span>
+          }
+        />
+      </div>
     </div>
   );
 }

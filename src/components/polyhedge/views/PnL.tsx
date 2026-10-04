@@ -56,7 +56,9 @@ export function PnLView() {
             value={dollars(b.available_dollars)}
             sub={
               b.locked_dollars
-                ? `${dollars(b.locked_dollars)} locked`
+                ? exchange === "polymarket"
+                  ? `+ ${dollars(b.locked_dollars)} in positions & unclaimed winnings`
+                  : `${dollars(b.locked_dollars)} locked`
                 : undefined
             }
           />

@@ -59,6 +59,14 @@ export interface MakerSummary {
   now: number;
   synced_at: number | null;
   bot: Record<string, string | number>;
+  // Polymarket account snapshot from the VPS (≤ 1 min old): free cash, open positions, winnings not yet claimed
+  account: {
+    t?: number;
+    cash?: number;
+    positions_value?: number;
+    unclaimed?: number;
+    n_positions?: number;
+  };
   totals: {
     recent_pnl: number;
     recent_fills: number;
