@@ -80,7 +80,7 @@ export function RecommendedBets({
         Live gaps between Kalshi and Polymarket right now, after both
         venues&apos; fees: buying both legs costs less than the $1 one of them
         pays. Ranked by return per year for the time the money is locked. At
-        least $1 profit and 10% a year.{" "}
+        least $5 profit and 30% a year.{" "}
         {q.data?.stale ? (
           <span className="ph-neg">
             Data is stale — the election watcher may be down.
