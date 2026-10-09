@@ -557,3 +557,9 @@ mark.ph-hl-num { background: rgba(214, 188, 250, 0.18); color: inherit; border-r
   .ph-table thead th { position: static; }
   .ph-btn { min-height: 36px; }
 }
+.rb-auto {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  border: 1px solid #2d3748; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 11px; line-height: 1.5;
+}
+.rb-auto-on { border-color: #276749; background: rgba(72, 187, 120, 0.06); }
+.rb-auto .ph-btn { min-height: 40px; flex-shrink: 0; }

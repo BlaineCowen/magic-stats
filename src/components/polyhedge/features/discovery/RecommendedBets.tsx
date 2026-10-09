@@ -50,6 +50,7 @@ interface PlaceRow {
   contracts_filled: number | null;
   total_cost: number | null;
   bet_id: number | null;
+  source: "click" | "auto" | null;
 }
 
 interface PlaceStatus {
@@ -59,6 +60,14 @@ interface PlaceStatus {
   spent_24h: number;
   left_24h: number;
   tolerance: number;
+  auto: {
+    enabled: boolean;
+    min_profit: number;
+    min_per_year: number;
+    min_edge: number;
+    max_edge: number;
+    pair_cap: number;
+  };
 }
 
 const WARN_TEXT: Record<string, string> = {
@@ -90,6 +99,38 @@ const day = (s: string | null) =>
 const sides = (r: Rec) =>
   r.direction === "K-YES + P-NO" ? { k: "YES", p: "NO" } : { k: "NO", p: "YES" };
 const inFlight = (s: PlaceRow["status"]) => s === "pending" || s === "running";
+
+/** Auto-betting status line with a pause / resume switch. */
+function AutoBar({ st }: { st: PlaceStatus }) {
+  const qc = useQueryClient();
+  const a = st.auto;
+  const m = useMutation({
+    mutationFn: (enabled: boolean) => api.post("/api/arb-recommended/auto", { enabled }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: placeKey }),
+  });
+  return (
+    <div className={`rb-auto ${a.enabled ? "rb-auto-on" : ""}`}>
+      <div>
+        <strong className={a.enabled ? "ph-pos" : "ph-warn"}>
+          Auto-betting {a.enabled ? "ON" : "PAUSED"}
+        </strong>
+        <div className="ph-muted-2">
+          Bets by itself when a gap is confirmed and makes at least {usd(a.min_profit)},{" "}
+          {(a.min_per_year * 100).toFixed(0)}% a year and {c(a.min_edge)}–{c(a.max_edge)} per $1, with no
+          analyst caveat. At most {usd(a.pair_cap)} per pair, within the limits above.
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant={a.enabled ? "ghost" : "primary"}
+        disabled={m.isPending}
+        onClick={() => m.mutate(!a.enabled)}
+      >
+        {a.enabled ? "Pause" : "Resume"}
+      </Button>
+    </div>
+  );
+}
 
 function usePlaceStatus(fast: boolean) {
   return useQuery<PlaceStatus>({
@@ -303,6 +344,7 @@ export function RecommendedBets({ onReview }: { onReview: (id: number) => void }
           </span>
         )}
       </p>
+      {status.data?.auto && <AutoBar st={status.data} />}
       {q.isLoading && <p className="ph-muted-2">Loading…</p>}
       {!q.isLoading && rows.length === 0 && <p className="ph-muted-2">No gaps worth taking right now.</p>}
       <div className="rb-grid">
@@ -318,12 +360,13 @@ export function RecommendedBets({ onReview }: { onReview: (id: number) => void }
       </div>
       {recent.length > 0 && (
         <div className="rb-recent">
-          <div className="ph-muted-2">Recent clicks</div>
+          <div className="ph-muted-2">Recent bets</div>
           {recent.map((x) => (
             <div key={x.id} className="rb-recent-row">
               <span className={x.status === "filled" ? "ph-pos" : inFlight(x.status) ? "ph-warn" : "ph-neg"}>
                 {STATUS_TEXT[x.status]}
               </span>{" "}
+              {x.source === "auto" && <span className="ph-badge ph-badge-warn">auto</span>}{" "}
               <span className="ph-muted-2">
                 {new Date(x.created_at * 1000).toLocaleString([], {
                   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
