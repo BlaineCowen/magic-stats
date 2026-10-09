@@ -19,6 +19,7 @@ export const qk = {
   makerUpcoming: ["ph", "maker", "upcoming"] as const,
   makerGame: (mode: string, key: string) => ["ph", "maker", mode, key] as const,
   arbSummary: ["ph", "arb", "summary"] as const,
+  arbRecommended: ["ph", "arb", "recommended"] as const,
   arbList: ["ph", "arb", "list"] as const,
   arbCandidates: (status: string, series: string, hideBlocked: boolean) =>
     ["ph", "arb", "list", status, series, hideBlocked] as const,
