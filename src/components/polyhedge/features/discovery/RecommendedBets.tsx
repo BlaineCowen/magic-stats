@@ -115,9 +115,10 @@ function AutoBar({ st }: { st: PlaceStatus }) {
           Auto-betting {a.enabled ? "ON" : "PAUSED"}
         </strong>
         <div className="ph-muted-2">
-          Bets by itself when a gap is confirmed and makes at least {usd(a.min_profit)},{" "}
-          {(a.min_per_year * 100).toFixed(0)}% a year and {c(a.min_edge)}–{c(a.max_edge)} per $1, with no
-          analyst caveat. At most {usd(a.pair_cap)} per pair, within the limits above.
+          Bets by itself only on vetted pairs (rules read side by side and marked OK), when a gap is
+          confirmed and makes at least {usd(a.min_profit)}, {(a.min_per_year * 100).toFixed(0)}% a year and{" "}
+          {c(a.min_edge)}–{c(a.max_edge)} per $1. At most {usd(a.pair_cap)} per pair, within the limits above.
+          Everything else is shown for you to check and click.
         </div>
       </div>
       <Button
