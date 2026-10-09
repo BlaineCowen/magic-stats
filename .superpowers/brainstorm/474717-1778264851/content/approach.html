@@ -1,0 +1,116 @@
+<h2>Muscle Map — Visual Approach</h2>
+<p class="subtitle">Which style fits the dashboard?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="svg" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:20px;border-radius:8px;">
+      <!-- Simplified front+back body SVG mockup -->
+      <div style="display:flex;gap:16px;justify-content:center;align-items:flex-start;">
+        <!-- Front view -->
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Front</div>
+          <svg width="80" height="160" viewBox="0 0 80 160">
+            <!-- Head -->
+            <ellipse cx="40" cy="14" rx="12" ry="14" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Chest (highlighted - primary) -->
+            <rect x="22" y="32" width="36" height="26" rx="4" fill="rgba(0,170,255,0.7)" stroke="#00aaff" stroke-width="1"/>
+            <!-- Shoulders (secondary) -->
+            <ellipse cx="16" cy="38" rx="9" ry="10" fill="rgba(0,170,255,0.35)" stroke="#00aaff" stroke-width="1" stroke-dasharray="2,1"/>
+            <ellipse cx="64" cy="38" rx="9" ry="10" fill="rgba(0,170,255,0.35)" stroke="#00aaff" stroke-width="1" stroke-dasharray="2,1"/>
+            <!-- Abs -->
+            <rect x="27" y="60" width="26" height="22" rx="3" fill="rgba(0,170,255,0.2)" stroke="#2d3748" stroke-width="1"/>
+            <!-- Arms -->
+            <rect x="8" y="50" width="10" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="62" y="50" width="10" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Forearms -->
+            <rect x="7" y="84" width="9" height="24" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="64" y="84" width="9" height="24" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Quads (highlighted) -->
+            <rect x="22" y="86" width="15" height="38" rx="4" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="1"/>
+            <rect x="43" y="86" width="15" height="38" rx="4" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="1"/>
+            <!-- Calves -->
+            <rect x="23" y="126" width="13" height="28" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="44" y="126" width="13" height="28" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+          </svg>
+        </div>
+        <!-- Back view -->
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Back</div>
+          <svg width="80" height="160" viewBox="0 0 80 160">
+            <!-- Head -->
+            <ellipse cx="40" cy="14" rx="12" ry="14" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Traps -->
+            <ellipse cx="40" cy="33" rx="18" ry="8" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Lats (highlighted - primary) -->
+            <path d="M22 42 Q12 55 18 72 L26 72 L26 44 Z" fill="rgba(0,170,255,0.65)" stroke="#00aaff" stroke-width="1"/>
+            <path d="M58 42 Q68 55 62 72 L54 72 L54 44 Z" fill="rgba(0,170,255,0.65)" stroke="#00aaff" stroke-width="1"/>
+            <!-- Mid back -->
+            <rect x="26" y="42" width="28" height="30" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="1" stroke-dasharray="2,1"/>
+            <!-- Glutes -->
+            <ellipse cx="33" cy="88" rx="11" ry="10" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <ellipse cx="47" cy="88" rx="11" ry="10" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Hamstrings -->
+            <rect x="22" y="96" width="15" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="43" y="96" width="15" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Calves -->
+            <rect x="23" y="130" width="13" height="24" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="44" y="130" width="13" height="24" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Arms -->
+            <rect x="8" y="50" width="10" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="62" y="50" width="10" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+          </svg>
+        </div>
+        <!-- Legend -->
+        <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;margin-top:20px;">
+          <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;">
+            <div style="width:12px;height:12px;background:rgba(0,170,255,0.7);border-radius:2px;"></div> Primary
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;">
+            <div style="width:12px;height:12px;background:rgba(0,170,255,0.35);border-radius:2px;border:1px dashed #00aaff;"></div> Secondary
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#94a3b8;">
+            <div style="width:12px;height:12px;background:#1e2535;border-radius:2px;border:1px solid #2d3748;"></div> Inactive
+          </div>
+        </div>
+      </div>
+      <!-- Weekly heatmap hint -->
+      <div style="margin-top:12px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+        <div style="background:rgba(0,170,255,0.7);color:#000;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:600;">Chest 12 sets</div>
+        <div style="background:rgba(0,170,255,0.45);color:#e2e8f0;font-size:9px;padding:2px 7px;border-radius:10px;">Back 8 sets</div>
+        <div style="background:rgba(0,170,255,0.2);color:#94a3b8;font-size:9px;padding:2px 7px;border-radius:10px;">Legs 3 sets</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — 2D SVG Heatmap</h3>
+      <p>Front + back body diagram. Muscles light up based on weekly set volume. Fast, lightweight, fits the dark theme perfectly. Uses <code>react-muscle-anatomy</code> or a bundled anatomy SVG.</p>
+      <div class="pros-cons" style="margin-top:10px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Ships in ~1 day</li><li>No heavy 3D deps</li><li>Works on mobile</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't rotate / inspect depth</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="3d" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:20px;border-radius:8px;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;">
+      <div style="font-size:3rem;">🫀</div>
+      <div style="font-size:11px;color:#64748b;text-align:center;max-width:180px;">3D model rotates freely — drag to inspect back, deep muscles, individual heads (e.g. long vs short bicep head)</div>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <div style="background:#1e2535;border:1px solid #2d3748;border-radius:6px;padding:4px 10px;font-size:10px;color:#64748b;">⟲ Rotate</div>
+        <div style="background:#1e2535;border:1px solid #2d3748;border-radius:6px;padding:4px 10px;font-size:10px;color:#64748b;">🔍 Zoom</div>
+      </div>
+      <div style="font-size:10px;color:#475569;margin-top:4px;">Powered by Three.js / model-viewer + Z-Anatomy GLTF</div>
+    </div>
+    <div class="card-body">
+      <h3>B — 3D Interactive Model</h3>
+      <p>Rotatable 3D anatomy. Highlights muscles on the actual 3D surface. Impressive but significantly heavier — Z-Anatomy GLTF files are large and Three.js adds bundle weight.</p>
+      <div class="pros-cons" style="margin-top:10px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Very impressive visually</li><li>Deep muscle detail</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Weeks of work</li><li>Heavy assets (~50–200 MB)</li><li>Poor mobile perf</li><li>Complex muscle mapping</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem;">Click to select. Let me know in the terminal which feels right — or if you want to see a different take.</p>

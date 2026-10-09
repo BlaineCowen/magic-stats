@@ -1,0 +1,177 @@
+<h2>Muscle Map tab layout</h2>
+<p class="subtitle">The body diagram is the centrepiece — what surrounds it?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="diagram-only" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:8px;">
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <!-- Toggle row -->
+        <div style="display:flex;gap:6px;justify-content:flex-end;">
+          <div style="background:rgba(0,170,255,0.2);border:1px solid #00aaff;border-radius:6px;padding:3px 10px;font-size:9px;color:#00aaff;font-weight:600;">Sets</div>
+          <div style="background:transparent;border:1px solid #2d3748;border-radius:6px;padding:3px 10px;font-size:9px;color:#64748b;">Volume</div>
+        </div>
+        <!-- Big body diagram centred -->
+        <div style="display:flex;gap:24px;justify-content:center;align-items:flex-start;padding:8px 0;">
+          <div style="text-align:center;">
+            <div style="font-size:8px;color:#64748b;margin-bottom:4px;">FRONT</div>
+            <svg width="80" height="160" viewBox="0 0 80 160">
+              <ellipse cx="40" cy="14" rx="12" ry="13" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="30" width="16" height="12" rx="3" fill="rgba(0,170,255,0.4)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="42" y="30" width="16" height="12" rx="3" fill="rgba(0,170,255,0.85)" stroke="#00aaff" stroke-width="0.5"/>
+              <ellipse cx="15" cy="36" rx="9" ry="8" fill="rgba(0,170,255,0.55)" stroke="#00aaff" stroke-width="0.5"/>
+              <ellipse cx="65" cy="36" rx="9" ry="8" fill="rgba(0,170,255,0.55)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="6" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="66" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="6" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="66" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="44" width="36" height="10" rx="2" fill="rgba(0,170,255,0.2)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="55" width="36" height="10" rx="2" fill="rgba(0,170,255,0.1)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="66" width="36" height="10" rx="2" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="80" width="16" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="42" y="80" width="16" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="114" width="15" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="43" y="114" width="15" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            </svg>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:8px;color:#64748b;margin-bottom:4px;">BACK</div>
+            <svg width="80" height="160" viewBox="0 0 80 160">
+              <ellipse cx="40" cy="14" rx="12" ry="13" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <ellipse cx="40" cy="30" rx="18" ry="7" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="0.5"/>
+              <path d="M22 38 Q10 52 16 70 L24 70 L24 40 Z" fill="rgba(0,170,255,0.7)" stroke="#00aaff" stroke-width="0.5"/>
+              <path d="M58 38 Q70 52 64 70 L56 70 L56 40 Z" fill="rgba(0,170,255,0.7)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="24" y="38" width="32" height="20" rx="3" fill="rgba(0,170,255,0.4)" stroke="#00aaff" stroke-width="0.5"/>
+              <rect x="24" y="59" width="32" height="14" rx="3" fill="rgba(0,170,255,0.2)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="6" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="66" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="6" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="66" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <ellipse cx="32" cy="83" rx="11" ry="9" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="0.5"/>
+              <ellipse cx="48" cy="83" rx="11" ry="9" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="90" width="15" height="30" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="43" y="90" width="15" height="30" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="22" y="122" width="14" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+              <rect x="44" y="122" width="14" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            </svg>
+          </div>
+        </div>
+        <!-- Hover tooltip hint -->
+        <div style="display:flex;justify-content:center;">
+          <div style="background:#1e2535;border:1px solid #2d3748;border-radius:6px;padding:5px 10px;font-size:9px;color:#94a3b8;">
+            💬 Hover a muscle → shows name + sets/volume count
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Diagram Only</h3>
+      <p>Full-width front + back views, as large as possible. Hover a region to see the muscle name and your stats for it. Clean and focused.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="diagram-plus-list" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:12px;border-radius:8px;">
+      <div style="display:flex;gap:10px;">
+        <!-- Left: mini body diagrams -->
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <div style="text-align:center;">
+            <div style="font-size:7px;color:#64748b;margin-bottom:3px;">FRONT</div>
+            <svg width="52" height="104" viewBox="0 0 80 160">
+              <ellipse cx="40" cy="14" rx="12" ry="13" fill="#1e2535" stroke="#2d3748" stroke-width="1.5"/>
+              <rect x="22" y="30" width="36" height="22" rx="4" fill="rgba(0,170,255,0.75)" stroke="#00aaff" stroke-width="1"/>
+              <ellipse cx="15" cy="36" rx="9" ry="8" fill="rgba(0,170,255,0.45)" stroke="#00aaff" stroke-width="1"/>
+              <ellipse cx="65" cy="36" rx="9" ry="8" fill="rgba(0,170,255,0.45)" stroke="#00aaff" stroke-width="1"/>
+              <rect x="6" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="1"/>
+              <rect x="66" y="48" width="8" height="24" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="1"/>
+              <rect x="6" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="66" y="74" width="8" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="54" width="36" height="22" rx="3" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="80" width="16" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="42" y="80" width="16" height="32" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="114" width="15" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="43" y="114" width="15" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            </svg>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:7px;color:#64748b;margin-bottom:3px;">BACK</div>
+            <svg width="52" height="104" viewBox="0 0 80 160">
+              <ellipse cx="40" cy="14" rx="12" ry="13" fill="#1e2535" stroke="#2d3748" stroke-width="1.5"/>
+              <ellipse cx="40" cy="30" rx="18" ry="7" fill="rgba(0,170,255,0.25)" stroke="#00aaff" stroke-width="1"/>
+              <path d="M22 38 Q10 52 16 70 L24 70 L24 40 Z" fill="rgba(0,170,255,0.65)" stroke="#00aaff" stroke-width="1"/>
+              <path d="M58 38 Q70 52 64 70 L56 70 L56 40 Z" fill="rgba(0,170,255,0.65)" stroke="#00aaff" stroke-width="1"/>
+              <rect x="24" y="38" width="32" height="20" rx="3" fill="rgba(0,170,255,0.35)" stroke="#00aaff" stroke-width="1"/>
+              <rect x="24" y="59" width="32" height="14" rx="3" fill="rgba(0,170,255,0.2)" stroke="#2d3748" stroke-width="1"/>
+              <rect x="6" y="48" width="8" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="66" y="48" width="8" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <ellipse cx="32" cy="83" rx="11" ry="9" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <ellipse cx="48" cy="83" rx="11" ry="9" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="90" width="15" height="30" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="43" y="90" width="15" height="30" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="22" y="122" width="14" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+              <rect x="44" y="122" width="14" height="24" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            </svg>
+          </div>
+        </div>
+        <!-- Right: ranked list -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Most Trained</div>
+          <!-- Bar rows -->
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#e2e8f0;width:70px;flex-shrink:0;">Lower Chest</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;position:relative;">
+              <div style="width:90%;background:#00aaff;height:100%;border-radius:2px;"></div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;width:18px;text-align:right;">16</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#e2e8f0;width:70px;flex-shrink:0;">Lats</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;position:relative;">
+              <div style="width:72%;background:#00aaff;height:100%;border-radius:2px;opacity:.8;"></div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;width:18px;text-align:right;">13</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#e2e8f0;width:70px;flex-shrink:0;">Ant. Deltoid</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;">
+              <div style="width:58%;background:#00aaff;height:100%;border-radius:2px;opacity:.6;"></div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;width:18px;text-align:right;">11</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#e2e8f0;width:70px;flex-shrink:0;">Triceps</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;">
+              <div style="width:44%;background:#00aaff;height:100%;border-radius:2px;opacity:.5;"></div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;width:18px;text-align:right;">8</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#e2e8f0;width:70px;flex-shrink:0;">Biceps</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;">
+              <div style="width:33%;background:#00aaff;height:100%;border-radius:2px;opacity:.4;"></div>
+            </div>
+            <div style="font-size:9px;color:#94a3b8;width:18px;text-align:right;">6</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="font-size:9px;color:#64748b;width:70px;flex-shrink:0;">Quads</div>
+            <div style="flex:1;background:#2d3748;border-radius:2px;height:7px;">
+              <div style="width:11%;background:#2d3748;height:100%;border-radius:2px;"></div>
+            </div>
+            <div style="font-size:9px;color:#475569;width:18px;text-align:right;">2</div>
+          </div>
+          <div style="margin-top:4px;display:flex;gap:4px;">
+            <div style="background:rgba(0,170,255,0.15);border:1px solid #00aaff;border-radius:4px;padding:2px 7px;font-size:8px;color:#00aaff;">Sets</div>
+            <div style="background:transparent;border:1px solid #2d3748;border-radius:4px;padding:2px 7px;font-size:8px;color:#64748b;">Volume</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Diagram + Ranked List</h3>
+      <p>Body diagram on the left, ranked bar chart of your most-trained muscles on the right. You get the visual heatmap plus a precise breakdown — easy to spot imbalances (e.g. chest-heavy, legs neglected).</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1rem;">Click to select, then let me know in the terminal.</p>
