@@ -100,6 +100,15 @@ const sides = (r: Rec) =>
   r.direction === "K-YES + P-NO" ? { k: "YES", p: "NO" } : { k: "NO", p: "YES" };
 const inFlight = (s: PlaceRow["status"]) => s === "pending" || s === "running";
 
+/** Rules-vetting verdict: "ok" pairs are the only ones auto-betting will touch. */
+function VerdictTag({ v }: { v?: string }) {
+  return v === "ok" ? (
+    <span className="ph-pos" style={{ fontWeight: 700 }}>vetted ✓</span>
+  ) : (
+    <span className="ph-warn">{v ?? "note"}:</span>
+  );
+}
+
 /** Auto-betting status line with a pause / resume switch. */
 function AutoBar({ st }: { st: PlaceStatus }) {
   const qc = useQueryClient();
@@ -222,7 +231,7 @@ function PlaceDialog({ r, limits, onClose }: { r: Rec; limits: PlaceStatus; onCl
           </dl>
           {r.note?.note && (
             <p className="rb-note">
-              <span className="ph-warn">{r.note.verdict ?? "note"}:</span> {r.note.note}
+              <VerdictTag v={r.note.verdict} /> {r.note.note}
             </p>
           )}
           {maxN < 1 && <p className="ph-neg">Not enough of today&apos;s limit left for one contract.</p>}
@@ -288,7 +297,7 @@ function Card({ r, onPlace, onReview, canPlace }: {
         <div className="rb-note">
           {r.note?.note && (
             <div>
-              <span className="ph-warn">{r.note.verdict ?? "note"}:</span> {r.note.note}
+              <VerdictTag v={r.note.verdict} /> {r.note.note}
             </div>
           )}
           {r.warns.length > 0 && (
