@@ -92,7 +92,7 @@ export function RecommendedBets({
         )}
       </p>
       <div style={{ overflowX: "auto" }}>
-        <Table>
+        <Table className="mk-table">
           <THead>
             <Tr>
               <Th>Buy both</Th>
@@ -140,7 +140,7 @@ export function RecommendedBets({
                       ? `${(r.per_year * 100).toFixed(0)}%`
                       : "—"}
                   </Td>
-                  <Td style={{ maxWidth: 360, fontSize: 11 }}>
+                  <Td style={{ maxWidth: 420, minWidth: 260, fontSize: 11, whiteSpace: "normal" }}>
                     {r.note?.note && (
                       <div>
                         <span className="ph-warn">
@@ -155,7 +155,7 @@ export function RecommendedBets({
                       </div>
                     )}
                   </Td>
-                  <Td>
+                  <Td style={{ whiteSpace: "nowrap", paddingLeft: 12 }}>
                     {r.candidate_id != null ? (
                       <button
                         type="button"
