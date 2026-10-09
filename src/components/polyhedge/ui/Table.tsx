@@ -10,7 +10,13 @@ export function Table({
   className,
   ...props
 }: HTMLAttributes<HTMLTableElement>) {
-  return <table className={cn("ph-table", className)} {...props} />;
+  // The wrapper only scrolls on phones (polyhedge.css); on wider screens it is inert so the sticky <thead>
+  // still pins to the page.
+  return (
+    <div className="ph-table-wrap">
+      <table className={cn("ph-table", className)} {...props} />
+    </div>
+  );
 }
 
 export function THead(props: HTMLAttributes<HTMLTableSectionElement>) {

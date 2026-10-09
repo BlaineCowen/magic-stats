@@ -513,3 +513,47 @@ mark.ph-hl-num { background: rgba(214, 188, 250, 0.18); color: inherit; border-r
 .mk-bar > span { display: block; height: 100%; background: #90cdf4; opacity: .7; border-radius: 3px; }
 .mk-panel-title { flex-wrap: wrap; }
 .mk-panel-title .ph-chip { white-space: nowrap; }
+
+/* ── Recommended bets (cards + Place bet dialog), mobile first ────────────── */
+.rb-wrap { padding: 0 12px 12px; }
+.rb-intro { font-size: 11px; margin: 4px 0 10px; line-height: 1.5; }
+.rb-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+@media (min-width: 720px) { .rb-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); } }
+.rb-card {
+  background: #151a27; border: 1px solid #2d3748; border-radius: 8px;
+  padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.rb-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.rb-profit { font-size: 20px; font-weight: 700; }
+.rb-legs { display: flex; flex-direction: column; gap: 4px; line-height: 1.4; overflow-wrap: anywhere; }
+.rb-venue {
+  display: inline-block; min-width: 82px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #718096;
+}
+.rb-meta { font-size: 11px; color: #a0aec0; }
+.rb-note { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.rb-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.rb-actions .ph-btn { min-height: 40px; padding-left: 16px; padding-right: 16px; font-size: 13px; }
+.rb-field { display: flex; flex-direction: column; gap: 4px; margin: 14px 0 10px; font-size: 11px; color: #a0aec0; }
+.rb-field .ph-input { font-size: 16px; min-height: 40px; width: 100%; } /* 16px stops iOS zooming on focus */
+.rb-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; font-size: 12px; }
+.rb-dl dt { color: #718096; }
+.rb-dl dd { margin: 0; }
+.rb-result { font-size: 13px; margin: 14px 0; line-height: 1.5; }
+.rb-recent { margin-top: 12px; font-size: 11px; display: flex; flex-direction: column; gap: 4px; }
+.rb-recent-row { overflow-wrap: anywhere; }
+
+/* ── Phones ──────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .ph-container { padding: 8px; gap: 8px; }
+  .ph-header { padding: 8px 10px; }
+  /* Dialogs: full width, scroll inside, buttons reachable above the keyboard. */
+  .ph-dialog {
+    min-width: 0; width: calc(100vw - 16px); max-width: none;
+    max-height: calc(100dvh - 16px); overflow-y: auto; padding: 16px;
+  }
+  /* Wide tables scroll sideways inside their section instead of being cut off. */
+  .ph-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ph-table thead th { position: static; }
+  .ph-btn { min-height: 36px; }
+}
