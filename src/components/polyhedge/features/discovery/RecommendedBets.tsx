@@ -25,6 +25,8 @@ interface Rec {
   open_s: number;
   confirmed: boolean;
   k_resolves: string | null;
+  payout_est?: string | null;
+  early?: boolean;
   warns: string[];
   candidate_id: number | null;
   candidate_status: string | null;
@@ -96,6 +98,8 @@ const day = (s: string | null) =>
   s
     ? new Date(s).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
     : "—";
+/** When the money comes back: Kalshi's early-payout races ~2 weeks after the call, else the official date. */
+const back = (r: Rec) => `${day(r.payout_est ?? r.k_resolves)}${r.early ? " (est., early payout)" : ""}`;
 const sides = (r: Rec) =>
   r.direction === "K-YES + P-NO" ? { k: "YES", p: "NO" } : { k: "NO", p: "YES" };
 const inFlight = (s: PlaceRow["status"]) => s === "pending" || s === "running";
@@ -221,7 +225,7 @@ function PlaceDialog({ r, limits, onClose }: { r: Rec; limits: PlaceStatus; onCl
             <dt>At most</dt>
             <dd>{valid ? usd(n * worstPer) : "—"} <span className="ph-muted-2">(refused above {c(worstPer)} each)</span></dd>
             <dt>Pays back</dt>
-            <dd>{valid ? usd(n) : "—"} on {day(r.k_resolves)}</dd>
+            <dd>{valid ? usd(n) : "—"} ~{back(r)}</dd>
             <dt>Profit</dt>
             <dd className="ph-pos">{valid ? usd(n * r.edge) : "—"}</dd>
             <dt>Limits</dt>
@@ -279,7 +283,7 @@ function Card({ r, onPlace, onReview, canPlace }: {
       <div className="rb-top">
         <span className="rb-profit ph-pos">{usd(r.profit)}</span>
         <span className="ph-muted-2">
-          {r.per_year != null ? `${(r.per_year * 100).toFixed(0)}% a year` : ""} · back {day(r.k_resolves)}
+          {r.per_year != null ? `${(r.per_year * 100).toFixed(0)}% a year` : ""} · back {back(r)}
         </span>
       </div>
       <div className="rb-legs">
