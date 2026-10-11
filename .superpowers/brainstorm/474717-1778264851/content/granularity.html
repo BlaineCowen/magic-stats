@@ -1,0 +1,126 @@
+<h2>How specific should the muscle groups be?</h2>
+<p class="subtitle">More groups = more detail but harder to map every exercise accurately</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="coarse" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:16px;border-radius:8px;">
+      <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
+        <!-- Front body coarse -->
+        <div style="text-align:center;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Front</div>
+          <svg width="72" height="150" viewBox="0 0 72 150">
+            <ellipse cx="36" cy="12" rx="11" ry="12" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Chest - one block -->
+            <rect x="18" y="28" width="36" height="24" rx="4" fill="rgba(0,170,255,0.75)" stroke="#00aaff" stroke-width="1"/>
+            <text x="36" y="43" text-anchor="middle" fill="#000" font-size="7" font-weight="600">Chest</text>
+            <!-- Shoulders - one block each -->
+            <ellipse cx="11" cy="34" rx="8" ry="9" fill="rgba(0,170,255,0.4)" stroke="#00aaff" stroke-width="1"/>
+            <ellipse cx="61" cy="34" rx="8" ry="9" fill="rgba(0,170,255,0.4)" stroke="#00aaff" stroke-width="1"/>
+            <!-- Arms - one block -->
+            <rect x="4" y="46" width="9" height="26" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="1"/>
+            <rect x="59" y="46" width="9" height="26" rx="3" fill="rgba(0,170,255,0.3)" stroke="#00aaff" stroke-width="1"/>
+            <!-- Forearms -->
+            <rect x="4" y="74" width="9" height="20" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="59" y="74" width="9" height="20" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Core -->
+            <rect x="22" y="54" width="28" height="20" rx="3" fill="rgba(0,170,255,0.15)" stroke="#2d3748" stroke-width="1"/>
+            <text x="36" y="66" text-anchor="middle" fill="#64748b" font-size="7">Core</text>
+            <!-- Quads - one block each -->
+            <rect x="19" y="78" width="14" height="34" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="39" y="78" width="14" height="34" rx="4" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Calves -->
+            <rect x="20" y="114" width="12" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <rect x="40" y="114" width="12" height="28" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+          </svg>
+        </div>
+        <!-- Muscle list -->
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:10px;justify-content:center;">
+          <div style="color:#00aaff;font-weight:700;">~10 groups</div>
+          <div style="color:#94a3b8;">• Chest</div>
+          <div style="color:#94a3b8;">• Shoulders</div>
+          <div style="color:#94a3b8;">• Back</div>
+          <div style="color:#94a3b8;">• Biceps</div>
+          <div style="color:#94a3b8;">• Triceps</div>
+          <div style="color:#94a3b8;">• Core</div>
+          <div style="color:#94a3b8;">• Quads</div>
+          <div style="color:#94a3b8;">• Hamstrings</div>
+          <div style="color:#94a3b8;">• Glutes</div>
+          <div style="color:#94a3b8;">• Calves</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — 10 Muscle Groups</h3>
+      <p>Clean, readable. Every exercise maps unambiguously. Matches what most lifting apps use. Still a big step up from the current 8 broad categories (Chest, Back, Arms, etc.).</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="fine" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0f1117;padding:16px;border-radius:8px;">
+      <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
+        <!-- Front body fine -->
+        <div style="text-align:center;">
+          <div style="font-size:9px;color:#64748b;margin-bottom:4px;text-transform:uppercase;">Front</div>
+          <svg width="72" height="150" viewBox="0 0 72 150">
+            <ellipse cx="36" cy="12" rx="11" ry="12" fill="#1e2535" stroke="#2d3748" stroke-width="1"/>
+            <!-- Upper chest -->
+            <rect x="18" y="28" width="36" height="11" rx="3" fill="rgba(0,170,255,0.5)" stroke="#00aaff" stroke-width="0.5"/>
+            <text x="36" y="36" text-anchor="middle" fill="#e2e8f0" font-size="5.5">Upper Chest</text>
+            <!-- Lower chest -->
+            <rect x="18" y="40" width="36" height="12" rx="3" fill="rgba(0,170,255,0.85)" stroke="#00aaff" stroke-width="0.5"/>
+            <text x="36" y="48" text-anchor="middle" fill="#000" font-size="5.5" font-weight="600">Lower Chest</text>
+            <!-- Anterior delt -->
+            <ellipse cx="11" cy="32" rx="8" ry="7" fill="rgba(0,170,255,0.6)" stroke="#00aaff" stroke-width="0.5"/>
+            <ellipse cx="61" cy="32" rx="8" ry="7" fill="rgba(0,170,255,0.6)" stroke="#00aaff" stroke-width="0.5"/>
+            <text x="11" y="34" text-anchor="middle" fill="#000" font-size="4.5">Ant</text>
+            <!-- Lat delt -->
+            <ellipse cx="9" cy="42" rx="6" ry="5" fill="rgba(0,170,255,0.25)" stroke="#2d3748" stroke-width="0.5"/>
+            <ellipse cx="63" cy="42" rx="6" ry="5" fill="rgba(0,170,255,0.25)" stroke="#2d3748" stroke-width="0.5"/>
+            <!-- Biceps short/long -->
+            <rect x="4" y="47" width="4" height="22" rx="2" fill="rgba(0,170,255,0.6)" stroke="#00aaff" stroke-width="0.5"/>
+            <rect x="9" y="47" width="4" height="22" rx="2" fill="rgba(0,170,255,0.3)" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="59" y="47" width="4" height="22" rx="2" fill="rgba(0,170,255,0.6)" stroke="#00aaff" stroke-width="0.5"/>
+            <rect x="64" y="47" width="4" height="22" rx="2" fill="rgba(0,170,255,0.3)" stroke="#2d3748" stroke-width="0.5"/>
+            <!-- Upper/Lower abs -->
+            <rect x="22" y="54" width="28" height="10" rx="2" fill="rgba(0,170,255,0.2)" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="22" y="65" width="28" height="10" rx="2" fill="rgba(0,170,255,0.1)" stroke="#2d3748" stroke-width="0.5"/>
+            <!-- Quads (4 heads!) -->
+            <rect x="19" y="79" width="6" height="30" rx="2" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="26" y="79" width="6" height="30" rx="2" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="40" y="79" width="6" height="30" rx="2" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="47" y="79" width="6" height="30" rx="2" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="20" y="111" width="12" height="26" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="40" y="111" width="12" height="26" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <!-- Forearms -->
+            <rect x="4" y="71" width="9" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+            <rect x="59" y="71" width="9" height="18" rx="3" fill="#1e2535" stroke="#2d3748" stroke-width="0.5"/>
+          </svg>
+        </div>
+        <!-- Muscle list -->
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:9px;justify-content:center;">
+          <div style="color:#00aaff;font-weight:700;">~20 groups</div>
+          <div style="color:#94a3b8;">• Upper / Lower Chest</div>
+          <div style="color:#94a3b8;">• Ant / Lat / Post Delt</div>
+          <div style="color:#94a3b8;">• Upper / Mid / Lower Back</div>
+          <div style="color:#94a3b8;">• Biceps long / short</div>
+          <div style="color:#94a3b8;">• Triceps heads</div>
+          <div style="color:#94a3b8;">• Upper / Lower Abs</div>
+          <div style="color:#94a3b8;">• Obliques</div>
+          <div style="color:#94a3b8;">• Quad heads</div>
+          <div style="color:#94a3b8;">• Hamstrings</div>
+          <div style="color:#94a3b8;">• Glutes</div>
+          <div style="color:#94a3b8;">• Hip flexors</div>
+          <div style="color:#94a3b8;">• Calves (gastroc / soleus)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — 20 Specific Muscles</h3>
+      <p>More informative — you can see "anterior delt" vs "lateral delt" from pressing vs raises. Mapping is harder and some exercises will have uncertain assignments.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:1rem;">Click to select, then let me know in the terminal.</p>

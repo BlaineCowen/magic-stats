@@ -36,6 +36,11 @@ export default tseslint.config(
     },
   },
   {
+    // node:test's describe/test return promises that the runner awaits itself.
+    files: ["**/*.test.ts"],
+    rules: { "@typescript-eslint/no-floating-promises": "off" },
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: true,
     },

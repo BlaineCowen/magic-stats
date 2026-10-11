@@ -1,0 +1,18 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Poly-Hedge">
+  <defs>
+    <clipPath id="ph-clip">
+      <circle cx="16" cy="16" r="13"/>
+    </clipPath>
+  </defs>
+  <!-- Dark base disc -->
+  <circle cx="16" cy="16" r="15" fill="#0f1117"/>
+  <!-- Subtle inner ring for depth -->
+  <circle cx="16" cy="16" r="13.5" fill="none" stroke="#2d3748" stroke-width="1"/>
+  <!-- Two-tone arb halves: purple = Polymarket / manual-arbs, green = positive edge / Kalshi -->
+  <g clip-path="url(#ph-clip)">
+    <rect x="0" y="0" width="16" height="32" fill="#9f7aea"/>
+    <rect x="16" y="0" width="16" height="32" fill="#48bb78"/>
+  </g>
+  <!-- Crisp center divider hints at the two sides of an arb -->
+  <line x1="16" y1="3" x2="16" y2="29" stroke="#0f1117" stroke-width="1.5"/>
+</svg>
