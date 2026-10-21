@@ -1,6 +1,11 @@
 "use client";
 
-import type { Decision, Option, OptionKey } from "@/lib/fourth/engine";
+import type {
+  Confidence,
+  Decision,
+  Option,
+  OptionKey,
+} from "@/lib/fourth/engine";
 import { cn } from "@/lib/utils";
 import { yardText } from "./decision-card";
 import { chance, CHOICE, CHOICE_COLOR, StrengthTag, TEAM_NAME } from "./ui";
@@ -61,6 +66,64 @@ function rowSentence(o: Option) {
   return `${o.key === "fg" ? `${o.detail.distance} yards, good` : "They convert"} ${chance(o.successProb)} of the time. ${chance(o.wpSuccess)} ${w.yes}, ${chance(o.wpFail)} ${w.no}.`;
 }
 
+const SURE: Record<Confidence["label"], { text: string; cls: string }> = {
+  "very sure": {
+    text: "Very sure",
+    cls: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+  },
+  "fairly sure": {
+    text: "Fairly sure",
+    cls: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+  },
+  unsure: {
+    text: "Unsure",
+    cls: "bg-gray-50 text-gray-700 ring-1 ring-gray-300",
+  },
+};
+
+/** How sure the call is: share of retrained models that pick the same thing. */
+function SureTag({ c }: { c: Confidence }) {
+  const s = SURE[c.label];
+  const n = Math.round(c.agree * c.replicates);
+  return (
+    <span
+      className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", s.cls)}
+      title={`${n} of ${c.replicates} versions of the model, each trained on a different sample of past games, pick this call`}
+    >
+      {s.text}
+    </span>
+  );
+}
+
+/** What each choice is, as a phrase: "going for it", "kicking a field goal", "punting". */
+const DOING: Record<OptionKey, string> = {
+  go: "going for it",
+  fg: "kicking a field goal",
+  punt: "punting",
+};
+
+function sureSentence(c: Confidence, best: OptionKey, other: OptionKey) {
+  const n = Math.round(c.agree * c.replicates);
+  if (c.label === "unsure") {
+    return `${n} of ${c.replicates} versions of the model pick ${DOING[best]}, the rest pick ${DOING[other]}. It's a genuine coin flip.`;
+  }
+  const lo = Math.max(0, Math.round(c.gapLow));
+  const hi = Math.max(lo, Math.round(c.gapHigh));
+  const by = lo === hi ? `about ${hi} points` : `${lo} to ${hi} points`;
+  return `${n} of ${c.replicates} versions of the model agree. In most of them, ${DOING[best]} beats ${DOING[other]} by ${by} of win chance.`;
+}
+
+/** "±3", the margin of error on one choice's chance to win; hidden when it rounds to zero. */
+function Margin({ d, k }: { d: Decision; k: OptionKey }) {
+  const m = d.confidence?.margin[k];
+  if (m == null || Math.round(m) < 1) return null;
+  return (
+    <span className="ml-0.5 text-xs font-normal text-gray-500">
+      ±{Math.round(m)}
+    </span>
+  );
+}
+
 export function DecisionTable({
   d,
   team,
@@ -113,6 +176,7 @@ export function DecisionTable({
           {CHOICE[d.best]}
         </span>
         <StrengthTag strength={d.strength} />
+        {d.confidence && <SureTag c={d.confidence} />}
         {next && (
           <span className="text-sm text-gray-600">
             {tight ? "Either is fine: " : ""}
@@ -123,6 +187,12 @@ export function DecisionTable({
           </span>
         )}
       </div>
+
+      {d.confidence && !compact && next && (
+        <p className="mt-1 text-sm text-gray-600">
+          {sureSentence(d.confidence, d.best, next.key)}
+        </p>
+      )}
 
       {/* wide screens: a table with plain-language column names */}
       <table
@@ -183,11 +253,12 @@ export function DecisionTable({
                     </div>
                     <span
                       className={cn(
-                        "w-10 text-right tabular-nums",
+                        "w-16 text-right whitespace-nowrap tabular-nums",
                         isBest ? "font-bold text-gray-900" : "text-gray-700",
                       )}
                     >
                       {chance(o.wp)}
+                      <Margin d={d} k={o.key} />
                     </span>
                   </div>
                 </td>
@@ -247,7 +318,8 @@ export function DecisionTable({
                   )}
                 </span>
                 <span className={cn("tabular-nums", isBest ? "font-bold" : "")}>
-                  {chance(o.wp)} to win
+                  {chance(o.wp)}
+                  <Margin d={d} k={o.key} /> to win
                 </span>
               </div>
               <div className="mt-1 h-2 rounded-full bg-gray-100">

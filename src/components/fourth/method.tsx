@@ -121,6 +121,38 @@ export function Method() {
           </ul>
         </Section>
 
+        <Section title="How sure is it?">
+          <p>
+            Every model learns from a sample of past games, and a different
+            sample would give slightly different answers. So the models were
+            retrained 12 times, each on a random resample of games, and every
+            decision is run through all 12.
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <b>Very sure</b>: at least 11 of 12 versions pick the same call.
+            </li>
+            <li>
+              <b>Fairly sure</b>: at least 9 of 12 do.
+            </li>
+            <li>
+              <b>Unsure</b>: they split. The honest answer is that nobody can
+              tell from the data.
+            </li>
+          </ul>
+          <p>
+            The small &ldquo;±&rdquo; next to a chance to win is how far it
+            moves across those versions (an 80% range). This follows Brill,
+            Yurko and Wyner&apos;s &ldquo;Analytics, have some humility&rdquo;
+            (2023), which showed many 4th down recommendations are less certain
+            than they look. It covers uncertainty in the models, not things they
+            can&apos;t see, like an injured quarterback or a kicker&apos;s range
+            that day. It also can&apos;t catch a mistake every version shares:
+            if the model rates a 4th &amp; 4 a few points too easy to convert,
+            all 12 versions do.
+          </p>
+        </Section>
+
         <Section title="What the labels mean">
           <Table
             head={["Label", "Difference in chance to win", "Meaning"]}
@@ -319,11 +351,6 @@ export function Method() {
               Overtime is handled separately on the Super Bowl LVIII card,
               because the playoff overtime rules changed in 2022 and there are
               too few games to train on.
-            </li>
-            <li>
-              Uncertainty: two win-probability models trained on different
-              seasons can disagree by a point or two. Treat toss-ups as
-              toss-ups.
             </li>
           </ul>
         </Section>

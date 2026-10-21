@@ -28,7 +28,9 @@ def compact(booster: xgb.Booster, features: list[str], sample: pd.DataFrame, ncl
         leaf = np.array(t["left_children"]) == -1
         trees.append({
             "f": [-1 if lf else int(i) for i, lf in zip(t["split_indices"], leaf)],
-            "t": [float(np.float32(v)) for v in t["split_conditions"]],
+            # xgboost can split at -inf (a "value is missing" split); JSON has no infinity, and any huge
+            # number splits the same way
+            "t": [float(np.clip(np.float32(v), -1e30, 1e30)) for v in t["split_conditions"]],
             "l": t["left_children"],
             "r": t["right_children"],
             "d": t["default_left"],

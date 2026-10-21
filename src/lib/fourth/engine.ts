@@ -1,4 +1,5 @@
 import {
+  hasModel,
   loadJson,
   predictBinary,
   predictSoftmax,
@@ -85,6 +86,20 @@ export type Decision = {
   breakeven: number | null;
   /** go-for-it yards-gained distribution, gains -10..65 */
   goGains: number[];
+  /** how much the call depends on which past games the models learned from; absent without replicates */
+  confidence?: Confidence;
+};
+
+export type Confidence = {
+  /** share of bootstrap replicates that pick the same best call */
+  agree: number;
+  replicates: number;
+  label: "very sure" | "fairly sure" | "unsure";
+  /** 80% range for how much better the best call is, in percentage points */
+  gapLow: number;
+  gapHigh: number;
+  /** ± half-width of each choice's 80% range, in percentage points */
+  margin: Partial<Record<OptionKey, number>>;
 };
 
 const PLAY_SEC = { go: 6, fg: 5, punt: 8 };
@@ -107,12 +122,35 @@ export function kickoffYardline(season: number): number {
 
 const patProb = (season: number) => (season >= 2015 ? 0.942 : 0.988);
 
-const models = () => ({
+type ModelSet = { wp: XgbModel; go: XgbModel; fg: XgbModel };
+
+const shipped = (): ModelSet => ({
   wp: loadJson<XgbModel>("wp.json"),
   go: loadJson<XgbModel>("go.json"),
   fg: loadJson<XgbModel>("fg.json"),
+});
+
+// Bootstrap replicates (scripts/fourth-down/train_boot.py) are swapped in one at a time while a decision
+// is re-run for its margin of error. Everything here is synchronous, so a module-level switch is safe.
+let active: ModelSet | null = null;
+
+const models = () => ({
+  ...(active ?? shipped()),
   punt: loadJson<Record<string, [string, number, number][]>>("punt.json"),
 });
+
+const BOOT_MAX = 50;
+function replicates(): ModelSet[] {
+  const out: ModelSet[] = [];
+  for (let b = 0; b < BOOT_MAX && hasModel(`boot/wp_${b}.json.gz`); b++) {
+    out.push({
+      wp: loadJson<XgbModel>(`boot/wp_${b}.json.gz`),
+      go: loadJson<XgbModel>(`boot/go_${b}.json.gz`),
+      fg: loadJson<XgbModel>(`boot/fg_${b}.json.gz`),
+    });
+  }
+  return out;
+}
 
 // timeouts the defense has -> seconds below which a leading offense can kneel out the game
 const KNEEL_SEC = [120, 80, 40, 0];
@@ -385,7 +423,101 @@ function strengthOf(gap: number): Decision["strength"] {
   return "no-brainer";
 }
 
-export function decide(x: Situation): Decision {
+/** Each available choice's win probability, with whichever models are active. */
+function optionWps(x: Situation): Partial<Record<OptionKey, number>> {
+  const s = situationState(x);
+  const out: Partial<Record<OptionKey, number>> = {
+    go: goOption(x, s).option.wp,
+    fg: fgOption(x, s).wp,
+    punt: puntOption(x, s).wp,
+  };
+  if (x.yardline < 30) delete out.punt;
+  if (x.yardline + 18 > 70) delete out.fg;
+  return out;
+}
+
+const quantile = (xs: number[], q: number) => {
+  const v = [...xs].sort((a, b) => a - b);
+  const i = (v.length - 1) * q;
+  const lo = Math.floor(i);
+  return v[lo]! + (v[Math.min(v.length - 1, lo + 1)]! - v[lo]!) * (i - lo);
+};
+
+/**
+ * Re-run the decision through every bootstrap replicate. Replicates are lighter models, so only their
+ * spread is used: each is re-centered on the shipped model's answer before counting agreement.
+ */
+function confidenceFor(x: Situation, main: Decision): Confidence | undefined {
+  const reps = replicates();
+  if (reps.length < 5) return undefined;
+  const runs = reps.map((set) => {
+    active = set;
+    try {
+      return optionWps(x);
+    } finally {
+      active = null;
+    }
+  });
+  const keys = main.options.map((o) => o.key);
+  const mainWp = Object.fromEntries(
+    main.options.map((o) => [o.key, o.wp]),
+  ) as Record<OptionKey, number>;
+  const mean = Object.fromEntries(
+    keys.map((k) => [
+      k,
+      runs.reduce((a, r) => a + (r[k] ?? 0), 0) / runs.length,
+    ]),
+  );
+  const adjusted = runs.map(
+    (r) =>
+      Object.fromEntries(
+        keys.map((k) => [k, mainWp[k] + (r[k] ?? 0) - mean[k]!]),
+      ) as Record<OptionKey, number>,
+  );
+  const gaps = adjusted.map(
+    (a) =>
+      (a[main.best] -
+        Math.max(...keys.filter((k) => k !== main.best).map((k) => a[k]), 0)) *
+      100,
+  );
+  const agree = gaps.filter((g) => g > 0).length / gaps.length;
+  const margin = Object.fromEntries(
+    keys.map((k) => [
+      k,
+      ((quantile(
+        adjusted.map((a) => a[k]),
+        0.9,
+      ) -
+        quantile(
+          adjusted.map((a) => a[k]),
+          0.1,
+        )) /
+        2) *
+        100,
+    ]),
+  );
+  return {
+    agree,
+    replicates: runs.length,
+    label: agree >= 0.9 ? "very sure" : agree >= 0.7 ? "fairly sure" : "unsure",
+    gapLow: quantile(gaps, 0.1),
+    gapHigh: quantile(gaps, 0.9),
+    margin,
+  };
+}
+
+// decisions repeat (live games re-grade every play on each refresh), so remember recent ones
+const decided = new Map<string, Decision>();
+const DECIDED_MAX = 5000;
+
+export function decide(
+  x: Situation,
+  opts: { confidence?: boolean } = {},
+): Decision {
+  const withConfidence = opts.confidence ?? true;
+  const key = `${withConfidence ? 1 : 0}|${JSON.stringify(x)}`;
+  const hit = decided.get(key);
+  if (hit) return hit;
   const s = situationState(x);
   const { option: go, gains } = goOption(x, s);
   const options = [go, fgOption(x, s), puntOption(x, s)];
@@ -406,7 +538,7 @@ export function decide(x: Situation): Decision {
     const b = (bestKick - go.wpFail) / (go.wpSuccess - go.wpFail);
     breakeven = b <= 1 ? Math.max(0, b) : null;
   }
-  return {
+  const result: Decision = {
     situation: x,
     wpNow: go.wp >= bestKick ? go.wp : bestKick,
     options: live,
@@ -416,4 +548,8 @@ export function decide(x: Situation): Decision {
     breakeven,
     goGains: gains,
   };
+  if (withConfidence) result.confidence = confidenceFor(x, result);
+  decided.set(key, result);
+  if (decided.size > DECIDED_MAX) decided.delete(decided.keys().next().value!);
+  return result;
 }

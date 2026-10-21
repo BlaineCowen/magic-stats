@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 
 /**
  * Minimal xgboost tree-ensemble evaluator for the compact JSON written by
@@ -26,6 +27,7 @@ const cache = new Map<
 >();
 const RECHECK_MS = 5000;
 
+/** Read a model file once (".json", or ".json.gz" for the bootstrap replicates). */
 export function loadJson<T>(name: string): T {
   const hit = cache.get(name);
   const now = Date.now();
@@ -36,7 +38,11 @@ export function loadJson<T>(name: string): T {
     hit.checked = now;
     return hit.value as T;
   }
-  const value = JSON.parse(fs.readFileSync(file, "utf8")) as T;
+  const raw = fs.readFileSync(file);
+  const text = name.endsWith(".gz")
+    ? zlib.gunzipSync(raw).toString("utf8")
+    : raw.toString("utf8");
+  const value = JSON.parse(text) as T;
   cache.set(name, { mtime, checked: now, value });
   return value;
 }
@@ -84,4 +90,9 @@ export function rowFor(
     if (!(f in values)) throw new Error(`missing feature ${f}`);
     return values[f]!;
   });
+}
+
+/** True if a model file exists (the bootstrap replicates are optional). */
+export function hasModel(name: string): boolean {
+  return fs.existsSync(path.join(MODEL_DIR, name));
 }
