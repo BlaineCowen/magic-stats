@@ -5,16 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, Minus, X } from "lucide-react";
 import type { LiveCall, LiveGame, LiveGameSummary } from "@/lib/fourth/live";
 import { cn } from "@/lib/utils";
-import { yardText } from "./decision-card";
-import {
-  CHOICE,
-  CHOICE_COLOR,
-  ChanceBars,
-  Expand,
-  StrengthTag,
-  TEAM_NAME,
-  verdictLine,
-} from "./ui";
+import { DecisionTable } from "./decision-table";
+import { TEAM_NAME } from "./ui";
 
 const GAME_MS = 15_000;
 const BOARD_MS = 30_000;
@@ -118,62 +110,51 @@ function did(c: LiveCall) {
 
 function CallRow({ c }: { c: LiveCall }) {
   const v = verdictOf(c);
-  const s = c.decision?.situation;
   const Icon = v === "right" ? Check : v === "wrong" ? X : Minus;
   const color =
     v === "right" ? "#059669" : v === "wrong" ? "#dc2626" : "#9ca3af";
   return (
-    <div className="border-b border-gray-100 px-3 py-2.5 last:border-0">
-      <div className="grid grid-cols-[1.25rem_1fr_auto] items-start gap-3 text-sm">
-        <Icon className="mt-0.5 size-4" style={{ color }} aria-label={v} />
+    <div className="border-b border-gray-100 px-4 py-4 last:border-0">
+      <div className="mb-2 flex items-center gap-2 text-sm text-gray-600">
+        <Icon className="size-4" style={{ color }} aria-label={v} />
+        <span className="font-medium text-gray-900">{name(c.posteam)}</span>
         <span>
-          <span className="font-medium text-gray-900">{name(c.posteam)}</span>{" "}
-          {s ? (
-            <span className="text-gray-700">
-              4th &amp; {s.ydstogo >= s.yardline ? "goal" : s.ydstogo} at{" "}
-              {yardText(s.yardline, c.posteam, c.defteam)}
-            </span>
-          ) : (
-            <span className="text-gray-700">overtime 4th down</span>
-          )}
-          <span className="block text-xs text-gray-600">
-            {c.qtr > 4 ? "OT" : `Q${c.qtr}`} {c.time}. {did(c)}.
-          </span>
-        </span>
-        <span className="text-right whitespace-nowrap">
-          {v === "right" && (
-            <span className="text-emerald-700">Right call</span>
-          )}
-          {v === "close" && <span className="text-gray-600">Coin flip</span>}
-          {v === "wrong" && (
-            <span className="text-red-700">
-              Should{" "}
-              {c.decision!.best === "go"
-                ? "go for it"
-                : c.decision!.best === "fg"
-                  ? "kick"
-                  : "punt"}
-              <span className="block text-xs text-gray-600">
-                cost {Math.max(1, Math.round(-c.cost))}% chance to win
-              </span>
-            </span>
-          )}
+          {c.qtr > 4 ? "OT" : `Q${c.qtr}`}, {c.time} left
         </span>
       </div>
-      {c.decision && (
-        <Expand label="Numbers" className="mt-1 pl-8">
-          <div className="max-w-md">
-            <ChanceBars
-              options={c.decision.options.map((o) => ({
-                key: o.key,
-                wp: o.wp,
-              }))}
-              best={c.decision.best}
-              actual={c.actual}
-              size="sm"
-            />
+      {c.decision ? (
+        <>
+          <DecisionTable
+            d={c.decision}
+            team={c.posteam}
+            opp={c.defteam}
+            actual={c.actual}
+            compact
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+            <span className="font-medium text-gray-900">{did(c)}.</span>
+            {v === "right" && (
+              <span className="font-semibold text-emerald-700">
+                Right call.
+              </span>
+            )}
+            {v === "close" && (
+              <span className="font-semibold text-gray-700">
+                A coin flip either way.
+              </span>
+            )}
+            {v === "wrong" && (
+              <span className="font-semibold text-red-700">
+                Wrong call, cost {Math.max(1, Math.round(-c.cost))}% in chance
+                to win.
+              </span>
+            )}
           </div>
-        </Expand>
+        </>
+      ) : (
+        <p className="text-sm text-gray-600">
+          Overtime 4th down. {did(c)}. Overtime calls aren&apos;t graded here.
+        </p>
       )}
     </div>
   );
@@ -215,33 +196,14 @@ function GameView({ eventId }: { eventId: string }) {
         <div className="rounded-lg border border-gray-200 bg-white p-5">
           {g.now ? (
             <>
-              <div className="text-sm text-gray-600">
-                Right now: {name(g.now.posteam)} face {g.now.text}
+              <div className="mb-3 text-sm font-semibold text-red-700">
+                Right now: {name(g.now.posteam)} face 4th down
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-3">
-                <span
-                  className="text-3xl font-bold"
-                  style={{ color: CHOICE_COLOR[g.now.decision.best] }}
-                >
-                  {CHOICE[g.now.decision.best]}
-                </span>
-                <StrengthTag strength={g.now.decision.strength} />
-              </div>
-              <p className="mt-1 text-gray-700">
-                {verdictLine(
-                  g.now.decision.options.map((o) => ({ key: o.key, wp: o.wp })),
-                  g.now.decision.best,
-                )}
-              </p>
-              <div className="mt-4 max-w-xl">
-                <ChanceBars
-                  options={g.now.decision.options.map((o) => ({
-                    key: o.key,
-                    wp: o.wp,
-                  }))}
-                  best={g.now.decision.best}
-                />
-              </div>
+              <DecisionTable
+                d={g.now.decision}
+                team={g.now.posteam}
+                opp={g.now.defteam}
+              />
             </>
           ) : (
             <p className="text-gray-700">

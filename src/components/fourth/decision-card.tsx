@@ -1,15 +1,14 @@
 "use client";
 
 import type { Decision } from "@/lib/fourth/engine";
+import { DecisionTable } from "./decision-table";
 import {
   chance,
   CHOICE,
   CHOICE_COLOR,
-  ChanceBars,
   Expand,
   outOf10,
   StrengthTag,
-  verdictLine,
 } from "./ui";
 
 // older names, still used across the 4th down components
@@ -189,26 +188,22 @@ export function GainsChart({ d }: { d: Decision }) {
 }
 
 export function DecisionCard({ d }: { d: Decision }) {
-  const rows = d.options.map((o) => ({ key: o.key, wp: o.wp }));
+  const go = d.options.find((o) => o.key === "go")!;
+  const be = d.breakeven;
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2
-          className="text-3xl font-bold"
-          style={{ color: CHOICE_COLOR[d.best] }}
-        >
-          {CHOICE[d.best]}
-        </h2>
-        <StrengthTag strength={d.strength} />
-      </div>
-      <p className="mt-1 text-gray-700">{verdictLine(rows, d.best)}</p>
-      <div className="mt-5">
-        <ChanceBars options={rows} best={d.best} />
-      </div>
+      <DecisionTable d={d} />
       <Expand label="Why?" className="mt-4 border-t border-gray-100 pt-3">
-        <div className="space-y-4">
-          <WhyDetails d={d} />
+        <div className="space-y-4 text-sm text-gray-700">
+          {be != null && be > 0 && be < 1 && (
+            <p>
+              Going for it is worth it as long as they convert at least{" "}
+              <b>{outOf10(be)}</b> times ({chance(be)}). Teams in this spot
+              usually convert {chance(go.successProb)}.
+            </p>
+          )}
           <BreakevenBar d={d} />
+          <GainsChart d={d} />
         </div>
       </Expand>
     </div>

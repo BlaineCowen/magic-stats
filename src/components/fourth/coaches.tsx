@@ -198,6 +198,35 @@ function situation(d: Coach["worst"][number]) {
   return `4th & ${togo} at ${yardText(d.yardline, d.team, d.opp)}, ${score}`;
 }
 
+/** Each choice's chance to win, inline: the best one bold, the one he chose marked. */
+function ChanceChips({ d }: { d: Coach["worst"][number] }) {
+  const opts = (
+    [
+      ["go", d.goWp],
+      ["fg", d.fgWp],
+      ["punt", d.puntWp],
+    ] as const
+  ).filter(([, wp]) => wp != null);
+  return (
+    <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+      {opts.map(([k, wp]) => (
+        <span
+          key={k}
+          className={
+            k === d.best ? "font-semibold text-gray-900" : "text-gray-600"
+          }
+        >
+          <span
+            className="mr-1 inline-block size-2 rounded-sm align-middle"
+            style={{ background: CHOICE_COLOR[k] }}
+          />
+          {CHOICE[k]} {Math.round(wp! * 100)}%{k === d.actual ? " (chose)" : ""}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function did(d: Coach["worst"][number]) {
   if (d.actual === "go")
     return `Went for it${d.worked == null ? "" : d.worked ? " (made it)" : " (stopped)"}`;
@@ -321,6 +350,7 @@ function CoachDetail({ c, report }: { c: Coach; report: CoachReport }) {
               >
                 <span>
                   <span className="text-gray-900">{situation(d)}</span>
+                  <ChanceChips d={d} />
                   <span className="block text-xs text-gray-600">
                     {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
                     {d.opp}, {d.qtr > 4 ? "OT" : `Q${d.qtr}`} {d.time}. {did(d)}

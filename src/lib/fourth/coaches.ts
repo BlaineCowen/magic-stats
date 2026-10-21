@@ -44,6 +44,10 @@ export type CoachDecision = {
   n4Best: OptionKey | null;
   n4Cost: number | null;
   desc: string;
+  /** chance to win after each choice (null when it wasn't an option) */
+  goWp: number | null;
+  fgWp: number | null;
+  puntWp: number | null;
 };
 
 export type Coach = CoachSummary & {

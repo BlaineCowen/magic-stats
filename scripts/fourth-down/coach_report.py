@@ -58,6 +58,7 @@ for coach, g in df.groupby("coach"):
     worst = worst[[
         "gameId", "season", "week", "post", "team", "opp", "qtr", "time", "ydstogo", "yardline", "scoreDiff",
         "actual", "worked", "best", "gap", "cost", "conv", "breakeven", "n4Best", "n4Cost", "desc",
+        "goWp", "fgWp", "puntWp",
     ]]
     # pandas turns missing values (e.g. "worked" for punts) into NaN, which isn't valid JSON
     s["worst"] = worst.astype(object).where(worst.notna(), None).to_dict(orient="records")

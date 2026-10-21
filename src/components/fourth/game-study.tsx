@@ -5,7 +5,8 @@ import { Check, Minus, X } from "lucide-react";
 import type { FourthDownPlay, GameAnalysis } from "@/lib/fourth/games";
 import { cn } from "@/lib/utils";
 import { yardText } from "./decision-card";
-import { chance, CHOICE, ChanceBars, Expand, StrengthTag } from "./ui";
+import { DecisionTable } from "./decision-table";
+import { chance, CHOICE, Expand } from "./ui";
 
 export type Nfl4thRow = { go: number; fg: number | null; punt: number | null };
 
@@ -143,7 +144,39 @@ function didText(p: FourthDownPlay): string {
   return "Punted";
 }
 
-/** One decision told as a short story, with the chance-to-win bars. */
+/** What they did and whether the model agrees, in one line. */
+function VerdictLine({ p }: { p: FourthDownPlay }) {
+  const v = verdictOf(p);
+  const d = p.decision!;
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="font-medium text-gray-900">{didText(p)}.</span>
+      <span
+        className={cn(
+          "font-semibold",
+          v === "wrong"
+            ? "text-red-700"
+            : v === "right"
+              ? "text-emerald-700"
+              : "text-gray-700",
+        )}
+      >
+        {v === "right"
+          ? "Right call."
+          : v === "close"
+            ? "A coin flip either way."
+            : `Wrong call, cost ${Math.max(1, Math.round(-p.cost))}% in chance to win.`}
+      </span>
+      {v === "wrong" && (
+        <span className="text-sm text-gray-600">
+          Best was: {CHOICE[d.best].toLowerCase()}.
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** One decision with the full table, for the calls a story is about. */
 export function FeaturedCall({
   p,
   heading,
@@ -151,122 +184,74 @@ export function FeaturedCall({
   p: FourthDownPlay;
   heading?: string;
 }) {
-  const d = p.decision!;
-  const v = verdictOf(p);
   return (
     <div className="rounded-lg bg-slate-50 p-4">
       {heading && (
-        <div className="mb-1 font-semibold text-gray-900">{heading}</div>
+        <div className="mb-2 text-sm font-semibold text-gray-600">
+          {heading}
+        </div>
       )}
-      <div className="text-sm text-gray-600">
-        {when(p)}: {situationText(p)}
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-gray-900">
-        <span className="font-medium">{didText(p)}.</span>
-        <span
-          className={cn(
-            "font-semibold",
-            v === "wrong"
-              ? "text-red-700"
-              : v === "right"
-                ? "text-emerald-700"
-                : "text-gray-700",
-          )}
-        >
-          {v === "right"
-            ? "Right call."
-            : v === "close"
-              ? "A coin flip either way."
-              : `They should have chosen: ${CHOICE[d.best].toLowerCase()}.`}
-        </span>
-        {v !== "close" && <StrengthTag strength={d.strength} />}
-      </div>
-      <div className="mt-3 max-w-xl">
-        <ChanceBars
-          options={d.options.map((o) => ({ key: o.key, wp: o.wp }))}
-          best={d.best}
-          actual={p.actual}
-          size="sm"
-        />
+
+      <DecisionTable
+        d={p.decision!}
+        team={p.posteam}
+        opp={p.defteam}
+        actual={p.actual}
+        compact
+      />
+      <div className="mt-3 border-t border-gray-200 pt-2">
+        <VerdictLine p={p} />
       </div>
     </div>
   );
 }
 
+/** Every play shows its numbers up front; only the play-by-play text sits behind a click. */
 function PlayRow({ p, nfl4th }: { p: FourthDownPlay; nfl4th?: Nfl4thRow }) {
-  const [open, setOpen] = useState(false);
   const d = p.decision;
   const v = verdictOf(p);
   const Icon = v === "right" ? Check : v === "wrong" ? X : Minus;
   return (
-    <div
-      className={cn(
-        "border-b border-gray-100 last:border-0",
-        open && "bg-slate-50",
-      )}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        disabled={!d}
-        onClick={() => setOpen(!open)}
-        className="grid w-full grid-cols-[1.25rem_1fr_auto] items-start gap-3 px-3 py-2.5 text-left hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-      >
+    <div className="border-b border-gray-100 px-4 py-4 last:border-0">
+      <div className="mb-2 flex items-center gap-2 text-sm text-gray-600">
         <Icon
-          className="mt-0.5 size-4"
+          className="size-4"
           style={{ color: VERDICT_COLOR[v] }}
           aria-label={v}
         />
-        <span className="text-sm">
-          <span className="font-medium text-gray-900">{p.posteam}</span>{" "}
-          <span className="text-gray-700">
-            {d ? situationText(p) : "overtime 4th down"}
-          </span>
-          <span className="block text-xs text-gray-600">
-            {when(p)}. {didText(p)}.
-          </span>
-        </span>
-        <span className="text-right text-sm whitespace-nowrap">
-          {v === "wrong" ? (
-            <span className="text-red-700">
-              Should{" "}
-              {d!.best === "go"
-                ? "go for it"
-                : d!.best === "fg"
-                  ? "kick"
-                  : "punt"}
-              <span className="block text-xs text-gray-600">
-                cost {Math.max(1, Math.round(-p.cost))}% chance to win
-              </span>
-            </span>
-          ) : v === "close" ? (
-            <span className="text-gray-600">Coin flip</span>
-          ) : v === "right" ? (
-            <span className="text-emerald-700">Right call</span>
-          ) : (
-            <span className="text-gray-400">see overtime</span>
-          )}
-        </span>
-      </button>
-      {open && d && (
-        <div className="grid gap-4 px-3 pb-4 pl-11 text-sm sm:grid-cols-2">
-          <ChanceBars
-            options={d.options.map((o) => ({ key: o.key, wp: o.wp }))}
-            best={d.best}
+        <span className="font-medium text-gray-900">{p.posteam}</span>
+        <span>{when(p)}</span>
+      </div>
+      {d ? (
+        <>
+          <DecisionTable
+            d={d}
+            team={p.posteam}
+            opp={p.defteam}
             actual={p.actual}
-            size="sm"
+            compact
           />
-          <div className="space-y-2 text-gray-600">
-            <p className="italic">{p.desc}</p>
-            {nfl4th && (
-              <p className="text-xs">
-                Ben Baldwin&apos;s nfl4th had: go {chance(nfl4th.go)}
-                {nfl4th.fg != null && `, field goal ${chance(nfl4th.fg)}`}
-                {nfl4th.punt != null && `, punt ${chance(nfl4th.punt)}`}.
-              </p>
-            )}
+          <div className="mt-2">
+            <VerdictLine p={p} />
           </div>
-        </div>
+          <Expand label="The play" className="mt-1">
+            <div className="space-y-1 text-sm text-gray-600">
+              <p className="italic">{p.desc}</p>
+              {nfl4th && (
+                <p className="text-xs">
+                  Ben Baldwin&apos;s nfl4th had: go {chance(nfl4th.go)}
+                  {nfl4th.fg != null && `, field goal ${chance(nfl4th.fg)}`}
+                  {nfl4th.punt != null && `, punt ${chance(nfl4th.punt)}`}.
+                </p>
+              )}
+            </div>
+          </Expand>
+        </>
+      ) : (
+        <p className="text-sm text-gray-600">
+          Overtime 4th down. {didText(p)}. Overtime calls are covered
+          separately.
+        </p>
       )}
     </div>
   );
@@ -354,7 +339,7 @@ export function GameStudy({
       </div>
 
       {featured.length > 0 && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-4 space-y-3">
           {featured.map((f) => {
             const p = g.plays.find((x) => x.playId === f.playId);
             return p?.decision ? (
