@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { decide, type Situation } from "@/lib/fourth/engine";
 import { coachReport } from "@/lib/fourth/coaches";
 import { analyzeGame, listGames } from "@/lib/fourth/games";
+import { liveGame, liveScoreboard } from "@/lib/fourth/live";
 import { parseSituation } from "@/lib/fourth/params";
 
 export const runtime = "nodejs";
@@ -17,6 +18,12 @@ export async function GET(request: Request) {
     const game = params.get("game");
     if (game) return NextResponse.json(await analyzeGame(game));
     if (params.has("coaches")) return NextResponse.json(coachReport());
+    // live: ?live=1 lists this week's games, ?live=<ESPN event id> grades one game so far
+    const live = params.get("live");
+    if (live)
+      return NextResponse.json(
+        live === "1" ? await liveScoreboard() : await liveGame(live),
+      );
     const season = params.get("games");
     if (season) return NextResponse.json(await listGames(Number(season)));
     const situation: Situation = parseSituation(params);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   BarChart3,
+  Activity,
   Calculator,
   ClipboardList,
   Lock,
@@ -67,6 +68,12 @@ const SECTIONS: {
   {
     title: "This season",
     items: [
+      {
+        href: "/magic-stats/fourth-down?tab=live",
+        title: "Live 4th down calls",
+        blurb: "Go, kick or punt, graded the moment a team faces 4th down.",
+        icon: Activity,
+      },
       {
         href: "/nfl/playoffs/",
         title: "Playoff odds",

@@ -11,9 +11,11 @@ import { GameStudy } from "./game-study";
 import { SuperBowls } from "./super-bowls";
 import { Method } from "./method";
 import { Coaches } from "./coaches";
+import { Live } from "./live";
 
 const TABS = [
   { key: "super-bowls", label: "Shanahan's Super Bowls" },
+  { key: "live", label: "Live games" },
   { key: "coaches", label: "Coaches" },
   { key: "calculator", label: "What should they do?" },
   { key: "game", label: "Any game" },
@@ -128,6 +130,7 @@ export function FourthDownView() {
       </div>
       {tab === "calculator" && <Calculator initial={parseSituation(params)} />}
       {tab === "coaches" && <Coaches />}
+      {tab === "live" && <Live />}
       {tab === "super-bowls" && <SuperBowls />}
       {tab === "game" && <GamePicker />}
       {tab === "method" && <Method />}
