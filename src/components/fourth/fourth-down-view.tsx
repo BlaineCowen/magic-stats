@@ -15,7 +15,7 @@ import { Coaches } from "./coaches";
 const TABS = [
   { key: "super-bowls", label: "Shanahan's Super Bowls" },
   { key: "coaches", label: "Coaches" },
-  { key: "calculator", label: "Calculator" },
+  { key: "calculator", label: "What should they do?" },
   { key: "game", label: "Any game" },
   { key: "method", label: "How it works" },
 ] as const;
@@ -102,18 +102,9 @@ export function FourthDownView() {
       <NflNav />
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">4th down decisions</h1>
-        <p className="mt-1 max-w-3xl text-sm text-gray-600">
-          Go for it, kick or punt? Each choice is scored by how likely it leaves
-          the offense to win, following Ben Baldwin&apos;s{" "}
-          <a
-            className="text-blue-700 underline"
-            href="https://www.nfl4th.com/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            nfl4th
-          </a>{" "}
-          approach, retrained on 1999–2026 play-by-play with a few fixes.
+        <p className="mt-1 max-w-3xl text-gray-700">
+          Should they go for it, kick or punt? Every choice gets a chance to win
+          the game, and the best one is the call.
         </p>
       </header>
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-gray-200">

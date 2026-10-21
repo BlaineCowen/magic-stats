@@ -8,7 +8,8 @@ import {
   receiveFirst,
   type OtParams,
 } from "@/lib/fourth/overtime";
-import { OPTION_COLOR, pct } from "./decision-card";
+import { OPTION_COLOR } from "./decision-card";
+import { chance, Expand, outOf10 } from "./ui";
 
 /** Scale one team's scoring rates: 1 = league average offense against a league average defense. */
 function scaled(p: OtParams, side: "a" | "b", f: number): OtParams {
@@ -90,8 +91,8 @@ function Pair({
               }}
             />
           </div>
-          <span className="w-14 text-right font-semibold tabular-nums">
-            {pct(v, 1)}
+          <span className="w-12 text-right font-semibold tabular-nums">
+            {chance(v)}
           </span>
         </div>
       ))}
@@ -120,71 +121,102 @@ export function OvertimeCard({ play }: { play: FourthDownPlay }) {
     };
   }, [sf, kc, ot]);
   const gap = (r.four.go - r.four.fg) * 100;
+  const toss = (r.receive - r.kick) * 100;
+  const kickBest = gap < 0;
+  const headline =
+    Math.abs(gap) < 1
+      ? "In overtime, kicking or going for it on that 4th down were about even."
+      : kickBest
+        ? "In overtime, kicking the field goal was the right call."
+        : "In overtime, going for it would have been the better call.";
+  const tossLine =
+    Math.abs(toss) < 1
+      ? "Taking the ball first was a coin flip."
+      : toss > 0
+        ? "Taking the ball first was the right choice."
+        : "Kicking off first would have been slightly better.";
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-5">
       <h3 className="text-lg font-semibold text-gray-900">
-        Overtime: the decisions nfl4th can&apos;t grade
+        Super Bowl LVIII overtime
       </h3>
-      <p className="mt-1 text-sm leading-relaxed text-gray-700">
-        Under the 2022 playoff rules both teams get the ball, even after a
-        first-drive touchdown, and then it&apos;s sudden death. nfl4th stops at
-        the end of regulation, and there aren&apos;t enough of these games to
-        train a model, so this is a possession-by-possession model built from
-        comparable regulation drives. The sliders set how good each offense is;
-        the Chiefs start at 25% better than average, which is roughly
-        Mahomes-era Kansas City.
+      <p className="mt-2 max-w-3xl text-xl leading-snug font-semibold text-gray-900">
+        {headline} {tossLine}
       </p>
-      <div className="mt-4 grid gap-6 md:grid-cols-[16rem_1fr]">
-        <div className="space-y-4">
-          <Slider label="49ers offense" value={sf} onChange={setSf} />
-          <Slider label="Chiefs offense" value={kc} onChange={setKc} />
-          <p className="text-xs text-gray-500">
-            Averages used: a normal first drive scores a TD 21% and a FG 15% of
-            the time; a team down 7 that must score a TD gets one 31%; a team
-            down 3 scores a TD 20% and a FG 23%.
+      <p className="mt-2 max-w-3xl text-sm text-gray-700">
+        Under the playoff rules both teams get the ball, even after a touchdown.
+        A field goal meant the Chiefs needed a touchdown to win outright; a
+        failed 4th down meant they needed only a field goal.
+      </p>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-lg bg-slate-50 p-4">
+          <div className="font-semibold text-gray-900">
+            4th &amp; {ot.ydstogo} at the KC {ot.yardline}, tied
+          </div>
+          <div className="mb-3 text-sm text-gray-600">
+            They kicked the field goal (good).
+          </div>
+          <Pair
+            aLabel="Field goal"
+            bLabel="Go for it"
+            a={r.four.fg}
+            b={r.four.go}
+          />
+        </div>
+        <div className="rounded-lg bg-slate-50 p-4">
+          <div className="font-semibold text-gray-900">The coin toss</div>
+          <div className="mb-3 text-sm text-gray-600">
+            Shanahan chose to take the ball first.
+          </div>
+          <Pair
+            aLabel="Ball first"
+            bLabel="Kick first"
+            a={r.receive}
+            b={r.kick}
+          />
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-gray-500">
+        Chance the 49ers win after each choice
+      </div>
+
+      <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
+        <Expand label="What if the offenses were better or worse?">
+          <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+            <Slider label="49ers offense" value={sf} onChange={setSf} />
+            <Slider label="Chiefs offense" value={kc} onChange={setKc} />
+          </div>
+          <p className="mt-2 text-xs text-gray-600">
+            The Chiefs start at 25% better than average, roughly Mahomes-era
+            Kansas City. Make them good enough and going for it becomes the
+            better call.
           </p>
-        </div>
-        <div className="space-y-6">
-          <div>
-            <div className="text-sm font-medium text-gray-800">
-              The coin toss: receive or kick?
-            </div>
-            <p className="mb-2 text-xs text-gray-500">
-              Shanahan chose to receive. Kicking means you know exactly what you
-              need on your drive.
+        </Expand>
+        <Expand label="How this was worked out">
+          <div className="max-w-3xl space-y-2 text-sm text-gray-700">
+            <p>
+              Ben Baldwin&apos;s nfl4th stops at the end of regulation, and
+              there aren&apos;t enough playoff overtime games under these rules
+              to learn from, so this plays out each possession using how often
+              drives score in similar spots during regulation.
             </p>
-            <Pair aLabel="Receive" bLabel="Kick" a={r.receive} b={r.kick} />
-          </div>
-          <div>
-            <div className="text-sm font-medium text-gray-800">
-              4th &amp; {ot.ydstogo} at the KC {ot.yardline}, tied, first
-              possession
-            </div>
-            <p className="mb-2 text-xs text-gray-500">
-              They kicked. Converting is {pct(ot.conv)} likely (a touchdown on
-              the play {pct(ot.tdOnPlay)}); a {18 + ot.yardline}-yard kick is{" "}
-              {pct(ot.fgMake)}.
+            <p>
+              Going for it: they make it about {outOf10(ot.conv)} times,
+              sometimes scoring on the play itself. The {18 + ot.yardline}-yard
+              field goal is nearly automatic ({chance(ot.fgMake)}). After a
+              49ers touchdown they win about {chance(r.four.winAfterTd)} of the
+              time; after a field goal, {chance(r.four.winAfterFg)}.
             </p>
-            <Pair
-              aLabel="Field goal"
-              bLabel="Go for it"
-              a={r.four.fg}
-              b={r.four.go}
-            />
-            <p className="mt-2 text-sm text-gray-700">
-              {Math.abs(gap) < 1
-                ? "Toss-up at these settings."
-                : gap > 0
-                  ? `Going for it was worth ${gap.toFixed(1)} points more.`
-                  : `Kicking was worth ${(-gap).toFixed(1)} points more.`}{" "}
-              A field goal makes the Chiefs need only a touchdown to win and a
-              field goal to extend; a touchdown makes them need a touchdown just
-              to keep playing ({pct(r.four.winAfterTd)} vs{" "}
-              {pct(r.four.winAfterFg)} for the 49ers).
+            <p className="text-xs text-gray-500">
+              League averages behind it: a normal first drive scores a touchdown
+              21% of the time and a field goal 15%; a team down 7 that needs a
+              touchdown gets one 31%; a team down 3 scores a touchdown 20% and a
+              field goal 23%.
             </p>
           </div>
-        </div>
+        </Expand>
       </div>
     </section>
   );

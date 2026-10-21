@@ -14,7 +14,7 @@ const LINKS = [
 export function NflNav() {
   const pathname = usePathname();
   return (
-    <nav className="mb-6 flex justify-center gap-x-5 gap-y-2 overflow-x-auto border-b border-gray-200 text-sm sm:gap-x-6">
+    <nav className="mb-6 flex justify-start gap-x-5 gap-y-2 overflow-x-auto border-b border-gray-200 text-sm sm:justify-center sm:gap-x-6">
       {LINKS.map((l) => {
         const active =
           l.href === "/nfl/"

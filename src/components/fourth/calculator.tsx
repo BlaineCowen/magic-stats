@@ -4,12 +4,7 @@ import { useEffect, useState } from "react";
 import type { Decision, Situation } from "@/lib/fourth/engine";
 import { situationQuery } from "@/lib/fourth/params";
 import { cn } from "@/lib/utils";
-import {
-  BreakevenBar,
-  DecisionCard,
-  GainsChart,
-  yardText,
-} from "./decision-card";
+import { DecisionCard, yardText } from "./decision-card";
 
 const inputCls =
   "w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none";
@@ -109,9 +104,11 @@ export function Calculator({ initial }: { initial: Situation }) {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
       <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
         <div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs font-medium text-gray-500">Ball on</span>
-            <span className="text-sm font-semibold text-gray-900">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs font-medium text-gray-500">
+              Where&apos;s the ball?
+            </span>
+            <span className="text-base font-semibold text-gray-900">
               4th &amp; {s.ydstogo >= s.yardline ? "goal" : s.ydstogo} at{" "}
               {yardText(s.yardline)}
             </span>
@@ -158,7 +155,7 @@ export function Calculator({ initial }: { initial: Situation }) {
               className={inputCls}
             />
           </Field>
-          <Field label="Score margin" hint="(offense)">
+          <Field label="Score" hint="(+ ahead, − behind)">
             <input
               type="number"
               value={s.scoreDiff}
@@ -206,7 +203,7 @@ export function Calculator({ initial }: { initial: Situation }) {
 
         <details className="group rounded-md border border-gray-200 px-3 py-2">
           <summary className="cursor-pointer text-sm font-medium text-gray-700">
-            Teams, line and weather
+            More details (betting line, stadium, weather)
           </summary>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Field label="Spread" hint="(+ = offense favored)">
@@ -313,15 +310,7 @@ export function Calculator({ initial }: { initial: Situation }) {
             {error}
           </div>
         )}
-        {d && (
-          <>
-            <DecisionCard d={d} />
-            <div className="grid gap-4 md:grid-cols-2">
-              <BreakevenBar d={d} />
-              <GainsChart d={d} />
-            </div>
-          </>
-        )}
+        {d && <DecisionCard d={d} />}
       </div>
     </div>
   );
