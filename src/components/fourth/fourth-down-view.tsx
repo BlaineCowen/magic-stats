@@ -81,11 +81,6 @@ function GamePicker() {
         <GameStudy
           gameId={gameId}
           focus={params.get("focus") ?? sel?.home ?? gameId.split("_")[3]!}
-          title={
-            sel
-              ? `${sel.away} at ${sel.home}, ${season}${sel.week > 18 ? " playoffs" : ` week ${sel.week}`}`
-              : gameId
-          }
         />
       )}
     </div>

@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Check, Minus, X } from "lucide-react";
-import type { FourthDownPlay, GameAnalysis } from "@/lib/fourth/games";
+import type {
+  FourthDownPlay,
+  GameAnalysis,
+  TeamInfo,
+} from "@/lib/fourth/games";
 import { cn } from "@/lib/utils";
 import { yardText } from "./decision-card";
-import { DecisionTable } from "./decision-table";
+import { DecisionTable, SureTag } from "./decision-table";
+import { MiniField } from "./field";
 import { chance, CHOICE, Expand } from "./ui";
-
-export type Nfl4thRow = { go: number; fg: number | null; punt: number | null };
 
 type Verdict = "right" | "close" | "wrong" | "none";
 const VERDICT_COLOR: Record<Verdict, string> = {
@@ -25,21 +28,21 @@ export function verdictOf(p: FourthDownPlay): Verdict {
   return p.cost > -1 ? "close" : "wrong";
 }
 
-const H = 170;
+const H = 150;
 const W = 720;
 const PAD = { l: 34, r: 10, t: 10, b: 24 };
 
-/** One team's chance to win across the game, with each of its 4th downs marked. */
-function WpTimeline({ g, focus }: { g: GameAnalysis; focus: string }) {
-  const focusHome = g.home === focus;
+/** One team's chance to win across the game, in its color, with each of its 4th downs marked. */
+function WpTimeline({ g, team }: { g: GameAnalysis; team: TeamInfo }) {
+  const isHome = g.teams.home.abbr === team.abbr;
   const maxEl = Math.max(3600, ...g.timeline.map((p) => p.elapsed));
   const x = (el: number) => PAD.l + (el / maxEl) * (W - PAD.l - PAD.r);
   const y = (wp: number) => PAD.t + (1 - wp) * (H - PAD.t - PAD.b);
-  const wpFocus = (homeWp: number) => (focusHome ? homeWp : 1 - homeWp);
+  const wpOf = (homeWp: number) => (isHome ? homeWp : 1 - homeWp);
   const path = g.timeline
     .map(
       (p, i) =>
-        `${i ? "L" : "M"}${x(p.elapsed).toFixed(1)},${y(wpFocus(p.homeWp)).toFixed(1)}`,
+        `${i ? "L" : "M"}${x(p.elapsed).toFixed(1)},${y(wpOf(p.homeWp)).toFixed(1)}`,
     )
     .join("");
   const wpAt = (el: number) =>
@@ -53,7 +56,7 @@ function WpTimeline({ g, focus }: { g: GameAnalysis; focus: string }) {
       viewBox={`0 0 ${W} ${H}`}
       className="w-full"
       role="img"
-      aria-label={`${focus} chance to win during the game`}
+      aria-label={`${team.nick} chance to win during the game`}
     >
       {[0, 0.5, 1].map((v) => (
         <g key={v}>
@@ -98,15 +101,15 @@ function WpTimeline({ g, focus }: { g: GameAnalysis; focus: string }) {
           OT
         </text>
       )}
-      <path d={path} fill="none" stroke="#111827" strokeWidth={1.75} />
+      <path d={path} fill="none" stroke={team.color} strokeWidth={2.25} />
       {g.plays
-        .filter((p) => p.posteam === focus)
+        .filter((p) => p.posteam === team.abbr)
         .map((p) => (
           <circle
             key={p.playId}
             cx={x(p.elapsed)}
-            cy={y(wpFocus(wpAt(p.elapsed)))}
-            r={5}
+            cy={y(wpOf(wpAt(p.elapsed)))}
+            r={5.5}
             fill={VERDICT_COLOR[verdictOf(p)]}
             stroke="#fff"
             strokeWidth={2}
@@ -118,60 +121,138 @@ function WpTimeline({ g, focus }: { g: GameAnalysis; focus: string }) {
   );
 }
 
-/** "4th & 3 at the KC 15, down 3" */
+/** "4th & 3 at the KC 15" */
 export function situationText(p: FourthDownPlay): string {
   const s = p.decision?.situation;
   if (!s) return "";
   const togo = s.ydstogo >= s.yardline ? "goal" : s.ydstogo;
-  const score =
-    s.scoreDiff === 0
-      ? "tied"
-      : s.scoreDiff > 0
-        ? `up ${s.scoreDiff}`
-        : `down ${-s.scoreDiff}`;
-  return `4th & ${togo} at ${yardText(s.yardline, p.posteam, p.defteam)}, ${score}`;
+  return `4th & ${togo} at ${yardText(s.yardline, p.posteam, p.defteam)}`;
 }
 
-const when = (p: FourthDownPlay) =>
-  p.qtr > 4 ? `Overtime, ${p.time} left` : `Q${p.qtr}, ${p.time} left`;
+// "02:12" -> "2:12"
+const clock = (p: FourthDownPlay) => {
+  const t = p.time.replace(/^0(?=\d:)/, "");
+  return p.qtr > 4 ? `OT, ${t}` : `Q${p.qtr}, ${t}`;
+};
 
-/** What they did, as a phrase: "Kicked a field goal (good)". */
+/** What they did, as a phrase: "Kicked a 58-yard field goal, missed". */
 function didText(p: FourthDownPlay): string {
   if (p.actual === "go")
     return `Went for it${p.worked == null ? "" : p.worked ? " and made it" : " and came up short"}`;
-  if (p.actual === "fg")
-    return `Kicked a field goal${p.worked == null ? "" : p.worked ? " (good)" : " (missed)"}`;
+  if (p.actual === "fg") {
+    const yd = p.decision?.options.find((o) => o.key === "fg")?.detail.distance;
+    return `Kicked a ${yd ? `${yd}-yard ` : ""}field goal${p.worked == null ? "" : p.worked ? ", good" : ", missed"}`;
+  }
   return "Punted";
 }
 
-/** What they did and whether the model agrees, in one line. */
-function VerdictLine({ p }: { p: FourthDownPlay }) {
+const DOING: Record<string, string> = {
+  go: "gone for it",
+  fg: "kicked the field goal",
+  punt: "punted",
+};
+
+/** The model's view in one sentence: right call, coin flip, or what they should have done. */
+function Verdict({ p }: { p: FourthDownPlay }) {
   const v = verdictOf(p);
   const d = p.decision!;
+  const best = d.options.find((o) => o.key === d.best)!;
+  const chosen = d.options.find((o) => o.key === p.actual);
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="font-medium text-gray-900">{didText(p)}.</span>
-      <span
-        className={cn(
-          "font-semibold",
-          v === "wrong"
-            ? "text-red-700"
-            : v === "right"
-              ? "text-emerald-700"
-              : "text-gray-700",
-        )}
-      >
-        {v === "right"
-          ? "Right call."
-          : v === "close"
-            ? "A coin flip either way."
-            : `Wrong call, cost ${Math.max(1, Math.round(-p.cost))}% in chance to win.`}
-      </span>
-      {v === "wrong" && (
-        <span className="text-sm text-gray-600">
-          Best was: {CHOICE[d.best].toLowerCase()}.
+      {v === "right" && (
+        <span className="text-emerald-700">
+          <b>Right call.</b> {chance(best.wp)} to win.
         </span>
       )}
+      {v === "close" && (
+        <span className="text-gray-700">
+          <b>Coin flip.</b> Either choice was about {chance(best.wp)} to win.
+        </span>
+      )}
+      {v === "wrong" && (
+        <span className="text-red-700">
+          <b>Should have {DOING[d.best]}:</b> {chance(best.wp)} to win vs{" "}
+          {chance(chosen?.wp)}.
+        </span>
+      )}
+      {d.confidence && v !== "close" && <SureTag c={d.confidence} />}
+    </div>
+  );
+}
+
+function Score({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
+  const nick = (abbr: string) =>
+    g.teams.home.abbr === abbr ? g.teams.home.nick : g.teams.away.nick;
+  return (
+    <span>
+      {nick(p.posteam)} {p.posteamScore}, {nick(p.defteam)} {p.defteamScore}
+    </span>
+  );
+}
+
+/** One 4th down: the field on the left, the story on the right, every number one click away. */
+function PlayCard({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
+  const v = verdictOf(p);
+  const Icon = v === "right" ? Check : v === "wrong" ? X : Minus;
+  const off = g.teams.home.abbr === p.posteam ? g.teams.home : g.teams.away;
+  const def = g.teams.home.abbr === p.posteam ? g.teams.away : g.teams.home;
+  const s = p.decision?.situation;
+  return (
+    <div className="grid gap-x-6 gap-y-3 border-b border-gray-100 py-5 last:border-0 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-xs text-gray-600">
+          <span className="font-semibold text-gray-900">{clock(p)}</span>
+          <Score p={p} g={g} />
+        </div>
+        {s ? (
+          <MiniField
+            yardline={s.yardline}
+            ydstogo={s.ydstogo}
+            offense={off}
+            defense={def}
+          />
+        ) : (
+          <div className="rounded-md bg-gray-100 p-4 text-center text-sm text-gray-600">
+            Overtime
+          </div>
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-start gap-2">
+          <Icon
+            className="mt-1 size-5 shrink-0"
+            style={{ color: VERDICT_COLOR[v] }}
+            aria-label={v}
+          />
+          <div className="min-w-0">
+            <div className="text-lg leading-snug font-semibold text-gray-900">
+              {s ? situationText(p) : "Overtime 4th down"}
+            </div>
+            <div className="text-gray-700">{didText(p)}.</div>
+          </div>
+        </div>
+        {p.decision ? (
+          <div className="mt-2 pl-7">
+            <Verdict p={p} />
+            <Expand label="All the numbers" className="mt-1">
+              <DecisionTable
+                d={p.decision}
+                team={p.posteam}
+                opp={p.defteam}
+                actual={p.actual}
+                compact
+                showHeading={false}
+              />
+              <p className="mt-3 text-xs text-gray-500 italic">{p.desc}</p>
+            </Expand>
+          </div>
+        ) : (
+          <p className="mt-2 pl-7 text-sm text-gray-600">
+            Overtime calls are graded on their own.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -184,6 +265,7 @@ export function FeaturedCall({
   p: FourthDownPlay;
   heading?: string;
 }) {
+  const v = verdictOf(p);
   return (
     <div className="rounded-lg bg-slate-50 p-4">
       {heading && (
@@ -191,7 +273,6 @@ export function FeaturedCall({
           {heading}
         </div>
       )}
-
       <DecisionTable
         d={p.decision!}
         team={p.posteam}
@@ -199,59 +280,120 @@ export function FeaturedCall({
         actual={p.actual}
         compact
       />
-      <div className="mt-3 border-t border-gray-200 pt-2">
-        <VerdictLine p={p} />
+      <div className="mt-3 border-t border-gray-200 pt-2 text-gray-900">
+        <span className="font-medium">{didText(p)}.</span>{" "}
+        <span
+          className={cn(
+            "font-semibold",
+            v === "wrong"
+              ? "text-red-700"
+              : v === "right"
+                ? "text-emerald-700"
+                : "text-gray-700",
+          )}
+        >
+          {v === "right"
+            ? "Right call."
+            : v === "close"
+              ? "A coin flip either way."
+              : `Wrong call, cost ${Math.max(1, Math.round(-p.cost))}% in chance to win.`}
+        </span>
       </div>
     </div>
   );
 }
 
-/** Every play shows its numbers up front; only the play-by-play text sits behind a click. */
-function PlayRow({ p, nfl4th }: { p: FourthDownPlay; nfl4th?: Nfl4thRow }) {
-  const d = p.decision;
-  const v = verdictOf(p);
-  const Icon = v === "right" ? Check : v === "wrong" ? X : Minus;
-  return (
-    <div className="border-b border-gray-100 px-4 py-4 last:border-0">
-      <div className="mb-2 flex items-center gap-2 text-sm text-gray-600">
-        <Icon
-          className="size-4"
-          style={{ color: VERDICT_COLOR[v] }}
-          aria-label={v}
-        />
-        <span className="font-medium text-gray-900">{p.posteam}</span>
-        <span>{when(p)}</span>
+/** Both teams side by side, in their colors, with the final score. */
+function Scoreboard({ g }: { g: GameAnalysis }) {
+  const date = g.date
+    ? new Date(`${g.date}T12:00:00`).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+  const side = (
+    t: TeamInfo,
+    score: number,
+    won: boolean,
+    align: "left" | "right",
+  ) => (
+    <div
+      className={cn(
+        "flex items-center gap-3",
+        align === "right" && "flex-row-reverse text-right",
+      )}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/charts/logo/${t.abbr}`}
+        alt=""
+        className="size-8 shrink-0 object-contain sm:size-12"
+      />
+      <div className="min-w-0">
+        <div className="hidden truncate text-sm text-gray-600 sm:block">
+          {t.name.replace(` ${t.nick}`, "")}
+        </div>
+        <div className="truncate text-base font-semibold text-gray-900 sm:text-xl">
+          {t.nick}
+        </div>
       </div>
-      {d ? (
-        <>
-          <DecisionTable
-            d={d}
-            team={p.posteam}
-            opp={p.defteam}
-            actual={p.actual}
-            compact
-          />
-          <div className="mt-2">
-            <VerdictLine p={p} />
-          </div>
-          <Expand label="The play" className="mt-1">
-            <div className="space-y-1 text-sm text-gray-600">
-              <p className="italic">{p.desc}</p>
-              {nfl4th && (
-                <p className="text-xs">
-                  Ben Baldwin&apos;s nfl4th had: go {chance(nfl4th.go)}
-                  {nfl4th.fg != null && `, field goal ${chance(nfl4th.fg)}`}
-                  {nfl4th.punt != null && `, punt ${chance(nfl4th.punt)}`}.
-                </p>
-              )}
-            </div>
-          </Expand>
-        </>
-      ) : (
-        <p className="text-sm text-gray-600">
-          Overtime 4th down. {didText(p)}. Overtime calls are covered
-          separately.
-        </p>
+      <div
+        className={cn(
+          "ml-auto text-2xl tabular-nums sm:text-4xl",
+          align === "right" && "mr-auto ml-0",
+          won ? "font-bold text-gray-900" : "text-gray-400",
+        )}
+      >
+        {score}
+      </div>
+    </div>
+  );
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      <div className="flex h-1.5">
+        <div className="flex-1" style={{ background: g.teams.away.color }} />
+        <div className="flex-1" style={{ background: g.teams.home.color }} />
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6">
+        {side(g.teams.away, g.awayScore, g.awayScore > g.homeScore, "left")}
+        <div className="text-center text-xs whitespace-nowrap text-gray-500">
+          <div className="font-semibold text-gray-700">Final</div>
+          {date && <div className="hidden sm:block">{date}</div>}
+          <div>{g.week > 18 ? "Playoffs" : `Week ${g.week}`}</div>
+        </div>
+        {side(g.teams.home, g.homeScore, g.homeScore > g.awayScore, "right")}
+      </div>
+    </div>
+  );
+}
+
+function Summary({ g, team }: { g: GameAnalysis; team: TeamInfo }) {
+  const theirs = g.plays.filter((p) => p.posteam === team.abbr && p.decision);
+  const n = (v: Verdict) => theirs.filter((p) => verdictOf(p) === v).length;
+  const lost = -theirs
+    .filter((p) => verdictOf(p) === "wrong")
+    .reduce((a, p) => a + p.cost, 0);
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-700">
+      <span className="font-semibold text-gray-900">{team.nick}:</span>
+      <span className="flex items-center gap-1.5">
+        <Check className="size-4 text-emerald-600" aria-hidden /> {n("right")}{" "}
+        right
+      </span>
+      <span className="flex items-center gap-1.5">
+        <X className="size-4 text-red-600" aria-hidden /> {n("wrong")} wrong
+        {n("wrong") > 0 && (
+          <span className="text-gray-500">
+            (cost {Math.max(1, Math.round(lost))}% in chance to win)
+          </span>
+        )}
+      </span>
+      {n("close") > 0 && (
+        <span className="flex items-center gap-1.5">
+          <Minus className="size-4 text-gray-400" aria-hidden /> {n("close")}{" "}
+          coin {n("close") === 1 ? "flip" : "flips"}
+        </span>
       )}
     </div>
   );
@@ -268,8 +410,8 @@ export function GameStudy({
   gameId: string;
   /** team whose decisions the story is about */
   focus: string;
-  title: string;
-  /** one plain-English sentence; generated when omitted */
+  title?: string;
+  /** one plain-English sentence */
   verdict?: React.ReactNode;
   /** play ids to show as featured calls, each with an optional heading */
   featured?: { playId: number; heading?: string }[];
@@ -278,17 +420,18 @@ export function GameStudy({
 }) {
   const [g, setG] = useState<GameAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [bothTeams, setBothTeams] = useState(false);
+  const [view, setView] = useState<string>(focus);
 
   useEffect(() => {
     setG(null);
+    setView(focus);
     fetch(`/api/fourth-down?game=${gameId}`)
       .then((r) => r.json())
       .then((j: GameAnalysis & { error?: string }) =>
         j.error ? setError(j.error) : setG(j),
       )
       .catch((e: Error) => setError(e.message));
-  }, [gameId]);
+  }, [gameId, focus]);
 
   if (error)
     return (
@@ -298,48 +441,24 @@ export function GameStudy({
     );
   if (!g) return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
 
-  const theirs = g.plays.filter((p) => p.posteam === focus && p.decision);
-  const count = (v: Verdict) => theirs.filter((p) => verdictOf(p) === v).length;
-  const lost = -theirs.reduce((a, p) => a + p.cost, 0);
-  const wrong = count("wrong");
-  const autoVerdict =
-    wrong === 0
-      ? `${focus} made the right call on every 4th down that mattered.`
-      : `${focus} got ${wrong} 4th down ${wrong === 1 ? "call" : "calls"} wrong, giving up about ${Math.max(1, Math.round(lost))}% in chance to win.`;
-  const plays = bothTeams
-    ? g.plays
-    : g.plays.filter((p) => p.posteam === focus);
+  const teams = [g.teams.away, g.teams.home];
+  const shown = view === "both" ? teams : teams.filter((t) => t.abbr === view);
+  const plays = g.plays.filter((p) => shown.some((t) => t.abbr === p.posteam));
 
   return (
-    <section className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+    <section className="space-y-4">
+      {title && (
         <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-        <span className="text-sm text-gray-600">
-          Final: {g.away} {g.awayScore}, {g.home} {g.homeScore}
-        </span>
-      </div>
-      <p className="mt-2 max-w-3xl text-xl leading-snug font-semibold text-gray-900">
-        {verdict ?? autoVerdict}
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-gray-700">
-        <span className="flex items-center gap-1.5">
-          <Check className="size-4 text-emerald-600" aria-hidden />{" "}
-          {count("right")} right calls
-        </span>
-        <span className="flex items-center gap-1.5">
-          <X className="size-4 text-red-600" aria-hidden /> {wrong} wrong
-        </span>
-        {count("close") > 0 && (
-          <span className="flex items-center gap-1.5">
-            <Minus className="size-4 text-gray-400" aria-hidden />{" "}
-            {count("close")} coin {count("close") === 1 ? "flip" : "flips"}
-          </span>
-        )}
-      </div>
+      )}
+      <Scoreboard g={g} />
+      {verdict && (
+        <p className="max-w-3xl text-xl leading-snug font-semibold text-gray-900">
+          {verdict}
+        </p>
+      )}
 
       {featured.length > 0 && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3">
           {featured.map((f) => {
             const p = g.plays.find((x) => x.playId === f.playId);
             return p?.decision ? (
@@ -349,46 +468,65 @@ export function GameStudy({
         </div>
       )}
 
-      <div className="mt-4 space-y-1 border-t border-gray-100 pt-3">
-        {children && (
-          <Expand label="The full story">
-            <div className="max-w-3xl space-y-2 text-sm leading-relaxed text-gray-700">
-              {children}
-            </div>
-          </Expand>
-        )}
-        <Expand
-          label={`Every 4th down in this game (${theirs.length} for ${focus})`}
-          // a story card leads with its featured calls; a plain game view is the list itself
-          defaultOpen={featured.length === 0}
-        >
-          <div className="mb-2 text-xs text-gray-600">
-            {focus}&apos;s chance to win as the game went on. Dots are its 4th
-            downs.
-          </div>
-          <WpTimeline g={g} focus={focus} />
-          <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
-            <span>Tap a play for the numbers.</span>
-            <label className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={bothTeams}
-                onChange={(e) => setBothTeams(e.target.checked)}
-              />{" "}
-              show both teams
-            </label>
-          </div>
-          <div className="mt-2 rounded-md border border-gray-100">
-            {plays.map((p) => (
-              <PlayRow
-                key={p.playId}
-                p={p}
-                nfl4th={g.nfl4th?.[String(p.playId)]}
-              />
-            ))}
+      {children && (
+        <Expand label="The full story">
+          <div className="max-w-3xl space-y-2 text-sm leading-relaxed text-gray-700">
+            {children}
           </div>
         </Expand>
-      </div>
+      )}
+
+      <Expand
+        label="Every 4th down in this game"
+        defaultOpen={featured.length === 0}
+      >
+        <div className="rounded-lg border border-gray-200 bg-white px-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 py-4">
+            <div
+              className="flex overflow-hidden rounded-md border border-gray-300 text-sm"
+              role="group"
+              aria-label="Whose 4th downs"
+            >
+              {[
+                ...teams.map((t) => ({ k: t.abbr, label: t.nick })),
+                { k: "both", label: "Both" },
+              ].map((o) => (
+                <button
+                  key={o.k}
+                  type="button"
+                  aria-pressed={view === o.k}
+                  onClick={() => setView(o.k)}
+                  className={cn(
+                    "px-3 py-1.5",
+                    view === o.k
+                      ? "bg-gray-900 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50",
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1">
+              {shown.map((t) => (
+                <Summary key={t.abbr} g={g} team={t} />
+              ))}
+            </div>
+          </div>
+          {shown.length === 1 && (
+            <div className="border-b border-gray-100 py-4">
+              <div className="mb-1 text-xs text-gray-600">
+                {shown[0]!.nick}&apos; chance to win through the game. Dots are
+                their 4th downs.
+              </div>
+              <WpTimeline g={g} team={shown[0]!} />
+            </div>
+          )}
+          {plays.map((p) => (
+            <PlayCard key={p.playId} p={p} g={g} />
+          ))}
+        </div>
+      </Expand>
     </section>
   );
 }

@@ -13,6 +13,9 @@ import {
 
 export type FourthDownPlay = {
   playId: number;
+  /** score before the snap */
+  posteamScore: number;
+  defteamScore: number;
   /** seconds since kickoff, continuing through overtime */
   elapsed: number;
   qtr: number;
@@ -42,8 +45,19 @@ export type FourthDownPlay = {
 
 export type GameTimelinePoint = { elapsed: number; homeWp: number };
 
+export type TeamInfo = {
+  abbr: string;
+  name: string;
+  nick: string;
+  color: string;
+  color2: string;
+};
+
 export type GameAnalysis = {
   gameId: string;
+  /** e.g. "2024-11-10" */
+  date: string | null;
+  teams: Record<"home" | "away", TeamInfo>;
   season: number;
   week: number;
   home: string;
@@ -101,7 +115,8 @@ async function buildAnalysis(gameId: string): Promise<GameAnalysis> {
       posteam, defteam, home_team, away_team, home_score, away_score, down, ydstogo, yardline_100,
       score_differential, posteam_timeouts_remaining, defteam_timeouts_remaining, spread_line,
       total_line, roof, temp, wind, home_opening_kickoff, play_type, "desc",
-      fourth_down_converted, field_goal_result, touchdown, td_team, vegas_home_wp, season_type
+      fourth_down_converted, field_goal_result, touchdown, td_team, vegas_home_wp, season_type,
+      posteam_score, defteam_score, game_date
     FROM pbp WHERE season = ${Number(gameId.slice(0, 4))} AND game_id = '${gameId}' ORDER BY play_id`);
   if (!rows.length) throw new Error(`No plays for ${gameId}`);
   const first = rows[0]!;
@@ -144,6 +159,8 @@ async function buildAnalysis(gameId: string): Promise<GameAnalysis> {
           : null;
     const base = {
       playId: Number(r.play_id),
+      posteamScore: Number(r.posteam_score ?? 0),
+      defteamScore: Number(r.defteam_score ?? 0),
       elapsed: elapsedOf(r),
       qtr,
       time: String(r.time ?? ""),
@@ -198,8 +215,26 @@ async function buildAnalysis(gameId: string): Promise<GameAnalysis> {
     });
   }
 
+  const home = String(first.home_team);
+  const away = String(first.away_team);
+  const { rows: teamRows } = await runSafeSelect(
+    `SELECT team_abbr, team_name, team_nick, team_color, team_color2 FROM teams WHERE team_abbr IN ('${home}', '${away}')`,
+  );
+  const teamInfo = (abbr: string): TeamInfo => {
+    const t = teamRows.find((r) => r.team_abbr === abbr);
+    return {
+      abbr,
+      name: String(t?.team_name ?? abbr),
+      nick: String(t?.team_nick ?? abbr),
+      color: String(t?.team_color ?? "#334155"),
+      color2: String(t?.team_color2 ?? "#94a3b8"),
+    };
+  };
+
   return {
     gameId,
+    date: first.game_date ? String(first.game_date).slice(0, 10) : null,
+    teams: { home: teamInfo(home), away: teamInfo(away) },
     season: Number(first.season),
     week: Number(first.week),
     home: String(first.home_team),

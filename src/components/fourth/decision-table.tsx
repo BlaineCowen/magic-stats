@@ -82,7 +82,7 @@ const SURE: Record<Confidence["label"], { text: string; cls: string }> = {
 };
 
 /** How sure the call is: share of retrained models that pick the same thing. */
-function SureTag({ c }: { c: Confidence }) {
+export function SureTag({ c }: { c: Confidence }) {
   const s = SURE[c.label];
   const n = Math.round(c.agree * c.replicates);
   return (
