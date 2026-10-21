@@ -30,3 +30,6 @@ tsconfig.tsbuildinfo
 scripts/fourth-down/.venv/
 scripts/fourth-down/work/
 scripts/fourth-down/__pycache__/
+
+# 4th down bootstrap replicates are compressed model files, not archives
+!src/lib/fourth/models/boot/*.json.gz
