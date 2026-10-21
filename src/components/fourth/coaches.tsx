@@ -5,7 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Coach, CoachReport } from "@/lib/fourth/coaches";
 import { cn } from "@/lib/utils";
 import { yardText } from "./decision-card";
-import { CHOICE, CHOICE_COLOR, Expand, teamPhrase } from "./ui";
+import { DecisionTable } from "./decision-table";
+import { CHOICE, CHOICE_COLOR, Expand, TEAM_NAME, teamPhrase } from "./ui";
 
 const DEFAULT_COACH = "DeMeco Ryans";
 
@@ -227,6 +228,40 @@ function ChanceChips({ d }: { d: Coach["worst"][number] }) {
   );
 }
 
+/** One costly call with its full decision card, like the game view. */
+function CostlyCall({ d }: { d: Coach["worst"][number] }) {
+  return (
+    <div className="border-b border-gray-100 px-4 py-4 last:border-0">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-sm text-gray-600">
+        <span>
+          {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
+          {TEAM_NAME[d.opp] ?? d.opp}, {d.qtr > 4 ? "OT" : `Q${d.qtr}`},{" "}
+          {d.time} left
+        </span>
+        <a
+          className="text-blue-700 hover:text-blue-900"
+          href={`?tab=game&season=${d.season}&id=${d.gameId}&focus=${d.team}`}
+        >
+          See the whole game
+        </a>
+      </div>
+      <DecisionTable
+        d={{ ...d.decision!, goGains: [] }}
+        team={d.team}
+        opp={d.opp}
+        actual={d.actual}
+        compact
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
+        <span className="font-medium text-gray-900">{did(d)}.</span>
+        <span className="font-semibold text-red-700">
+          Wrong call, cost {Math.max(1, Math.round(-d.cost))}% in chance to win.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function did(d: Coach["worst"][number]) {
   if (d.actual === "go")
     return `Went for it${d.worked == null ? "" : d.worked ? " (made it)" : " (stopped)"}`;
@@ -340,45 +375,46 @@ function CoachDetail({ c, report }: { c: Coach; report: CoachReport }) {
           </Expand>
         )}
 
-        <Expand label="His most costly calls">
+        <Expand label="His most costly calls" defaultOpen>
           <div className="rounded-md border border-gray-200 bg-white">
-            {c.worst.map((d) => (
-              <a
-                key={`${d.gameId}-${d.qtr}-${d.time}`}
-                href={`?tab=game&season=${d.season}&id=${d.gameId}&focus=${d.team}`}
-                className="grid grid-cols-[1fr_auto] gap-3 border-b border-gray-100 px-4 py-2.5 text-sm last:border-0 hover:bg-slate-50"
-              >
-                <span>
-                  <span className="text-gray-900">{situation(d)}</span>
-                  <ChanceChips d={d} />
-                  <span className="block text-xs text-gray-600">
-                    {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
-                    {d.opp}, {d.qtr > 4 ? "OT" : `Q${d.qtr}`} {d.time}. {did(d)}
-                    .
+            {c.worst.map((d) =>
+              d.decision ? (
+                <CostlyCall key={`${d.gameId}-${d.qtr}-${d.time}`} d={d} />
+              ) : (
+                <a
+                  key={`${d.gameId}-${d.qtr}-${d.time}`}
+                  href={`?tab=game&season=${d.season}&id=${d.gameId}&focus=${d.team}`}
+                  className="grid grid-cols-[1fr_auto] gap-3 border-b border-gray-100 px-4 py-2.5 text-sm last:border-0 hover:bg-slate-50"
+                >
+                  <span>
+                    <span className="text-gray-900">{situation(d)}</span>
+                    <ChanceChips d={d} />
+                    <span className="block text-xs text-gray-600">
+                      {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
+                      {d.opp}, {d.qtr > 4 ? "OT" : `Q${d.qtr}`} {d.time}.{" "}
+                      {did(d)}.
+                    </span>
                   </span>
-                </span>
-                <span className="text-right">
-                  <span
-                    className="font-medium"
-                    style={{ color: CHOICE_COLOR[d.best] }}
-                  >
-                    Should{" "}
-                    {d.best === "go"
-                      ? "go for it"
-                      : d.best === "fg"
-                        ? "kick"
-                        : "punt"}
+                  <span className="text-right">
+                    <span
+                      className="font-medium"
+                      style={{ color: CHOICE_COLOR[d.best] }}
+                    >
+                      Should{" "}
+                      {d.best === "go"
+                        ? "go for it"
+                        : d.best === "fg"
+                          ? "kick"
+                          : "punt"}
+                    </span>
+                    <span className="block text-xs text-red-700">
+                      cost {Math.round(-d.cost)}% chance to win
+                    </span>
                   </span>
-                  <span className="block text-xs text-red-700">
-                    cost {Math.round(-d.cost)}% chance to win
-                  </span>
-                </span>
-              </a>
-            ))}
+                </a>
+              ),
+            )}
           </div>
-          <p className="mt-1 text-xs text-gray-600">
-            Tap a call to see the whole game.
-          </p>
         </Expand>
 
         <Expand label="Season by season">

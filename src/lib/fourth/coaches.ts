@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { OptionKey } from "./engine";
+import type { Decision, OptionKey } from "./engine";
 
 /** Written by scripts/fourth-down/coach_report.py from a full run of the engine over every 4th down. */
 
@@ -48,6 +48,8 @@ export type CoachDecision = {
   goWp: number | null;
   fgWp: number | null;
   puntWp: number | null;
+  /** the full graded decision with its margin of error (added by coach-worst-details.mts) */
+  decision?: Omit<Decision, "goGains">;
 };
 
 export type Coach = CoachSummary & {

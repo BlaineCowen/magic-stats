@@ -359,6 +359,8 @@ export function GameStudy({
         )}
         <Expand
           label={`Every 4th down in this game (${theirs.length} for ${focus})`}
+          // a story card leads with its featured calls; a plain game view is the list itself
+          defaultOpen={featured.length === 0}
         >
           <div className="mb-2 text-xs text-gray-600">
             {focus}&apos;s chance to win as the game went on. Dots are its 4th
