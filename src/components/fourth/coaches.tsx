@@ -68,6 +68,16 @@ function Tile({
 
 const wins = (pts: number) => (pts / 100).toFixed(2);
 
+type SortKey = "perGame" | "wins";
+const SORTS: { key: SortKey; label: string; hint: string }[] = [
+  {
+    key: "perGame",
+    label: "Per game",
+    hint: "win probability given up per game",
+  },
+  { key: "wins", label: "Wins given up", hint: "total expected wins given up" },
+];
+
 function Leaderboard({
   report,
   selected,
@@ -77,7 +87,20 @@ function Leaderboard({
   selected: string;
   onSelect: (c: string) => void;
 }) {
-  const worst = Math.min(...report.coaches.map((c) => c.lostPerGame));
+  const [sort, setSort] = useState<SortKey>("perGame");
+  // true = most given up first
+  const [mostFirst, setMostFirst] = useState(false);
+  const value = (c: Coach) =>
+    sort === "perGame" ? -c.lostPerGame : -c.lost / 100;
+  const rows = useMemo(
+    () =>
+      [...report.coaches].sort((a, b) =>
+        mostFirst ? value(b) - value(a) : value(a) - value(b),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [report, sort, mostFirst],
+  );
+  const max = Math.max(...report.coaches.map(value));
   const list = useRef<HTMLDivElement>(null);
   // keep the selected coach visible in the scrolling list (Ryans sits near the bottom)
   useEffect(() => {
@@ -86,20 +109,48 @@ function Leaderboard({
     );
     if (row && list.current)
       list.current.scrollTop = row.offsetTop - list.current.clientHeight / 2;
-  }, [selected]);
+  }, [selected, sort, mostFirst]);
+  const hint = SORTS.find((x) => x.key === sort)!.hint;
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-3">
+      <div className="space-y-2 border-b border-gray-100 px-4 py-3">
         <div className="text-sm font-semibold text-gray-900">
           Every head coach
         </div>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 overflow-hidden rounded-md border border-gray-300 text-xs">
+            {SORTS.map((x) => (
+              <button
+                key={x.key}
+                type="button"
+                onClick={() => setSort(x.key)}
+                className={cn(
+                  "flex-1 px-2 py-1",
+                  sort === x.key
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                {x.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMostFirst((v) => !v)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            title="Flip the order"
+          >
+            {mostFirst ? "Most first" : "Least first"}
+          </button>
+        </div>
         <div className="text-xs text-gray-500">
-          Win probability given up per game on 4th downs, best at top ·{" "}
+          {hint[0]!.toUpperCase() + hint.slice(1)} on 4th downs ·{" "}
           {report.minGames}+ games
         </div>
       </div>
       <div ref={list} className="relative max-h-[38rem] overflow-y-auto">
-        {report.coaches.map((c) => (
+        {rows.map((c, i) => (
           <button
             key={c.coach}
             type="button"
@@ -110,7 +161,7 @@ function Leaderboard({
               c.coach === selected && "bg-blue-50 hover:bg-blue-50",
             )}
           >
-            <span className="text-xs text-gray-400 tabular-nums">{c.rank}</span>
+            <span className="text-xs text-gray-400 tabular-nums">{i + 1}</span>
             <span className="min-w-0">
               <span
                 className={cn(
@@ -125,13 +176,15 @@ function Leaderboard({
               <span className="block h-1.5 rounded-full bg-gray-100">
                 <span
                   className="block h-1.5 rounded-full bg-red-400"
-                  style={{ width: `${(c.lostPerGame / worst) * 100}%` }}
+                  style={{ width: `${(value(c) / max) * 100}%` }}
                 />
               </span>
             </span>
             <span className="text-right text-xs text-gray-600 tabular-nums">
-              {c.lostPerGame.toFixed(2)}{" "}
-              <span className="text-gray-400">{c.teams.join("/")}</span>
+              {value(c).toFixed(2)}{" "}
+              <span className="text-gray-400">
+                {sort === "wins" ? `${c.games}g` : c.teams.join("/")}
+              </span>
             </span>
           </button>
         ))}
