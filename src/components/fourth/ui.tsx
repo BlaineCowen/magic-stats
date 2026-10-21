@@ -232,3 +232,51 @@ export function teamPhrase(codes: string[]): string {
   const names = codes.map((c) => TEAM_NAME[c] ?? c);
   return `the ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0]}`;
 }
+
+/** Primary team colors (nflverse teams file), for the field end zones. */
+export const TEAM_COLOR: Record<string, string> = {
+  ARI: "#97233F",
+  ATL: "#A71930",
+  BAL: "#241773",
+  BUF: "#00338D",
+  CAR: "#0085CA",
+  CHI: "#0B162A",
+  CIN: "#FB4F14",
+  CLE: "#FF3C00",
+  DAL: "#002244",
+  DEN: "#002244",
+  DET: "#0076B6",
+  GB: "#203731",
+  HOU: "#03202F",
+  IND: "#002C5F",
+  JAX: "#006778",
+  KC: "#E31837",
+  LA: "#003594",
+  LAC: "#007BC7",
+  LV: "#000000",
+  MIA: "#008E97",
+  MIN: "#4F2683",
+  NE: "#002244",
+  NO: "#D3BC8D",
+  NYG: "#0B2265",
+  NYJ: "#003F2D",
+  PHI: "#004C54",
+  PIT: "#000000",
+  SEA: "#002244",
+  SF: "#AA0000",
+  TB: "#A71930",
+  TEN: "#4495D2",
+  WAS: "#5A1414",
+};
+
+/** Team info for MiniField from just a code. */
+export function teamInfo(abbr: string) {
+  const nick = TEAM_NAME[abbr] ?? abbr;
+  return {
+    abbr,
+    name: nick,
+    nick,
+    color: TEAM_COLOR[abbr] ?? "#334155",
+    color2: "#94a3b8",
+  };
+}

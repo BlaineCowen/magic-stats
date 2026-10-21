@@ -5,8 +5,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Coach, CoachReport } from "@/lib/fourth/coaches";
 import { cn } from "@/lib/utils";
 import { yardText } from "./decision-card";
-import { DecisionTable } from "./decision-table";
-import { CHOICE, CHOICE_COLOR, Expand, TEAM_NAME, teamPhrase } from "./ui";
+import { DecisionTable, SureTag } from "./decision-table";
+import { MiniField } from "./field";
+import {
+  CHOICE,
+  CHOICE_COLOR,
+  Expand,
+  TEAM_NAME,
+  teamInfo,
+  teamPhrase,
+} from "./ui";
 
 const DEFAULT_COACH = "DeMeco Ryans";
 
@@ -228,35 +236,77 @@ function ChanceChips({ d }: { d: Coach["worst"][number] }) {
   );
 }
 
-/** One costly call with its full decision card, like the game view. */
+/** One costly call, laid out like the game view: the field, what he did, what he should have done. */
 function CostlyCall({ d }: { d: Coach["worst"][number] }) {
+  const dec = d.decision!;
+  const s = dec.situation;
+  const best = dec.options.find((o) => o.key === dec.best)!;
+  const chosen = dec.options.find((o) => o.key === d.actual);
+  const togo = s.ydstogo >= s.yardline ? "goal" : s.ydstogo;
+  const score =
+    s.scoreDiff === 0
+      ? "Tied"
+      : s.scoreDiff > 0
+        ? `Up ${s.scoreDiff}`
+        : `Down ${-s.scoreDiff}`;
   return (
-    <div className="border-b border-gray-100 px-4 py-4 last:border-0">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 text-sm text-gray-600">
-        <span>
-          {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
-          {TEAM_NAME[d.opp] ?? d.opp}, {d.qtr > 4 ? "OT" : `Q${d.qtr}`},{" "}
-          {d.time} left
-        </span>
-        <a
-          className="text-blue-700 hover:text-blue-900"
-          href={`?tab=game&season=${d.season}&id=${d.gameId}&focus=${d.team}`}
-        >
-          See the whole game
-        </a>
+    <div className="grid gap-x-6 gap-y-3 border-b border-gray-100 px-4 py-5 last:border-0 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-xs text-gray-600">
+          <span className="font-semibold text-gray-900">
+            {d.qtr > 4 ? "OT" : `Q${d.qtr}`}, {d.time.replace(/^0(?=\d:)/, "")}
+          </span>
+          <span>
+            {d.season} {d.post ? "playoffs" : `week ${d.week}`} vs{" "}
+            {TEAM_NAME[d.opp] ?? d.opp}
+          </span>
+        </div>
+        <MiniField
+          yardline={s.yardline}
+          ydstogo={s.ydstogo}
+          offense={teamInfo(d.team)}
+          defense={teamInfo(d.opp)}
+        />
       </div>
-      <DecisionTable
-        d={{ ...d.decision!, goGains: [] }}
-        team={d.team}
-        opp={d.opp}
-        actual={d.actual}
-        compact
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm">
-        <span className="font-medium text-gray-900">{did(d)}.</span>
-        <span className="font-semibold text-red-700">
-          Wrong call, cost {Math.max(1, Math.round(-d.cost))}% in chance to win.
-        </span>
+      <div className="min-w-0">
+        <div className="text-lg leading-snug font-semibold text-gray-900">
+          {score}, 4th &amp; {togo} at {yardText(s.yardline, d.team, d.opp)}
+        </div>
+        <div className="text-gray-700">{did(d)}.</div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-red-700">
+            <b>
+              Should have{" "}
+              {d.best === "go"
+                ? "gone for it"
+                : d.best === "fg"
+                  ? "kicked the field goal"
+                  : "punted"}
+              :
+            </b>{" "}
+            {Math.round(best.wp * 100)}% to win vs{" "}
+            {chosen ? Math.round(chosen.wp * 100) : "–"}%.
+          </span>
+          {dec.confidence && <SureTag c={dec.confidence} />}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-4">
+          <Expand label="All the numbers">
+            <DecisionTable
+              d={{ ...dec, goGains: [] }}
+              team={d.team}
+              opp={d.opp}
+              actual={d.actual}
+              compact
+              showHeading={false}
+            />
+          </Expand>
+          <a
+            className="py-1 text-sm font-medium text-blue-700 hover:text-blue-900"
+            href={`?tab=game&season=${d.season}&id=${d.gameId}&focus=${d.team}`}
+          >
+            See the whole game
+          </a>
+        </div>
       </div>
     </div>
   );
