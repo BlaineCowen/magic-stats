@@ -25,3 +25,8 @@ data/nfl/
 
 # TypeScript incremental build cache
 tsconfig.tsbuildinfo
+
+# 4th down model training env and intermediate data
+scripts/fourth-down/.venv/
+scripts/fourth-down/work/
+scripts/fourth-down/__pycache__/
