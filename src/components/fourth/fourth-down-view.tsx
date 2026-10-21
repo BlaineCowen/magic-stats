@@ -10,9 +10,11 @@ import { Calculator } from "./calculator";
 import { GameStudy } from "./game-study";
 import { SuperBowls } from "./super-bowls";
 import { Method } from "./method";
+import { Coaches } from "./coaches";
 
 const TABS = [
   { key: "super-bowls", label: "Shanahan's Super Bowls" },
+  { key: "coaches", label: "Coaches" },
   { key: "calculator", label: "Calculator" },
   { key: "game", label: "Any game" },
   { key: "method", label: "How it works" },
@@ -76,7 +78,7 @@ function GamePicker() {
       {gameId && (
         <GameStudy
           gameId={gameId}
-          focus={sel?.home ?? gameId.split("_")[3]!}
+          focus={params.get("focus") ?? sel?.home ?? gameId.split("_")[3]!}
           title={
             sel
               ? `${sel.away} at ${sel.home}, ${season}${sel.week > 18 ? " playoffs" : ` week ${sel.week}`}`
@@ -134,6 +136,7 @@ export function FourthDownView() {
         ))}
       </div>
       {tab === "calculator" && <Calculator initial={parseSituation(params)} />}
+      {tab === "coaches" && <Coaches />}
       {tab === "super-bowls" && <SuperBowls />}
       {tab === "game" && <GamePicker />}
       {tab === "method" && <Method />}

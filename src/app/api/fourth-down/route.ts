@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { decide, type Situation } from "@/lib/fourth/engine";
+import { coachReport } from "@/lib/fourth/coaches";
 import { analyzeGame, listGames } from "@/lib/fourth/games";
 import { parseSituation } from "@/lib/fourth/params";
 
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
   try {
     const game = params.get("game");
     if (game) return NextResponse.json(await analyzeGame(game));
+    if (params.has("coaches")) return NextResponse.json(coachReport());
     const season = params.get("games");
     if (season) return NextResponse.json(await listGames(Number(season)));
     const situation: Situation = parseSituation(params);

@@ -1,3 +1,4 @@
 
 # trained 4th down models (compact JSON written by scripts/fourth-down/export.py)
 src/lib/fourth/models/
+src/lib/fourth/data/
