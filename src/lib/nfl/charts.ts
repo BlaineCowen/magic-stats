@@ -6,6 +6,8 @@ import {
   type ChartData,
   type ChartFilters,
   type ChartKind,
+  type LuckPoint,
+  POSITIONS,
   type QbPoint,
   type TeamPoint,
   type TeamWeek,
@@ -30,7 +32,7 @@ const intList = (allowed: number[]) =>
     });
 
 const paramsSchema = z.object({
-  chart: z.enum(["teams", "qbs"]).default("teams"),
+  chart: z.enum(["teams", "qbs", "luck"]).default("teams"),
   seasonFrom: int.optional(),
   seasonTo: int.optional(),
   weekFrom: int.min(1).max(18).optional(),
@@ -42,6 +44,7 @@ const paramsSchema = z.object({
   qtrs: intList(ALL_QTRS),
   plays: z.enum(["all", "pass", "run"]).default("all"),
   minPlays: int.min(1).max(20000).optional(),
+  pos: z.enum(POSITIONS).default("all"),
 });
 
 export class ChartParamsError extends Error {}
@@ -100,6 +103,7 @@ export async function resolveParams(params: URLSearchParams): Promise<{
       // Runs have no CPOE, so a runs-only QB chart would be empty.
       plays: p.chart === "qbs" && p.plays === "run" ? "all" : p.plays,
       minPlays: p.minPlays ?? null,
+      pos: p.pos,
     },
   };
 }
@@ -282,6 +286,62 @@ async function quarterbacks(
   };
 }
 
+/**
+ * Actual vs expected PPR points (ffopportunity) per player. Fantasy-relevant
+ * players only: at least 40% of the games in the range and 6+ expected points
+ * per game, capped at the 70 biggest expected workloads so the chart stays
+ * readable.
+ */
+async function fantasyLuck(f: ChartFilters): Promise<LuckPoint[]> {
+  const weeks = `season_type = 'REG' AND week BETWEEN ${f.weekFrom} AND ${f.weekTo}`;
+  const phase =
+    f.playoffs === "only"
+      ? "season_type = 'POST'"
+      : f.playoffs === "include"
+        ? `(season_type = 'POST' OR (${weeks}))`
+        : weeks;
+  const pos =
+    f.pos === "all"
+      ? "position IN ('QB', 'RB', 'WR', 'TE')"
+      : `position = '${f.pos}'`;
+  const { rows } = await runSafeSelect(`
+    WITH g AS (
+      SELECT * FROM xfp
+      WHERE season BETWEEN ${f.seasonFrom} AND ${f.seasonTo} AND ${phase} AND ${pos}
+    ),
+    agg AS (
+      SELECT player_id AS id, any_value(player_name) AS name, any_value(position) AS position,
+        arg_max(team, season * 100 + week) AS team, count(*) AS games,
+        sum(fantasy_points) AS points, sum(fantasy_points_exp) AS expected,
+        sum(coalesce(targets, 0) + coalesce(carries, 0)) AS opportunities
+      FROM g GROUP BY player_id
+    ),
+    span AS (SELECT max(games) AS n FROM agg)
+    SELECT a.*, t.team_color, t.team_color2
+    FROM agg a LEFT JOIN teams t ON t.team_abbr = a.team
+    WHERE a.games >= greatest(1, 0.4 * (SELECT n FROM span))
+      AND a.expected / a.games >= 6
+    ORDER BY a.expected DESC
+    LIMIT 70`);
+  return rows.map((r) => {
+    const games = num(r.games);
+    return {
+      id: String(r.id),
+      name: String(r.name),
+      position: String(r.position),
+      team: String(r.team),
+      team_color: str(r.team_color),
+      team_color2: str(r.team_color2),
+      games,
+      points: num(r.points),
+      expected: num(r.expected),
+      ppg: num(r.points) / games,
+      xppg: num(r.expected) / games,
+      opportunities: num(r.opportunities),
+    };
+  });
+}
+
 export async function buildChart(params: URLSearchParams): Promise<ChartData> {
   const started = Date.now();
   const { chart, filters, seasons } = await resolveParams(params);
@@ -300,6 +360,17 @@ export async function buildChart(params: URLSearchParams): Promise<ChartData> {
       minPlays: null,
       teams,
       weekly,
+      ms: Date.now() - started,
+    };
+  }
+  if (chart === "luck") {
+    const luck = await fantasyLuck(filters);
+    return {
+      chart,
+      filters,
+      seasons,
+      minPlays: null,
+      luck,
       ms: Date.now() - started,
     };
   }

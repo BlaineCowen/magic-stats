@@ -1,8 +1,10 @@
 // Shared by the /api/charts route and the chart components (no server imports).
 
-export type ChartKind = "teams" | "qbs";
+export type ChartKind = "teams" | "qbs" | "luck";
 export type Playoffs = "none" | "include" | "only";
 export type PlayType = "all" | "pass" | "run";
+export const POSITIONS = ["all", "QB", "RB", "WR", "TE"] as const;
+export type Position = (typeof POSITIONS)[number];
 
 export type ChartFilters = {
   seasonFrom: number;
@@ -19,6 +21,8 @@ export type ChartFilters = {
   plays: PlayType;
   /** QB chart only; null means 40% of a typical team's QB plays in the range. */
   minPlays: number | null;
+  /** Fantasy luck chart only. */
+  pos: Position;
 };
 
 export const ALL_DOWNS = [1, 2, 3, 4];
@@ -64,6 +68,23 @@ export type QbPoint = {
   success: number;
 };
 
+/** One player's actual vs expected PPR points over the filtered games. */
+export type LuckPoint = {
+  id: string;
+  name: string;
+  position: string;
+  team: string;
+  team_color: string | null;
+  team_color2: string | null;
+  games: number;
+  points: number;
+  expected: number;
+  /** Per game. */
+  ppg: number;
+  xppg: number;
+  opportunities: number;
+};
+
 export type ChartData = {
   chart: ChartKind;
   filters: ChartFilters;
@@ -74,6 +95,7 @@ export type ChartData = {
   /** Team chart, single season only: every team's week-by-week sums. */
   weekly?: TeamWeek[];
   qbs?: QbPoint[];
+  luck?: LuckPoint[];
   ms: number;
 };
 
@@ -94,7 +116,23 @@ function describeList(
 }
 
 /** One-line summary under the chart title, in the style of rbsdm.com. */
-export function describeFilters(f: ChartFilters, minPlays?: number | null) {
+export function describeFilters(
+  f: ChartFilters,
+  minPlays?: number | null,
+  chart: ChartKind = "teams",
+) {
+  if (chart === "luck") {
+    return [
+      f.seasonFrom === f.seasonTo
+        ? String(f.seasonFrom)
+        : `${f.seasonFrom}-${f.seasonTo}`,
+      f.playoffs === "only"
+        ? "playoffs only"
+        : `reg. weeks ${f.weekFrom}-${f.weekTo}${f.playoffs === "include" ? " + playoffs" : ""}`,
+      f.pos === "all" ? "QB, RB, WR, TE" : `${f.pos}s`,
+      "PPR",
+    ].join(", ");
+  }
   const parts = [
     f.seasonFrom === f.seasonTo
       ? String(f.seasonFrom)

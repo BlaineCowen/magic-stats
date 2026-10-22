@@ -12,14 +12,17 @@ import {
   type ChartKind,
   type PlayType,
   type Playoffs,
+  POSITIONS,
 } from "@/lib/nfl/chart-types";
 import { downloadSvgAsPng, pct, signed } from "./chart-kit";
+import { LuckChart } from "./luck-chart";
 import { QbChart } from "./qb-chart";
 import { TeamTiersChart, type PathMode } from "./team-tiers-chart";
 
 const TABS: { kind: ChartKind; label: string }[] = [
   { kind: "teams", label: "Team tiers" },
   { kind: "qbs", label: "Quarterbacks" },
+  { kind: "luck", label: "Fantasy luck" },
 ];
 
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
@@ -39,6 +42,7 @@ function toQuery(f: ChartFilters): string {
     plays: f.plays,
   });
   if (f.minPlays) p.set("minPlays", String(f.minPlays));
+  if (f.pos !== "all") p.set("pos", f.pos);
   return p.toString();
 }
 
@@ -62,6 +66,10 @@ function summarize(f: ChartFilters, chart: ChartKind): string {
       ? "Playoffs only"
       : `Weeks ${f.weekFrom}–${f.weekTo}${f.playoffs === "include" ? " + playoffs" : ""}`,
   ];
+  if (chart === "luck") {
+    parts.push(f.pos === "all" ? "All positions" : `${f.pos}s`);
+    return parts.join(" · ");
+  }
   if (f.wpMin !== 0 || f.wpMax !== 100)
     parts.push(`Win prob ${f.wpMin}–${f.wpMax}%`);
   if (f.downs.length !== ALL_DOWNS.length)
@@ -183,6 +191,7 @@ function DataTable({ data }: { data: ChartData }) {
     "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 font-medium whitespace-nowrap text-slate-600";
   const num = "px-3 py-1.5 text-right tabular-nums";
   const txt = "px-3 py-1.5 text-left";
+  if (data.luck) return <LuckTable data={data} />;
   const cols = data.teams
     ? [
         "#",
@@ -253,6 +262,65 @@ function DataTable({ data }: { data: ChartData }) {
   );
 }
 
+function LuckTable({ data }: { data: ChartData }) {
+  const th =
+    "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 font-medium whitespace-nowrap text-slate-600";
+  const num = "px-3 py-1.5 text-right tabular-nums";
+  const txt = "px-3 py-1.5 text-left";
+  const rows = [...(data.luck ?? [])].sort(
+    (a, b) => b.points - b.expected - (a.points - a.expected),
+  );
+  const plus = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+  const cols = [
+    "#",
+    "Player",
+    "Pos",
+    "Team",
+    "PPR/game",
+    "Expected/game",
+    "Over expected",
+    "Games",
+  ];
+  return (
+    <table className="w-full border-separate border-spacing-0 text-sm">
+      <thead>
+        <tr>
+          {cols.map((h, i) => (
+            <th
+              key={h}
+              scope="col"
+              className={cn(
+                th,
+                [1, 2, 3].includes(i) ? "text-left" : "text-right",
+              )}
+            >
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="[&>tr:nth-child(even)]:bg-slate-50/60 [&>tr>td]:border-b [&>tr>td]:border-slate-100">
+        {rows.map((p, i) => (
+          <tr key={p.id}>
+            <td className={cn(num, "text-slate-400")}>{i + 1}</td>
+            <td className={cn(txt, "font-medium whitespace-nowrap")}>
+              {p.name}
+            </td>
+            <td className={txt}>{p.position}</td>
+            <td className={txt}>{p.team}</td>
+            <td className={num}>{p.ppg.toFixed(1)}</td>
+            <td className={num}>{p.xppg.toFixed(1)}</td>
+            <td className={cn(num, "font-medium")}>
+              {plus(p.points - p.expected)}
+            </td>
+            <td className={num}>{p.games}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 type PresetKey = "this" | "last4" | "last";
 
 export function ChartsView() {
@@ -262,7 +330,8 @@ export function ChartsView() {
   const svgRef = useRef<SVGSVGElement>(null);
 
   const [chart, setChart] = useState<ChartKind>(
-    searchParams.get("chart") === "qbs" ? "qbs" : "teams",
+    (["qbs", "luck"] as const).find((k) => k === searchParams.get("chart")) ??
+      "teams",
   );
   // Whatever the URL asked for; the server fills in defaults it leaves out.
   const [query, setQuery] = useState(() => {
@@ -377,7 +446,7 @@ export function ChartsView() {
           : `${f.seasonFrom}-${f.seasonTo}`;
       await downloadSvgAsPng(
         svgRef.current,
-        `${chart === "teams" ? "team-tiers" : "quarterbacks"}-${seasons}.png`,
+        `${{ teams: "team-tiers", qbs: "quarterbacks", luck: "fantasy-luck" }[chart]}-${seasons}.png`,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export failed");
@@ -454,7 +523,8 @@ export function ChartsView() {
 
   // Only show a chart that matches the selected tab (not the previous one).
   const shown = data?.chart === chart ? data : null;
-  const empty = shown && (shown.teams ?? shown.qbs ?? []).length === 0;
+  const empty =
+    shown && (shown.teams ?? shown.qbs ?? shown.luck ?? []).length === 0;
   const busy = loading;
 
   const presets: {
@@ -481,15 +551,19 @@ export function ChartsView() {
       on: presetOn("last"),
       run: () => applyPreset("last"),
     },
-    {
-      key: "neutral",
-      label: "Neutral situations (win prob 20–80%)",
-      on: neutral,
-      run: () =>
-        neutral
-          ? update({ wpMin: 0, wpMax: 100 })
-          : update({ wpMin: 20, wpMax: 80 }),
-    },
+    ...(chart === "luck"
+      ? []
+      : [
+          {
+            key: "neutral",
+            label: "Neutral situations (win prob 20–80%)",
+            on: neutral,
+            run: () =>
+              neutral
+                ? update({ wpMin: 0, wpMax: 100 })
+                : update({ wpMin: 20, wpMax: 80 }),
+          },
+        ]),
   ];
 
   const btnCls = cn(
@@ -702,71 +776,107 @@ export function ChartsView() {
                 </select>
               </Field>
 
-              <Field label="Win probability">
-                <select
-                  aria-label="Minimum win probability"
-                  className={selectCls}
-                  value={filters.wpMin}
-                  onChange={(e) => update({ wpMin: Number(e.target.value) })}
-                >
-                  {WP_STEPS.map((v) => (
-                    <option key={v} value={v}>
-                      {v}%
-                    </option>
-                  ))}
-                </select>
-                <span className="text-slate-400">to</span>
-                <select
-                  aria-label="Maximum win probability"
-                  className={selectCls}
-                  value={filters.wpMax}
-                  onChange={(e) => update({ wpMax: Number(e.target.value) })}
-                >
-                  {WP_STEPS.map((v) => (
-                    <option key={v} value={v}>
-                      {v}%
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              {chart === "luck" ? (
+                <Field label="Position">
+                  <div
+                    role="group"
+                    aria-label="Position"
+                    className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-white"
+                  >
+                    {POSITIONS.map((pos) => (
+                      <button
+                        key={pos}
+                        type="button"
+                        aria-pressed={filters.pos === pos}
+                        onClick={() => update({ pos })}
+                        className={cn(
+                          "font-display flex-1 border-l border-slate-300 px-2 py-1 text-base font-semibold first:border-l-0 focus-visible:-outline-offset-2",
+                          focusCls,
+                          filters.pos === pos
+                            ? "bg-turf-950 text-white"
+                            : "text-slate-600 hover:bg-slate-50",
+                        )}
+                      >
+                        {pos === "all" ? "All" : pos}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              ) : (
+                <>
+                  <Field label="Win probability">
+                    <select
+                      aria-label="Minimum win probability"
+                      className={selectCls}
+                      value={filters.wpMin}
+                      onChange={(e) =>
+                        update({ wpMin: Number(e.target.value) })
+                      }
+                    >
+                      {WP_STEPS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}%
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-slate-400">to</span>
+                    <select
+                      aria-label="Maximum win probability"
+                      className={selectCls}
+                      value={filters.wpMax}
+                      onChange={(e) =>
+                        update({ wpMax: Number(e.target.value) })
+                      }
+                    >
+                      {WP_STEPS.map((v) => (
+                        <option key={v} value={v}>
+                          {v}%
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
 
-              <Field label="Downs">
-                <Chips
-                  name="Downs"
-                  values={ALL_DOWNS}
-                  selected={filters.downs}
-                  onChange={(downs) => update({ downs })}
-                />
-              </Field>
+                  <Field label="Downs">
+                    <Chips
+                      name="Downs"
+                      values={ALL_DOWNS}
+                      selected={filters.downs}
+                      onChange={(downs) => update({ downs })}
+                    />
+                  </Field>
 
-              <Field label="Quarters">
-                <Chips
-                  name="Quarters"
-                  values={ALL_QTRS}
-                  selected={filters.qtrs}
-                  label={(q) => (q === 5 ? "OT" : String(q))}
-                  onChange={(qtrs) => update({ qtrs })}
-                />
-              </Field>
+                  <Field label="Quarters">
+                    <Chips
+                      name="Quarters"
+                      values={ALL_QTRS}
+                      selected={filters.qtrs}
+                      label={(q) => (q === 5 ? "OT" : String(q))}
+                      onChange={(qtrs) => update({ qtrs })}
+                    />
+                  </Field>
 
-              <Field label="Plays">
-                <select
-                  aria-label="Plays"
-                  className={selectCls}
-                  value={filters.plays}
-                  onChange={(e) =>
-                    update({ plays: e.target.value as PlayType })
-                  }
-                >
-                  <option value="all">
-                    {chart === "qbs"
-                      ? "Dropbacks and QB runs"
-                      : "Dropbacks and runs"}
-                  </option>
-                  <option value="pass">Dropbacks only</option>
-                  {chart === "teams" && <option value="run">Runs only</option>}
-                </select>
-              </Field>
+                  <Field label="Plays">
+                    <select
+                      aria-label="Plays"
+                      className={selectCls}
+                      value={filters.plays}
+                      onChange={(e) =>
+                        update({ plays: e.target.value as PlayType })
+                      }
+                    >
+                      <option value="all">
+                        {chart === "qbs"
+                          ? "Dropbacks and QB runs"
+                          : "Dropbacks and runs"}
+                      </option>
+                      <option value="pass">Dropbacks only</option>
+                      {chart === "teams" && (
+                        <option value="run">Runs only</option>
+                      )}
+                    </select>
+                  </Field>
+                </>
+              )}
 
               {chart === "qbs" && (
                 <Field label="Minimum plays">
@@ -812,8 +922,8 @@ export function ChartsView() {
           )
         ) : empty ? (
           <div className="flex aspect-[1000/680] items-center justify-center p-6 text-center text-sm text-slate-500">
-            No {chart === "teams" ? "teams" : "quarterbacks"} match these
-            filters
+            No {{ teams: "teams", qbs: "quarterbacks", luck: "players" }[chart]}{" "}
+            match these filters
             {chart === "qbs" && ". Try lowering the minimum plays"}.
           </div>
         ) : (
@@ -823,7 +933,9 @@ export function ChartsView() {
               busy && "pointer-events-none opacity-40",
             )}
           >
-            {chart === "teams" ? (
+            {chart === "luck" ? (
+              <LuckChart data={shown} svgRef={svgRef} />
+            ) : chart === "teams" ? (
               <TeamTiersChart
                 data={shown}
                 svgRef={svgRef}
@@ -869,7 +981,7 @@ export function ChartsView() {
             </svg>
             Show data
             <span className="font-normal text-slate-500">
-              {(shown.teams ?? shown.qbs ?? []).length} rows
+              {(shown.teams ?? shown.qbs ?? shown.luck ?? []).length} rows
             </span>
           </summary>
           <div className="max-h-[28rem] overflow-auto border-t border-slate-200">
@@ -878,13 +990,25 @@ export function ChartsView() {
         </details>
       )}
 
-      <p className="mt-4 max-w-3xl text-sm text-slate-500">
-        EPA (expected points added) per play counts dropbacks (passes, sacks,
-        scrambles) and runs. On the team chart the defense axis is flipped, so
-        defenses that give up fewer points sit higher. Win probability is from
-        each team&apos;s own side, so on defense it is the defending team&apos;s
-        chance of winning. Charts in the style of Ben Baldwin&apos;s rbsdm.com.
-      </p>
+      {chart === "luck" ? (
+        <p className="mt-4 max-w-3xl text-sm text-slate-500">
+          Expected points come from the ffopportunity model: what an average
+          player would score with the same targets, carries, depth and field
+          position. Players far above the line are getting more out of their
+          usage than it usually yields, which tends not to last; players below
+          it are the buy-low candidates. Shows fantasy-relevant players only (6+
+          expected PPR points per game).
+        </p>
+      ) : (
+        <p className="mt-4 max-w-3xl text-sm text-slate-500">
+          EPA (expected points added) per play counts dropbacks (passes, sacks,
+          scrambles) and runs. On the team chart the defense axis is flipped, so
+          defenses that give up fewer points sit higher. Win probability is from
+          each team&apos;s own side, so on defense it is the defending
+          team&apos;s chance of winning. Charts in the style of Ben
+          Baldwin&apos;s rbsdm.com.
+        </p>
+      )}
       <Toaster position="bottom-center" />
     </div>
   );

@@ -83,7 +83,12 @@ TODAY is ${today}. That is later than your training data, so never assume an ear
 ${p.seasonContext(info)}
 
 RULES
-${p.rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
+${[
+  ...p.rules,
+  `"How many" or "total" for one player or team over a span is one summed row (with games played as the sample), not a game log. Return one row per game only when asked for each game, a game log or a week-by-week view.`,
+]
+  .map((r, i) => `${i + 1}. ${r}`)
+  .join("\n")}
 
 TABLES
 ${tables.join("\n\n")}

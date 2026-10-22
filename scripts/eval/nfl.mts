@@ -2,6 +2,35 @@ import { leaders, type Case } from "./types.mts";
 
 // NFL cases: reference SQL runs against data/nfl.
 export const CASES: Case[] = [
+  // Paid-site stats: expected fantasy points, Next Gen Stats, FTN, QBR, contracts, snaps.
+  { q: "Who is most due for positive fantasy regression this season?", fuzzy: true },
+  {
+    q: "Which receivers get the most separation this season, at least 30 targets?",
+    ref: "SELECT player_display_name n, avg_separation v FROM ngs_receiving WHERE season = 2026 AND week = 0 AND season_type = 'REG' AND targets >= 30 ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  {
+    q: "Who has the most rush yards over expected this season?",
+    ref: "SELECT player_display_name n, rush_yards_over_expected v FROM ngs_rushing WHERE season = 2026 AND week = 0 AND season_type = 'REG' ORDER BY v DESC LIMIT 20",
+    pick: (r) => ({ oneOf: [String(r[0]!.n)] }),
+    scope: "top1",
+  },
+  {
+    q: "Which qualified QB had the highest QBR in 2025?",
+    ref: "SELECT player_name n, qbr_total v FROM qbr_season WHERE season = 2025 AND season_type = 'Regular' AND qualified ORDER BY v DESC LIMIT 20",
+    pick: (r) => ({ oneOf: [String(r[0]!.n)] }),
+    scope: "top1",
+  },
+  {
+    q: "Who had the most created receptions in 2025?",
+    ref: "SELECT p.receiver_full_name n, count(*) v FROM pbp p JOIN ftn f USING (game_id, play_id) WHERE p.season = 2025 AND p.season_type = 'REG' AND p.complete_pass = 1 AND f.is_created_reception GROUP BY p.receiver_id, n ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  { q: "Who is the most overpaid quarterback this season?", fuzzy: true },
+  { q: "Which running back has the highest snap share this season?", fuzzy: true },
+  { q: "Which defenses blitz the most this season?", fuzzy: true },
   // Slang and opinion questions: any sensible stand-in passes.
   { q: "What team is the biggest fraud?", fuzzy: true },
   { q: "What qb is carried the most by their receivers?", fuzzy: true },

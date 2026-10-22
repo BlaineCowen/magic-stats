@@ -16,6 +16,8 @@ import { fileURLToPath } from "node:url";
 import { DuckDBInstance } from "@duckdb/node-api";
 
 const RELEASES = "https://github.com/nflverse/nflverse-data/releases/download";
+const FFOPP =
+  "https://github.com/ffverse/ffopportunity/releases/download/latest-data";
 const FIRST_SEASON = 1999;
 // Upstream files are snappy; zstd 19 is ~42% smaller and decompresses just as fast.
 const ZSTD_LEVEL = 19;
@@ -66,6 +68,45 @@ const DATASETS = [
     url: (y) => `${RELEASES}/pfr_advstats/advstats_week_${k}_${y}.parquet`,
     order: ["pfr_player_id", "week"],
   })),
+  // Expected fantasy points per player per game (ffopportunity model).
+  {
+    name: "xfp",
+    first: 2006,
+    url: (y) => `${FFOPP}/ep_weekly_${y}.parquet`,
+    order: ["game_id", "player_id"],
+  },
+  // FTN hand charting per play: play action, motion, blitzers, drops...
+  {
+    name: "ftn",
+    first: 2022,
+    url: (y) => `${RELEASES}/ftn_charting/ftn_charting_${y}.parquet`,
+    order: ["nflverse_game_id", "nflverse_play_id"],
+  },
+  {
+    name: "snaps",
+    first: 2012,
+    url: (y) => `${RELEASES}/snap_counts/snap_counts_${y}.parquet`,
+    order: ["game_id", "pfr_player_id"],
+  },
+  // Next Gen Stats (tracking): separation, time to throw, rush yards over expected.
+  ...["passing", "receiving", "rushing"].map((k) => ({
+    name: `ngs_${k}`,
+    single: true,
+    url: () => `${RELEASES}/nextgen_stats/ngs_${k}.parquet`,
+    order: ["season", "week"],
+  })),
+  ...["week", "season"].map((k) => ({
+    name: `qbr_${k}`,
+    single: true,
+    url: () => `${RELEASES}/espn_data/qbr_${k}_level.parquet`,
+    order: ["season"],
+  })),
+  {
+    name: "contracts",
+    single: true,
+    url: () => `${RELEASES}/contracts/historical_contracts.parquet`,
+    order: ["player", "year_signed"],
+  },
   {
     name: "games",
     single: true,

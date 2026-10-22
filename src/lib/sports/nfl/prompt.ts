@@ -172,7 +172,138 @@ const PFR_DEF_COLS: Col[] = [
   ["def_tackles_combined, def_missed_tackles", ""],
 ];
 
-const FUZZY = `- broken tackles, drops, bad throws, pressure, missed tackles, yards after contact: the pfr_* tables (2018 on). SUM per player_id, pfr_player_name; filter game_type = 'REG' for the regular season. Their counts are often NULL, so wrap each in coalesce(x, 0) before adding columns together. "Broken tackles" for a runner means rushing_broken_tackles unless the question says catches too.
+const XFP_COLS: Col[] = [
+  ["season, week, season_type, game_id", "season_type 'REG' or 'POST'"],
+  [
+    "player_id, player_name, position, team",
+    "player_id is the gsis id (joins player_week.player_id)",
+  ],
+  ["targets, carries, pass_attempts", ""],
+  ["receptions, receptions_exp", "actual and expected catches"],
+  [
+    "rec_yards, rec_yards_exp, rush_yards, rush_yards_exp, pass_yards, pass_yards_exp",
+    "",
+  ],
+  ["touchdowns, touchdowns_exp", "all TDs scored, actual and expected"],
+  [
+    "rec_air_yards, team_air_yards, team_targets, team_carries",
+    "team totals in the same game, for shares",
+  ],
+  [
+    "fantasy_points, fantasy_points_exp, fantasy_points_diff",
+    "PPR: actual, expected from the player's usage, actual minus expected",
+  ],
+  [
+    "pass_fantasy_points, pass_fantasy_points_exp, rec_fantasy_points, rec_fantasy_points_exp, rush_fantasy_points, rush_fantasy_points_exp",
+    "by phase",
+  ],
+];
+const NGS_COMMON: Col = [
+  "season, season_type, week, player_display_name, player_position, player_id, team",
+  "week 0 = whole season (season_type 'REG'); only players over the NFL's weekly minimum appear",
+];
+const NGS_PASS_COLS: Col[] = [
+  NGS_COMMON,
+  [
+    "attempts, completions, pass_yards, pass_touchdowns, interceptions, passer_rating",
+    "",
+  ],
+  ["avg_time_to_throw", "seconds"],
+  ["aggressiveness", "% of throws into tight coverage"],
+  [
+    "avg_intended_air_yards, avg_completed_air_yards, avg_air_yards_to_sticks",
+    "",
+  ],
+  [
+    "expected_completion_percentage, completion_percentage_above_expectation",
+    "percent units",
+  ],
+];
+const NGS_REC_COLS: Col[] = [
+  NGS_COMMON,
+  ["targets, receptions, yards, rec_touchdowns, catch_percentage", ""],
+  ["avg_separation", "yards from the nearest defender when the ball arrives"],
+  ["avg_cushion", "yards off the receiver at the snap"],
+  ["avg_intended_air_yards, percent_share_of_intended_air_yards", ""],
+  ["avg_yac, avg_expected_yac, avg_yac_above_expectation", ""],
+];
+const NGS_RUSH_COLS: Col[] = [
+  NGS_COMMON,
+  ["rush_attempts, rush_yards, avg_rush_yards, rush_touchdowns", ""],
+  [
+    "expected_rush_yards, rush_yards_over_expected, rush_yards_over_expected_per_att, rush_pct_over_expected",
+    "RYOE",
+  ],
+  ["percent_attempts_gte_eight_defenders", "% of carries vs 8+ in the box"],
+  [
+    "efficiency, avg_time_to_los",
+    "distance run per yard gained; seconds to the line",
+  ],
+];
+const FTN_COLS: Col[] = [
+  ["game_id, play_id", "JOIN pbp USING (game_id, play_id); 2022 on"],
+  ["season, week", ""],
+  [
+    "is_play_action, is_motion, is_screen_pass, is_rpo, is_trick_play, is_qb_sneak",
+    "booleans",
+  ],
+  [
+    "is_qb_out_of_pocket, is_throw_away, is_interception_worthy",
+    "interception_worthy = a bad decision whether or not it was picked",
+  ],
+  [
+    "is_catchable_ball, is_contested_ball, is_created_reception, is_drop",
+    "created = a tough catch the receiver made himself",
+  ],
+  ["n_blitzers, n_pass_rushers, n_defense_box, n_offense_backfield", ""],
+  ["qb_location", "'S' shotgun, 'U' under center, 'P' pistol"],
+];
+const SNAP_COLS: Col[] = [
+  [
+    "season, week, game_type, game_id, player, player_id, position, team, opponent",
+    "game_type 'REG' or playoff codes",
+  ],
+  [
+    "offense_snaps, offense_pct, defense_snaps, defense_pct, st_snaps, st_pct",
+    "pct is a 0-1 share of the team's snaps",
+  ],
+];
+const QBR_COLS: Col[] = [
+  [
+    "season, season_type, team, player_name, qualified",
+    "season_type 'Regular' or 'Playoffs'",
+  ],
+  ["qbr_total", "ESPN Total QBR, 0-100"],
+  ["pts_added, qb_plays, epa_total", ""],
+];
+const CONTRACT_COLS: Col[] = [
+  [
+    "player_name, player_id, position, team, is_active",
+    "one row per contract; is_active = the current deal",
+  ],
+  ["year_signed, years, value, apy, guaranteed", "millions of dollars"],
+  ["apy_cap_pct", "0-1 share of the cap when signed"],
+  ["draft_year, draft_round, draft_overall", ""],
+];
+const CONTRACT_YEAR_COLS: Col[] = [
+  [
+    "player_name, player_id, position, season, team",
+    "one row per player per season",
+  ],
+  [
+    "cap_number, cash_paid, base_salary, guaranteed_salary",
+    "millions of dollars",
+  ],
+  ["cap_percent", "percent units (5.2 = 5.2% of the cap)"],
+];
+
+const FUZZY = `- expected fantasy points / "due for regression" / lucky or unlucky in fantasy: xfp. SUM(fantasy_points_diff) per player; most negative = unlucky (due to bounce back), most positive = lucky (due to fall off). Show games, opportunities (targets + carries), actual and expected points.
+- separation, cushion, YAC over expected, time to throw, aggressiveness, rush yards over expected (RYOE), stacked boxes: the ngs_* tables (week 0 for season numbers).
+- play action, motion, RPOs, screens, blitzes, contested or catchable targets, drops, created receptions, interception-worthy throws: pbp JOIN ftn USING (game_id, play_id), 2022 on.
+- QBR: qbr_season or qbr_week.
+- "overpaid" / "bad contract" / value per dollar: contract_years cap_number for that season joined on player_id to production (player_week fantasy points or EPA); rank cost per point. "Best value" is the reverse.
+- snap share, "plays every snap", "barely plays": snaps.offense_pct.
+- broken tackles, drops, bad throws, pressure, missed tackles, yards after contact: the pfr_* tables (2018 on). SUM per player_id, pfr_player_name; filter game_type = 'REG' for the regular season. Their counts are often NULL, so wrap each in coalesce(x, 0) before adding columns together. "Broken tackles" for a runner means rushing_broken_tackles unless the question says catches too.
 - "fraud" team: won more than its points say it should. From team_games: wins - games * POW(pf, 2.37) / (POW(pf, 2.37) + POW(pa, 2.37)) where pf/pa are summed points; higher = bigger fraud. Show record, point differential and expected wins. "Unlucky" is the reverse.
 - "lucky": record in one-score games (ABS(points_for - points_against) <= 8).
 - QB "carried by his receivers" / YAC merchant: on completions (pbp complete_pass = 1), SUM(yards_after_catch) / SUM(passing_yards) is the share of his yards gained after the catch; also SUM(yards_after_catch - xyac_mean_yardage) = YAC over expected. Min 100 completions for a season.
@@ -226,6 +357,15 @@ Q: Scatter of QB CPOE vs EPA per dropback from 2022 to 2023, min 400 dropbacks
 
 Q: Chart the Bills and Chiefs point differential by season since 2018
 {"plan": "team_games BUF and KC REG since 2018, point differential per team per season.", "sql": "SELECT season, team, SUM(points_for) - SUM(points_against) AS point_diff, COUNT(*) AS games FROM team_games WHERE team IN ('BUF', 'KC') AND season_type = 'REG' AND season >= 2018 AND points_for IS NOT NULL GROUP BY season, team ORDER BY season, team", "chart": {"type": "line", "x": "season", "y": "point_diff", "label": "", "series": "team", "title": "Point differential by season"}}
+
+Q: Which players have been unluckiest in fantasy this season?
+{"plan": "xfp 2026 REG per player: actual minus expected PPR points, most negative first, min 40 opportunities.", "sql": "SELECT player_name, ARG_MAX(team, week) AS team, ANY_VALUE(position) AS position, COUNT(*) AS games, SUM(targets) + SUM(carries) AS opportunities, ROUND(SUM(fantasy_points), 1) AS ppr_points, ROUND(SUM(fantasy_points_exp), 1) AS expected_points, ROUND(SUM(fantasy_points_diff), 1) AS points_vs_expected FROM xfp WHERE season = 2026 AND season_type = 'REG' GROUP BY player_id, player_name HAVING SUM(targets) + SUM(carries) >= 40 ORDER BY SUM(fantasy_points_diff) ASC LIMIT 25", ${NO_CHART}}
+
+Q: Which receivers get the most separation?
+{"plan": "ngs_receiving season rows (week 0) for 2026, min 30 targets, by avg_separation.", "sql": "SELECT player_display_name, team, targets, ROUND(avg_separation, 2) AS avg_separation, ROUND(avg_cushion, 2) AS avg_cushion, ROUND(avg_yac_above_expectation, 2) AS yac_over_expected FROM ngs_receiving WHERE season = 2026 AND week = 0 AND season_type = 'REG' AND targets >= 30 ORDER BY avg_separation DESC LIMIT 25", ${NO_CHART}}
+
+Q: Best QBs on play action in 2025
+{"plan": "pbp dropbacks joined to ftn where is_play_action, 2025 REG, EPA per dropback, min 80.", "sql": "SELECT p.passer_full_name, ARG_MAX(p.posteam, p.game_id) AS team, COUNT(*) AS play_action_dropbacks, ROUND(AVG(p.epa), 3) AS epa_per_dropback FROM pbp p JOIN ftn f USING (game_id, play_id) WHERE p.season = 2025 AND p.season_type = 'REG' AND p.qb_dropback = 1 AND f.is_play_action GROUP BY p.passer_id, p.passer_full_name HAVING COUNT(*) >= 80 ORDER BY AVG(p.epa) DESC LIMIT 25", ${NO_CHART}}
 
 Q: Bar chart of the top 15 running backs by rushing EPA per carry in 2023, min 150 carries
 {"plan": "player_week RBs 2023 REG: rushing_epa / carries per player, min 150 carries, top 15.", "sql": "SELECT player_display_name, ARG_MAX(team, game_id) AS team, SUM(carries) AS carries, ROUND(SUM(rushing_epa) / SUM(carries), 3) AS epa_per_carry FROM player_week WHERE season = 2023 AND season_type = 'REG' AND position = 'RB' GROUP BY player_id, player_display_name HAVING SUM(carries) >= 150 ORDER BY SUM(rushing_epa) / SUM(carries) DESC LIMIT 15", "chart": {"type": "bar", "x": "", "y": "epa_per_carry", "label": "player_display_name", "series": "", "title": "Rushing EPA per carry, 2023 RBs"}}`;
@@ -312,6 +452,54 @@ export const nflPrompt: SportPrompt = {
       view: "pfr_def",
       title: () => "the same for defenders",
       cols: PFR_DEF_COLS,
+    },
+    {
+      view: "xfp",
+      title: () =>
+        "expected fantasy points (PPR), one row per player per game, 2006 on",
+      cols: XFP_COLS,
+    },
+    {
+      view: "ngs_passing",
+      title: () =>
+        "NFL Next Gen Stats tracking data for QBs, per week and season, 2016 on",
+      cols: NGS_PASS_COLS,
+    },
+    {
+      view: "ngs_receiving",
+      title: () => "Next Gen Stats for pass catchers",
+      cols: NGS_REC_COLS,
+    },
+    {
+      view: "ngs_rushing",
+      title: () => "Next Gen Stats for rushers",
+      cols: NGS_RUSH_COLS,
+    },
+    {
+      view: "ftn",
+      title: () => "FTN hand charting, one row per play",
+      cols: FTN_COLS,
+    },
+    {
+      view: "snaps",
+      title: () => "snap counts, one row per player per game, 2012 on",
+      cols: SNAP_COLS,
+    },
+    {
+      view: "qbr_season",
+      title: () =>
+        "ESPN Total QBR per QB per season (qbr_week: same columns plus week, opponent). Leaderboards: WHERE qualified",
+      cols: QBR_COLS,
+    },
+    {
+      view: "contracts",
+      title: () => "OverTheCap contracts",
+      cols: CONTRACT_COLS,
+    },
+    {
+      view: "contract_years",
+      title: () => "cap hit per player per season",
+      cols: CONTRACT_YEAR_COLS,
     },
   ],
   idioms: IDIOMS,

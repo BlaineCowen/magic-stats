@@ -57,7 +57,7 @@ const TOOLS: (Item & { example: string })[] = [
     href: "/magic-stats/charts",
     title: "NFL charts",
     blurb:
-      "Team tiers and quarterback efficiency, by season, week and situation.",
+      "Team tiers, quarterback efficiency and fantasy luck, by season, week and situation.",
     example: "Offense vs defense, all 32 teams",
     icon: BarChart3,
   },

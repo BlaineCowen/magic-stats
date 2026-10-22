@@ -5,7 +5,7 @@ import { ChartsView } from "@/components/charts/charts-view";
 export const metadata: Metadata = {
   title: "NFL Charts",
   description:
-    "Team tiers and quarterback efficiency by season, week and situation.",
+    "Team tiers, quarterback efficiency and fantasy luck by season, week and situation.",
 };
 
 export default function ChartsPage() {
@@ -17,7 +17,8 @@ export default function ChartsPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-lg text-slate-600">
           How good each offense, defense and quarterback really is, measured in
-          expected points added per play. Up and right is better.
+          expected points added per play, and which fantasy players are scoring
+          more or less than their usage is worth.
         </p>
       </header>
       {/* ChartsView reads the URL's search params, which needs a Suspense boundary. */}
