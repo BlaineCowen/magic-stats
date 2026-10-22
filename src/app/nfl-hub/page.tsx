@@ -134,11 +134,10 @@ export default function NflHub() {
         />
         <div className="relative mx-auto max-w-6xl px-4 pt-10 pb-8 sm:pt-14">
           <h1 className="font-display max-w-3xl text-5xl leading-[0.95] font-extrabold tracking-tight sm:text-7xl">
-            Win the argument.
+            Own your friends with based statistics.
           </h1>
           <p className="text-turf-100/85 mt-4 max-w-xl text-lg">
-            Stats, 4th down calls and fantasy tools, built on every NFL play
-            since 1999.
+            You are like Brad Pitt in Moneyball. You&apos;re cool as hell.
           </p>
           <div className="mt-8">
             <ScoreboardStrip />
