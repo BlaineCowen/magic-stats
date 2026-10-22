@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { MembersOnly } from "@/components/ask/members-only";
 import { NflQuery } from "@/components/nfl-query";
-import { TIER_LIMITS, TIER_NAME, viewerFrom } from "@/lib/query-limits";
+import {
+  isMember,
+  TIER_LIMITS,
+  TIER_NAME,
+  viewerFrom,
+} from "@/lib/query-limits";
 
 export const metadata: Metadata = {
   title: "Magic Stats",
@@ -10,7 +16,9 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const v = viewerFrom(await headers());
+  const h = await headers();
+  if (!isMember(h)) return <MembersOnly />;
+  const v = viewerFrom(h);
   const limits = TIER_LIMITS[v.tier];
   return (
     <NflQuery

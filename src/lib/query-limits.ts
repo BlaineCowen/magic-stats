@@ -65,6 +65,16 @@ function fromAuthProxy(h: Headers): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * Signed in through blaine-auth. nginx gates Magic Stats, but the app checks
+ * too, so the container's own port and any route nginx misses stay closed.
+ * With no AUTH_PROXY_SECRET (local dev) there is no proxy, so everyone is in.
+ */
+export function isMember(h: Headers): boolean {
+  if (!process.env.AUTH_PROXY_SECRET) return true;
+  return fromAuthProxy(h) && !!h.get("x-authentik-username");
+}
+
 export function viewerFrom(h: Headers): Viewer {
   const name = fromAuthProxy(h) ? h.get("x-authentik-username") : null;
   const raw = h.get("x-blaine-tier");
@@ -102,9 +112,7 @@ export function admit(
 
   const siteStamps = deep ? site.deep : site.fast;
   prune(siteStamps, now);
-  if (
-    siteStamps.length >= (deep ? SITE.deepPerDay : SITE.fastPerDay)
-  ) {
+  if (siteStamps.length >= (deep ? SITE.deepPerDay : SITE.fastPerDay)) {
     return {
       ok: false,
       status: 429,

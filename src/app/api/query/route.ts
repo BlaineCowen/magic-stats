@@ -10,7 +10,12 @@ import { proveClaim } from "@/lib/sports/prove/engine";
 import { isProofQuestion } from "@/lib/sports/prove/parse";
 import { stashAnswer } from "@/lib/sports/shares";
 import { isSport, type Sport } from "@/lib/sports/types";
-import { admit, MAX_QUESTION_CHARS, viewerFrom } from "@/lib/query-limits";
+import {
+  admit,
+  isMember,
+  MAX_QUESTION_CHARS,
+  viewerFrom,
+} from "@/lib/query-limits";
 
 // Deep mode waits on the model's thinking (~2-3 min on qwen 9B).
 export const maxDuration = 300;
@@ -24,6 +29,12 @@ type QueryRequest = {
 };
 
 export async function POST(request: Request) {
+  if (!isMember(request.headers)) {
+    return NextResponse.json(
+      { error: "Sign in to use Magic Stats." },
+      { status: 401 },
+    );
+  }
   const body = (await request.json().catch(() => ({}))) as QueryRequest;
   const query = body.query?.trim();
   const mode: QueryMode = body.mode === "deep" ? "deep" : "fast";

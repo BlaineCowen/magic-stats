@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
-import { viewerFrom } from "@/lib/query-limits";
+import { isMember, viewerFrom } from "@/lib/query-limits";
 import { allowShare, createShare } from "@/lib/sports/shares";
 
 export const runtime = "nodejs";
 
 type ShareRequest = { answer_id?: string; chart?: unknown };
 
-/** Turn a recent answer into a public page at /magic-stats/s/<id>. */
+/** Turn a recent answer into a public page at /share/<id>. */
 export async function POST(request: Request) {
+  if (!isMember(request.headers)) {
+    return NextResponse.json(
+      { error: "Sign in to use Magic Stats." },
+      { status: 401 },
+    );
+  }
   const body = (await request.json().catch(() => ({}))) as ShareRequest;
   if (typeof body.answer_id !== "string") {
     return NextResponse.json(
@@ -29,5 +35,5 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
-  return NextResponse.json({ id: share.id, url: `/magic-stats/s/${share.id}` });
+  return NextResponse.json({ id: share.id, url: `/share/${share.id}` });
 }

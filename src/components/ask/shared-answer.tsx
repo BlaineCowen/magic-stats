@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Toaster } from "react-hot-toast";
 import { SPORT_ASK } from "@/components/ask/examples";
 import { ProofResults } from "@/components/ask/proof-results";
@@ -65,15 +64,7 @@ export function SharedAnswer({ share }: { share: Share }) {
         </>
       )}
       <p className="mt-8 text-sm text-slate-500">
-        Answered by{" "}
-        <Link
-          href="/magic-stats"
-          className="text-turf-800 font-medium underline underline-offset-2"
-        >
-          Magic Stats
-        </Link>
-        , which turns plain-English sports questions into stats. Data from{" "}
-        {SPORT_ASK[share.sport].source}.
+        Answered by Magic Stats from {SPORT_ASK[share.sport].source} data.
       </p>
       <Toaster position="bottom-center" />
     </main>
