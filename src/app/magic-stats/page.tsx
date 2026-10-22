@@ -6,7 +6,7 @@ import { TIER_LIMITS, TIER_NAME, viewerFrom } from "@/lib/query-limits";
 export const metadata: Metadata = {
   title: "Magic Stats",
   description:
-    "Ask any NFL stats question in plain English. Answers come from every play since 1999.",
+    "Ask NFL, NBA and MLB stats questions in plain English, from play-by-play, box scores, advanced stats and Statcast.",
 };
 
 export default async function Home() {

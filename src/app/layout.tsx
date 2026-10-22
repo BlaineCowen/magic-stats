@@ -4,8 +4,8 @@ import { type Metadata } from "next";
 import { Inter } from "next/font/google";
 
 export const metadata: Metadata = {
-  title: "NFL Stats Query",
-  description: "Natural language NFL statistics search engine",
+  title: "Blaine's Sports Tools",
+  description: "NFL, NBA and MLB stats you can ask about in plain English",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 

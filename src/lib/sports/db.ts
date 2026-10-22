@@ -73,6 +73,7 @@ async function createDb(sport: Sport): Promise<DbState> {
   });
   const conn = await instance.connect();
   await spec.create({ run: (sql) => conn.run(sql).then(() => undefined), dir, has });
+  for (const s of spec.settings ?? []) await conn.run(s);
   // LLM-written SQL may only read this sport's data directory: no other files,
   // no network, and no changing these settings afterwards.
   await conn.run(`SET allowed_directories = [${sqlStr(`${dir}/`)}]`);
@@ -197,6 +198,10 @@ export type DataInfo = {
   maxSeasonType: string;
   /** Date of the latest game played, 'YYYY-MM-DD' (NBA, MLB). */
   latestDate: string | null;
+  /** Latest season in the season-level tables, which can lag the game logs (NBA). */
+  statsThrough: number | null;
+  /** Any other columns the sport's infoSql returned. */
+  extra: Row;
 };
 
 const infoCache = new Map<Sport, DataInfo>();
@@ -215,6 +220,8 @@ export async function getDataInfo(sport: Sport): Promise<DataInfo> {
     maxWeek: Number(r.max_week ?? 0),
     maxSeasonType: String(r.max_season_type ?? ""),
     latestDate: r.latest_date == null ? null : String(r.latest_date),
+    statsThrough: r.stats_through == null ? null : Number(r.stats_through),
+    extra: r,
   };
   infoCache.set(sport, info);
   return info;

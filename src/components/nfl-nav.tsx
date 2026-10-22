@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/nfl/", label: "Home" },
   { href: "/magic-stats", label: "Magic Stats" },
-  { href: "/magic-stats/charts", label: "Charts" },
-  { href: "/magic-stats/fourth-down", label: "4th down" },
+  { href: "/magic-stats/charts", label: "NFL charts" },
+  { href: "/magic-stats/fourth-down", label: "NFL 4th down" },
 ];
 
 function isActive(href: string, pathname: string) {
@@ -22,7 +22,7 @@ export function NflNav() {
   const pathname = usePathname();
   return (
     <nav
-      aria-label="NFL sections"
+      aria-label="Site sections"
       className="nfl-scroll-fade -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     >
       <ul className="font-display flex gap-6 text-lg font-semibold tracking-wide">

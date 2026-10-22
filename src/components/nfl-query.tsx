@@ -16,8 +16,15 @@ import {
   X,
 } from "lucide-react";
 import { QueryChart } from "@/components/charts/query-chart";
-import { EXAMPLE_GROUPS } from "@/components/ask/examples";
-import { loadRecent, pushRecent, saveRecent } from "@/components/ask/recent";
+import { SPORT_ASK } from "@/components/ask/examples";
+import {
+  loadRecent,
+  loadSport,
+  pushRecent,
+  saveRecent,
+  saveSport,
+  type RecentQuestion,
+} from "@/components/ask/recent";
 import { formatValue, ResultsTable } from "@/components/ask/results-table";
 import {
   inferSpec,
@@ -27,6 +34,7 @@ import {
   type ChartSpec,
   type TeamColors,
 } from "@/lib/nfl/chart-spec";
+import { isSport, SPORT_LABEL, SPORTS, type Sport } from "@/lib/sports/types";
 import { cn } from "@/lib/utils";
 
 // Stable references so an idle response doesn't hand QueryChart a new empty
@@ -120,6 +128,7 @@ export function NflQuery({
   debug?: boolean;
   viewer?: QueryViewer;
 }) {
+  const [sport, setSport] = useState<Sport>("nfl");
   const [query, setQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [response, setResponse] = useState<ApiResponse | null>(null);
@@ -127,7 +136,7 @@ export function NflQuery({
   const [elapsed, setElapsed] = useState(0);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<RecentQuestion[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   // The chart on screen; a new `key` remounts QueryChart so its controls
   // reset. `question` is the question it answers, shown as the subtitle.
@@ -163,8 +172,12 @@ export function NflQuery({
   useEffect(() => {
     setRecent(loadRecent());
     // ?q= prefills the box but never runs it: every question costs money.
-    const q = new URLSearchParams(window.location.search).get("q");
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
     if (q) setQuery(q);
+    // ?sport= wins, then the last sport this browser used, else NFL.
+    const fromUrl = params.get("sport");
+    setSport(isSport(fromUrl) ? fromUrl : (loadSport() ?? "nfl"));
     fetch("/api/ai-status")
       .then((r) => r.json())
       .then((d: AiStatus) => setAiStatus(d))
@@ -192,7 +205,18 @@ export function NflQuery({
     return () => clearInterval(id);
   }, [isLoading]);
 
-  const runQuery = async (raw: string, mode: Mode) => {
+  /** Switching sports clears the last answer, which belonged to the old one. */
+  const chooseSport = (next: Sport) => {
+    if (next === sport) return;
+    setSport(next);
+    saveSport(next);
+    setResponse(null);
+    setProblem(null);
+    setChart(null);
+    setLastQuery("");
+  };
+
+  const runQuery = async (raw: string, mode: Mode, asked: Sport = sport) => {
     const text = raw.trim();
     if (!text || isLoading) return;
     if (text.length > MAX_CHARS) {
@@ -212,7 +236,7 @@ export function NflQuery({
         res = await fetch("/api/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: text, mode, nocache: debug }),
+          body: JSON.stringify({ query: text, mode, sport: asked, nocache: debug }),
         });
       } catch {
         setResponse(null);
@@ -248,7 +272,7 @@ export function NflQuery({
           : null,
       );
       setRecent((r) => {
-        const next = pushRecent(r, text);
+        const next = pushRecent(r, { q: text, sport: asked });
         saveRecent(next);
         return next;
       });
@@ -257,6 +281,7 @@ export function NflQuery({
       try {
         const url = new URL(window.location.href);
         url.searchParams.set("q", text);
+        url.searchParams.set("sport", asked);
         window.history.replaceState(null, "", url);
       } catch {
         // not fatal
@@ -266,9 +291,12 @@ export function NflQuery({
     }
   };
 
-  const ask = (text: string) => {
+  const ask = (text: string, asked: Sport = sport) => {
+    if (asked !== sport) {
+      chooseSport(asked);
+    }
     setQuery(text);
-    void runQuery(text, "fast");
+    void runQuery(text, "fast", asked);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -282,7 +310,7 @@ export function NflQuery({
   };
 
   const debugText = () =>
-    `User Query: ${lastQuery}\n\nSQL Generated: ${response?.sql ?? ""}\n\n${
+    `Sport: ${SPORT_LABEL[sport]}\nUser Query: ${lastQuery}\n\nSQL Generated: ${response?.sql ?? ""}\n\n${
       error ? `Error: ${error}` : "No results were returned."
     } Please help debug this query.`;
 
@@ -300,6 +328,7 @@ export function NflQuery({
       const url = new URL(window.location.href);
       url.search = "";
       url.searchParams.set("q", lastQuery);
+      url.searchParams.set("sport", sport);
       await navigator.clipboard.writeText(url.toString());
       toast.success("Link copied");
     } catch {
@@ -321,7 +350,7 @@ export function NflQuery({
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "nfl_stats_results.csv";
+    link.download = `${sport}_stats_results.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -329,7 +358,7 @@ export function NflQuery({
   };
 
   const sendEmail = () => {
-    const subject = encodeURIComponent("NFL Stats Query Debug");
+    const subject = encodeURIComponent("Magic Stats debug");
     window.open(
       `mailto:blaine.cowen@gmail.com?subject=${subject}&body=${encodeURIComponent(debugText())}`,
     );
@@ -401,8 +430,8 @@ export function NflQuery({
         {debug && <span className="text-slate-400"> (testing)</span>}
       </h1>
       <p className="mt-2 max-w-2xl text-lg text-slate-600">
-        Ask any NFL stats question the way you&apos;d text a friend. Answers
-        come from every play since 1999.
+        Ask a stats question the way you&apos;d text a friend.{" "}
+        {SPORT_ASK[sport].coverage}
       </p>
       {viewer && (
         <p className="mt-3 text-sm text-slate-500">
@@ -440,6 +469,34 @@ export function NflQuery({
           </div>
         )}
 
+        <fieldset className="mb-3">
+          <legend className="sr-only">Sport</legend>
+          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 shadow-sm">
+            {SPORTS.map((s) => (
+              <label
+                key={s}
+                className={cn(
+                  "font-display has-[:focus-visible]:outline-turf-700 cursor-pointer rounded-md px-4 py-1.5 text-base font-bold tracking-wide transition-colors has-[:focus-visible]:outline-2 sm:px-5",
+                  s === sport
+                    ? "bg-turf-950 text-line"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="sport"
+                  value={s}
+                  checked={s === sport}
+                  onChange={() => chooseSport(s)}
+                  disabled={isLoading}
+                  className="sr-only"
+                />
+                {SPORT_LABEL[s]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         <form onSubmit={handleSearch}>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -458,8 +515,8 @@ export function NflQuery({
                     setQuery("");
                   }
                 }}
-                placeholder="Most rushing yards in 2024?"
-                aria-label="Your question"
+                placeholder={SPORT_ASK[sport].placeholder}
+                aria-label={`Your ${SPORT_LABEL[sport]} question`}
                 aria-describedby={showCounter ? "ask-counter" : undefined}
                 aria-invalid={tooLong || undefined}
                 enterKeyHint="search"
@@ -518,16 +575,19 @@ export function NflQuery({
         {recent.length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-500">Recent</span>
-            {recent.map((q) => (
+            {recent.map((r) => (
               <button
-                key={q}
+                key={`${r.sport}:${r.q}`}
                 type="button"
-                onClick={() => ask(q)}
+                onClick={() => ask(r.q, r.sport)}
                 disabled={isLoading}
-                title={q}
-                className="hover:border-turf-700 hover:text-turf-800 focus-visible:outline-turf-700 max-w-[16rem] truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 focus-visible:outline-2 disabled:opacity-50"
+                title={`${SPORT_LABEL[r.sport]}: ${r.q}`}
+                className="hover:border-turf-700 hover:text-turf-800 focus-visible:outline-turf-700 max-w-[18rem] truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 focus-visible:outline-2 disabled:opacity-50"
               >
-                {q}
+                <span className="font-display mr-1.5 text-xs font-bold text-slate-400">
+                  {SPORT_LABEL[r.sport]}
+                </span>
+                {r.q}
               </button>
             ))}
             <button
@@ -742,9 +802,10 @@ export function NflQuery({
           className="font-display text-2xl font-bold text-slate-900"
         >
           {response ? "Try another" : "Try one of these"}
+          <span className="sr-only"> {SPORT_LABEL[sport]} question</span>
         </h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {EXAMPLE_GROUPS.map((g) => (
+          {SPORT_ASK[sport].groups.map((g) => (
             <div
               key={g.title}
               className="rounded-lg border border-slate-200 bg-white p-4"

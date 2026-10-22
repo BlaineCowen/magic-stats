@@ -17,7 +17,7 @@ import { NflShell } from "@/components/nfl-shell";
 import { ScoreboardStrip } from "@/components/scoreboard-strip";
 
 /**
- * The NFL hub, served at projects.blainecowen.com/nfl/ (nfl-router proxies that exact path here).
+ * The sports hub, served at projects.blainecowen.com/nfl/ (nfl-router proxies that exact path here).
  * Links are absolute site paths because the pages live in three places: this app, the static
  * Draft & Pick'em export under /nfl/, and its hand-written pages. Private ones sit behind
  * blaine-auth in nfl-router, so they only open for Blaine.
@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Blaine's Sports Tools",
   description:
-    "NFL stats you can ask about in plain English, 4th down calls, playoff odds and fantasy draft tools.",
+    "NFL, NBA and MLB stats you can ask about in plain English, plus 4th down calls, playoff odds and fantasy draft tools.",
   icons: {
     icon: { url: "/magic-stats/icon.svg", type: "image/svg+xml" },
     apple: "/magic-stats/apple-icon",
@@ -49,13 +49,13 @@ const TOOLS: (Item & { example: string })[] = [
     href: "/magic-stats",
     title: "Magic Stats",
     blurb:
-      "Ask any NFL stats question in plain English. Answers come from every play since 1999.",
-    example: "“Most rushing yards in 2024?”",
+      "Ask NFL, NBA or MLB stats questions in plain English. Box scores, advanced stats and Statcast.",
+    example: "“Most crabsketball points per game this season?”",
     icon: MessageSquareText,
   },
   {
     href: "/magic-stats/charts",
-    title: "Charts",
+    title: "NFL charts",
     blurb:
       "Team tiers and quarterback efficiency, by season, week and situation.",
     example: "Offense vs defense, all 32 teams",
@@ -63,7 +63,7 @@ const TOOLS: (Item & { example: string })[] = [
   },
   {
     href: "/magic-stats/fourth-down",
-    title: "4th down decisions",
+    title: "NFL 4th down calls",
     blurb:
       "Go, kick or punt, graded by chance to win. Coaches ranked by the wins they gave away.",
     example: "Live calls during every game",
@@ -179,7 +179,7 @@ export default function NflHub() {
 
         <section aria-labelledby="season">
           <h2 id="season" className="font-display mb-4 text-2xl font-bold">
-            This season
+            NFL this season
           </h2>
           <div className="grid gap-3 sm:grid-cols-3">
             {SEASON.map((it) => (

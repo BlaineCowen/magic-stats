@@ -15,9 +15,11 @@ export type SportViews = {
   /** Paths under dir that must exist before the views can be built. */
   required: string[];
   create: (ctx: ViewContext) => Promise<void>;
+  /** Extra DuckDB SET statements, applied before the settings are locked. */
+  settings?: string[];
   /**
    * One row: min_season, max_season, and optionally max_week,
-   * max_season_type and latest_date ('YYYY-MM-DD').
+   * max_season_type, latest_date ('YYYY-MM-DD') and stats_through.
    */
   infoSql: string;
 };
