@@ -163,11 +163,36 @@ def main() -> None:
     # player's games in that season, upcoming row included.
     con.execute("""
       CREATE TABLE hist AS
-      WITH h AS (
+      WITH raw AS (
         SELECT r.player_id, r.season, r.week, r.game_id, r.upcoming,
           p.ppr, p.xfp, p.xtd, p.tgt_share, p.car_share, p.air_yards_share, p.snap_pct,
-          p.targets, p.carries
+          p.targets, p.carries,
+          median(p.snap_pct) OVER (PARTITION BY r.player_id, r.season ORDER BY r.week
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS typical_snap,
+          count(p.snap_pct) OVER (PARTITION BY r.player_id, r.season ORDER BY r.week
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS snap_games,
+          median(p.xfp) OVER (PARTITION BY r.player_id, r.season ORDER BY r.week
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS typical_xfp
         FROM rows r LEFT JOIN pg p USING (player_id, game_id)
+      ),
+      -- A game with well under his usual snaps (75%) and usage (60%) is an
+      -- early exit (injury, ejection, blowout rest): leave it out of his
+      -- averages, the way fantasy sites do, so one partial game doesn't sink
+      -- him. Requiring both keeps normal rotation swings in.
+      h AS (
+        SELECT * REPLACE (
+          CASE WHEN partial THEN NULL ELSE ppr END AS ppr,
+          CASE WHEN partial THEN NULL ELSE xfp END AS xfp,
+          CASE WHEN partial THEN NULL ELSE xtd END AS xtd,
+          CASE WHEN partial THEN NULL ELSE tgt_share END AS tgt_share,
+          CASE WHEN partial THEN NULL ELSE car_share END AS car_share,
+          CASE WHEN partial THEN NULL ELSE air_yards_share END AS air_yards_share,
+          CASE WHEN partial THEN NULL ELSE snap_pct END AS snap_pct)
+        FROM (
+          SELECT *, coalesce(snap_games >= 2 AND snap_pct < 0.75 * typical_snap
+            AND xfp < 0.6 * typical_xfp, false) AS partial
+          FROM raw
+        )
       )
       SELECT player_id, game_id,
         count(ppr) OVER prior AS games_to_date,

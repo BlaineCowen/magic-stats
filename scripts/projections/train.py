@@ -129,9 +129,23 @@ def with_breakout_label(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# More of these never lowers a projection. Without the constraint the trees
+# did odd things at the extremes (a 32-point usage game counted against a WR).
+INCREASING = {
+    "xfp_pg", "xfp_l3", "xfp_last", "xfp_prev", "xfp_max", "ppr_pg", "ppr_l3", "ppr_prev",
+    "xtd_pg", "xtd_l3", "tgt_share", "tgt_share_l3", "tgt_share_prev", "car_share", "car_share_l3",
+    "ay_share", "snap_pct", "snap_l3", "snap_prev", "implied_total", "vacated_tgt", "vacated_car",
+}
+
+
+def monotone(cols: list[str]) -> tuple[int, ...]:
+    return tuple(1 if c in INCREASING else 0 for c in cols)
+
+
 def fit_points(X: pd.DataFrame, y: pd.Series) -> tuple[xgb.XGBRegressor, xgb.XGBRegressor]:
     common = dict(n_estimators=600, learning_rate=0.03, max_depth=5, subsample=0.8,
-                  colsample_bytree=0.8, min_child_weight=20, tree_method="hist", n_jobs=4)
+                  colsample_bytree=0.8, min_child_weight=20, tree_method="hist", n_jobs=4,
+                  monotone_constraints=monotone(list(X.columns)))
     mean = xgb.XGBRegressor(objective="reg:squarederror", **common).fit(X, y)
     quant = xgb.XGBRegressor(objective="reg:quantileerror", quantile_alpha=np.array([0.1, 0.5, 0.9]), **common).fit(X, y)
     return mean, quant
@@ -197,6 +211,7 @@ def backtest(df: pd.DataFrame, feats: list[str]) -> None:
         far_mean = xgb.XGBRegressor(
             objective="reg:squarederror", n_estimators=600, learning_rate=0.03, max_depth=5, subsample=0.8,
             colsample_bytree=0.8, min_child_weight=20, tree_method="hist", n_jobs=4,
+            monotone_constraints=monotone(far_feats),
         ).fit(train[far_feats], train.ppr)
         for week in (4, 8, 12):
             snap = ros_snapshot(test, week, far_feats)
