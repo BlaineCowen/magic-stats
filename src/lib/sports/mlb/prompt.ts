@@ -235,7 +235,7 @@ export const mlbPrompt: SportPrompt = {
   examples: EXAMPLES,
   errorHint(error, sql) {
     if (
-      /Referenced column "team"/.test(error) &&
+      error.includes('Referenced column "team"') &&
       /\bstatcast_(batting|pitching)\b/i.test(sql)
     ) {
       return "\nHint: the statcast tables have no team column. JOIN batting_seasons b ON b.player_id = s.player_id AND b.season = s.season and use b.team.";
