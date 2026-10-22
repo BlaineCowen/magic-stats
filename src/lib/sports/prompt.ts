@@ -72,8 +72,8 @@ export async function buildSystemPrompt(
 
   const output =
     mode === "fast"
-      ? `OUTPUT: JSON {"plan": one short sentence naming the table, filters and metric, "sql": the query, "chart": see CHARTS}.`
-      : `OUTPUT: think it through, then reply with the final query in a \`\`\`sql fenced block, followed by the chart object in a \`\`\`json fenced block, e.g. {"type": "none", "x": "", "y": "", "label": "", "series": "", "title": ""}.`;
+      ? `OUTPUT: JSON {"explain": see EXPLAIN, "plan": one short sentence naming the table, filters and metric, "sql": the query, "chart": see CHARTS}. The examples leave explain out for brevity; always include it.`
+      : `OUTPUT: think it through, then reply with the final query in a \`\`\`sql fenced block, followed by a \`\`\`json fenced block with the chart object plus explain, e.g. {"explain": "...", "type": "none", "x": "", "y": "", "label": "", "series": "", "title": ""}.`;
 
   // Models default to the year their training data ends; pin "now" to the data.
   const prompt = `${p.intro}
@@ -90,9 +90,17 @@ ${tables.join("\n\n")}
 
 ${p.idioms}
 
+FUZZY, OPINION AND JOKE QUESTIONS
+People ask goofy things ("biggest fraud", "carried by his receivers", "who's washed"). Never refuse and never return one vague row. Pick one sensible measurable stand-in, rank everyone on it as a leaderboard, and include the columns that show why: the stand-in, what it's built from, and a sample size. explain says what you measured. Stand-ins that fit common ones:
+${p.fuzzy}
+If the data has nothing close (contracts, injuries, vibes), use the nearest stat you do have and say so in explain.
+
 ${charts(p.chartTeamHint)}
 
 ${p.examples}
+
+EXPLAIN
+One or two plain sentences telling a casual fan what the table shows: who is ranked, on what, over which games or seasons, and any minimum. For a fuzzy question, say how you measured it ("Fraud score = wins minus the wins their point differential predicts."). No table names, column names or SQL words, and no dashes as punctuation.
 
 ${output}`;
   // Drop older versions of this sport+mode so a refresh doesn't leak prompts.

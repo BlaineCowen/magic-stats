@@ -101,6 +101,10 @@ for (const [i, c] of CASES.entries()) {
     body: JSON.stringify({ query: c.q, mode, sport, nocache: true }),
   });
   const data = (await res.json()) as {
+    kind?: string;
+    player?: string;
+    findings?: unknown[];
+    explain?: string | null;
     results?: Row[];
     error?: string;
     sql?: string;
@@ -111,12 +115,25 @@ for (const [i, c] of CASES.entries()) {
   };
   const ms = Date.now() - t;
   times.push(ms);
-  const missing = data.results
-    ? [
-        ...(exp ? check(data.results, exp, c.scope ?? "any") : []),
-        ...checkChart(data.chart ?? null, c.chart),
-      ]
-    : ["<error>"];
+  const missing = c.proof
+    ? data.kind === "proof" &&
+      data.player?.toLowerCase().includes(c.proof.toLowerCase()) &&
+      data.findings?.length
+      ? []
+      : [
+          `proof for ${c.proof} (got ${data.kind ?? "sql"} ${data.player ?? ""})`,
+        ]
+    : data.results
+      ? [
+          ...(exp ? check(data.results, exp, c.scope ?? "any") : []),
+          ...checkChart(data.chart ?? null, c.chart),
+          ...(data.explain ? [] : ["<explain>"]),
+          ...(c.fuzzy &&
+          (data.results.length < 3 || Object.keys(data.results[0]!).length < 3)
+            ? ["<leaderboard>"]
+            : []),
+        ]
+      : ["<error>"];
   const ok = missing.length === 0;
   if (ok) tally[kind].pass++;
   const chart = data.chart
@@ -125,6 +142,8 @@ for (const [i, c] of CASES.entries()) {
   console.log(
     `${ok ? "PASS" : "FAIL"} ${String(i + 1).padStart(2)} ${(ms / 1000).toFixed(1).padStart(5)}s tries=${data.attempts?.length ?? "?"} chart=${chart}${data.cached ? " (cached)" : ""}  ${c.q}`,
   );
+  if (c.fuzzy || c.proof)
+    console.log(`       explain: ${data.explain ?? data.player ?? ""}`);
   if (!ok) {
     console.log(
       `       expected ${exp ? JSON.stringify(exp) : "-"} missing ${JSON.stringify(missing)}`,

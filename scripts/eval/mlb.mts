@@ -2,6 +2,11 @@ import { leaders, type Case } from "./types.mts";
 
 // MLB cases: reference SQL runs against data/mlb.
 export const CASES: Case[] = [
+  // Slang and opinion questions: any sensible stand-in passes.
+  { q: "What team is the biggest fraud?", fuzzy: true },
+  { q: "Who is the luckiest hitter?", fuzzy: true },
+  { q: "Who is the most three true outcomes hitter?", fuzzy: true },
+  { q: "Make the case for the Dodgers", proof: "Dodgers" },
   // No year or "this year": must mean the current season, not the model's training year.
   {
     q: "Who hit the most home runs?",

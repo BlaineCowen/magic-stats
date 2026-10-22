@@ -58,6 +58,14 @@ const DATASETS = [
     url: (y) => `${RELEASES}/rosters/roster_${y}.parquet`,
     order: ["team", "gsis_id"],
   },
+  // Pro Football Reference charting (broken tackles, drops, pressures,
+  // missed tackles), weekly, 2018 on.
+  ...["pass", "rush", "rec", "def"].map((k) => ({
+    name: `pfr_${k}`,
+    first: 2018,
+    url: (y) => `${RELEASES}/pfr_advstats/advstats_week_${k}_${y}.parquet`,
+    order: ["pfr_player_id", "week"],
+  })),
   {
     name: "games",
     single: true,
@@ -106,7 +114,7 @@ function targets({ from, to }) {
       });
       continue;
     }
-    for (let y = Math.max(from, FIRST_SEASON); y <= to; y++) {
+    for (let y = Math.max(from, ds.first ?? FIRST_SEASON); y <= to; y++) {
       list.push({
         ds,
         key: `${ds.name}/${y}`,

@@ -49,7 +49,22 @@ export function extractChartBlock(text: string): ChartPick | null {
   }
 }
 
+/** The plain-English explain field from a deep-mode reply's ```json block. */
+export function extractExplainBlock(text: string): string | null {
+  const block = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)].at(-1)?.[1];
+  if (!block) return null;
+  try {
+    const j = JSON.parse(block) as { explain?: unknown };
+    return typeof j.explain === "string" && j.explain.trim()
+      ? j.explain.trim().slice(0, 600)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export type FastReply = {
+  explain: string | null;
   plan: string | null;
   sql: string | null;
   chart: ChartPick | null;
@@ -58,11 +73,16 @@ export type FastReply = {
 export function parseFast(raw: string): FastReply {
   try {
     const j = JSON.parse(raw) as {
+      explain?: unknown;
       plan?: unknown;
       sql?: unknown;
       chart?: unknown;
     };
     return {
+      explain:
+        typeof j.explain === "string" && j.explain.trim()
+          ? j.explain.trim()
+          : null,
       plan: typeof j.plan === "string" ? j.plan : null,
       sql: typeof j.sql === "string" ? j.sql : null,
       chart: toChartPick(j.chart),
@@ -71,6 +91,7 @@ export function parseFast(raw: string): FastReply {
     // Truncated JSON: salvage the sql field if it closed.
     const m = /"sql"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(raw);
     return {
+      explain: null,
       plan: null,
       sql: m ? (JSON.parse(`"${m[1]}"`) as string) : null,
       chart: null,

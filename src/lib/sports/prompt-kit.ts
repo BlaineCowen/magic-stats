@@ -19,6 +19,9 @@ export type SportPrompt = {
   rules: string[];
   tables: PromptTable[];
   idioms: string;
+  /** Stand-ins for slang and opinion questions ("biggest fraud", "garbage
+   * time"), one "- term: definition" bullet each. */
+  fuzzy: string;
   /** CHARTS bullet saying which column gives player rows a team for colors. */
   chartTeamHint: string;
   examples: string;
@@ -32,8 +35,7 @@ export const NO_CHART = `"chart": {"type": "none", "x": "", "y": "", "label": ""
 
 /** Rules every sport shares, worded as in the original NFL prompt. */
 export const RULE = {
-  oneSelect:
-    "Exactly one SELECT statement (CTEs allowed). DuckDB SQL dialect.",
+  oneSelect: "Exactly one SELECT statement (CTEs allowed). DuckDB SQL dialect.",
   onlyListed:
     "Use ONLY the tables and columns listed below. Never invent column names.",
   leaderboard:

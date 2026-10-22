@@ -133,6 +133,57 @@ const ROSTER_COLS: Col[] = [
   ],
 ];
 
+const PFR_COMMON: Col = [
+  "season, week, game_type, game_id, team, opponent, pfr_player_name, player_id, position",
+  "game_type 'REG' or playoff codes; pfr_player_name is the full name; player_id joins player_week; position e.g. 'RB'",
+];
+const PFR_RUSH_COLS: Col[] = [
+  PFR_COMMON,
+  ["carries", ""],
+  ["rushing_yards_before_contact, rushing_yards_after_contact", ""],
+  ["rushing_broken_tackles, receiving_broken_tackles", ""],
+];
+const PFR_REC_COLS: Col[] = [
+  PFR_COMMON,
+  ["receiving_drop", "passes dropped"],
+  ["receiving_broken_tackles", ""],
+  ["receiving_int", "interceptions when targeted"],
+  ["receiving_rat", "passer rating when targeted"],
+];
+const PFR_PASS_COLS: Col[] = [
+  PFR_COMMON,
+  ["passing_drops", "drops by the QB's receivers"],
+  ["passing_bad_throws", ""],
+  [
+    "times_blitzed, times_hurried, times_hit, times_pressured, times_sacked",
+    "",
+  ],
+];
+const PFR_DEF_COLS: Col[] = [
+  PFR_COMMON,
+  [
+    "def_targets, def_completions_allowed, def_yards_allowed, def_receiving_td_allowed",
+    "in coverage",
+  ],
+  [
+    "def_ints, def_sacks, def_pressures, def_times_hurried, def_times_hitqb, def_times_blitzed",
+    "",
+  ],
+  ["def_tackles_combined, def_missed_tackles", ""],
+];
+
+const FUZZY = `- broken tackles, drops, bad throws, pressure, missed tackles, yards after contact: the pfr_* tables (2018 on). SUM per player_id, pfr_player_name; filter game_type = 'REG' for the regular season. Their counts are often NULL, so wrap each in coalesce(x, 0) before adding columns together. "Broken tackles" for a runner means rushing_broken_tackles unless the question says catches too.
+- "fraud" team: won more than its points say it should. From team_games: wins - games * POW(pf, 2.37) / (POW(pf, 2.37) + POW(pa, 2.37)) where pf/pa are summed points; higher = bigger fraud. Show record, point differential and expected wins. "Unlucky" is the reverse.
+- "lucky": record in one-score games (ABS(points_for - points_against) <= 8).
+- QB "carried by his receivers" / YAC merchant: on completions (pbp complete_pass = 1), SUM(yards_after_catch) / SUM(passing_yards) is the share of his yards gained after the catch; also SUM(yards_after_catch - xyac_mean_yardage) = YAC over expected. Min 100 completions for a season.
+- "garbage time": pbp plays in the 4th quarter with wp < 0.10 or wp > 0.90. Garbage-time PPR points per play: 0.1 * coalesce(rushing_yards,0) + 0.1 * coalesce(receiving_yards,0) + complete_pass (for the receiver) + 6 * touchdown (for the rusher or receiver) + 0.04 * coalesce(passing_yards,0) + 4 * pass_touchdown - 2 * interception (for the passer). Credit each player via rusher_id/receiver_id/passer_id with their full name; show garbage-time points and the share of their total.
+- "clutch": 4th quarter or overtime with score_differential BETWEEN -8 AND 0; rank by SUM(wpa) or EPA with a minimum sample. "Choker" team: games it lost after its win probability hit 0.90 (max of wp when posteam = team, 1 - wp when defteam = team).
+- "vulture": touchdowns from inside the 5 (yardline_100 <= 5) per touch there.
+- "gunslinger": highest average air_yards on pass attempts plus interceptions; "checkdown king": lowest average air_yards.
+- "washed": biggest drop in a key stat from the previous season to this one (self-join on season - 1), min sample both years.
+- "empty stats" / stat padder: production in losses or in garbage time.
+- "covers the spread": team_games margin (points_for - points_against) > favored_by.`;
+
 const IDIOMS = `NFL IDIOMS (use these exact definitions)
 - QB season totals (passing yards, TDs, INTs, completion %): player_week, named player_display_name. passer_full_name/passer_id exist ONLY in pbp.
 - QB efficiency / "per dropback": pbp WHERE qb_dropback = 1, GROUP BY passer_id, passer_full_name.
@@ -211,14 +262,60 @@ export const nflPrompt: SportPrompt = {
     "Teams are abbreviations: ARI ATL BAL BUF CAR CHI CIN CLE DAL DEN DET GB HOU IND JAX KC LA(Rams) LAC LV MIA MIN NE NO NYG NYJ PHI PIT SEA SF TB TEN WAS. Relocated teams use the current code for every season.",
   ],
   tables: [
-    { view: "pbp", title: (i) => `one row per play, ${i.minSeason}-${i.maxSeason}`, cols: PBP_COLS },
-    { view: "player_week", title: () => "one row per player per game (box score stats)", cols: PLAYER_WEEK_COLS },
-    { view: "team_week", title: () => "one row per team per game", cols: TEAM_WEEK_COLS },
-    { view: "team_games", title: () => "one row per team per game (records, scoring, home/away)", cols: TEAM_GAMES_COLS },
-    { view: "games", title: () => "one row per game (schedule, scores, betting lines)", cols: GAMES_COLS },
-    { view: "rosters", title: () => "one row per player per season", cols: ROSTER_COLS },
+    {
+      view: "pbp",
+      title: (i) => `one row per play, ${i.minSeason}-${i.maxSeason}`,
+      cols: PBP_COLS,
+    },
+    {
+      view: "player_week",
+      title: () => "one row per player per game (box score stats)",
+      cols: PLAYER_WEEK_COLS,
+    },
+    {
+      view: "team_week",
+      title: () => "one row per team per game",
+      cols: TEAM_WEEK_COLS,
+    },
+    {
+      view: "team_games",
+      title: () => "one row per team per game (records, scoring, home/away)",
+      cols: TEAM_GAMES_COLS,
+    },
+    {
+      view: "games",
+      title: () => "one row per game (schedule, scores, betting lines)",
+      cols: GAMES_COLS,
+    },
+    {
+      view: "rosters",
+      title: () => "one row per player per season",
+      cols: ROSTER_COLS,
+    },
+    {
+      view: "pfr_rush",
+      title: () =>
+        "Pro Football Reference charting, one row per player per game, 2018 on",
+      cols: PFR_RUSH_COLS,
+    },
+    {
+      view: "pfr_rec",
+      title: () => "the same for pass catchers",
+      cols: PFR_REC_COLS,
+    },
+    {
+      view: "pfr_pass",
+      title: () => "the same for quarterbacks",
+      cols: PFR_PASS_COLS,
+    },
+    {
+      view: "pfr_def",
+      title: () => "the same for defenders",
+      cols: PFR_DEF_COLS,
+    },
   ],
   idioms: IDIOMS,
+  fuzzy: FUZZY,
   chartTeamHint:
     "Player charts: include the latest team as ARG_MAX(posteam, game_id) AS team (pbp) or ARG_MAX(team, game_id) AS team (player_week) so points get team colors.",
   examples: EXAMPLES,

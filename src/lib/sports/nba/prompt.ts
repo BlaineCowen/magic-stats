@@ -103,11 +103,18 @@ const GAMES_COLS: Col[] = [
 
 const ROSTER_COLS: Col[] = [
   ["season, team, player_id, player_name, position", ""],
-  [
-    "height, weight, age, years_exp, school, jersey",
-    "height text like '6-8'",
-  ],
+  ["height, weight, age, years_exp, school, jersey", "height text like '6-8'"],
 ];
+
+const FUZZY = `- No play-by-play, so anything about moments inside a game uses whole games as the stand-in.
+- "fraud" team: wins - games * POW(pf, 14) / (POW(pf, 14) + POW(pa, 14)) from team_games summed points; higher = won more than its point differential says. Show record, net points per game and expected wins.
+- "garbage time": stats in blowouts, games where the team won or lost by 20+ (join team_games on game_id and team, ABS(points_for - points_against) >= 20), usually by players who played under 20 minutes in them. Show garbage-time totals and the share of their season.
+- "clutch": games decided by 5 or fewer; "choker": record or shooting in those games.
+- "stat padder" / "empty stats": big numbers in losses, or on losing teams.
+- "ball hog": highest usage rate (player_seasons usg_pct) or shots per game with a low assist rate.
+- "brick layer": most missed shots, SUM(fga - fgm), or worst shooting on high volume.
+- "carrying the team": share of the team's points (player points / team points_for in the same games).
+- "washed": biggest drop in a key stat from the previous season (self-join on season - 1), min sample both years.`;
 
 const IDIOMS = `NBA IDIOMS (use these exact definitions)
 - Per-game averages: AVG(stat) over player_games (one row per game played). For completed seasons, player_seasons totals / gp give the same.
@@ -213,7 +220,8 @@ export const nbaPrompt: SportPrompt = {
     },
     {
       view: "standings",
-      title: () => "final regular-season standings, one row per team per season",
+      title: () =>
+        "final regular-season standings, one row per team per season",
       cols: STANDINGS_COLS,
     },
     { view: "games", title: () => "one row per game", cols: GAMES_COLS },
@@ -224,6 +232,7 @@ export const nbaPrompt: SportPrompt = {
     },
   ],
   idioms: IDIOMS,
+  fuzzy: FUZZY,
   chartTeamHint:
     "Player charts: include ARG_MAX(team, game_date) AS team (player_games) or team (player_seasons) so points get team colors.",
   examples: EXAMPLES,

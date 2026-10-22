@@ -3,7 +3,7 @@ import { parquetView, sqlLit, type SportViews } from "../view-kit";
 /** nflverse data from scripts/refresh-nfl-data.mjs. */
 export const nflViews: SportViews = {
   envVar: "NFL_DATA_DIR",
-  rev: 3,
+  rev: 5,
   required: ["pbp", "players.parquet"],
   async create({ run, dir, has }) {
     await run(
@@ -35,6 +35,19 @@ export const nflViews: SportViews = {
     );
     for (const ds of ["player_week", "team_week", "rosters"]) {
       if (has(ds)) await run(parquetView(ds, `${dir}/${ds}/*.parquet`));
+    }
+    // Pro Football Reference charting stats (2018 on), with the gsis id and
+    // position from players so they filter and join like player_week.
+    for (const ds of ["pfr_pass", "pfr_rush", "pfr_rec", "pfr_def"]) {
+      if (!has(ds)) continue;
+      await run(`
+        CREATE VIEW ${ds} AS
+        SELECT r.*, p.player_id, p.position
+        FROM read_parquet(${sqlLit(`${dir}/${ds}/*.parquet`)}, union_by_name = true) r
+        LEFT JOIN (
+          SELECT pfr_id, any_value(gsis_id) AS player_id, any_value(position) AS position
+          FROM players WHERE pfr_id IS NOT NULL GROUP BY pfr_id
+        ) p ON p.pfr_id = r.pfr_player_id`);
     }
     // Colors and logo URLs per team code (includes historical codes like OAK).
     if (has("teams.parquet")) {

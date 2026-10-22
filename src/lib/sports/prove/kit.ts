@@ -37,6 +37,9 @@ export type Metric = {
 
 export type Role = {
   key: string;
+  /** Ranks teams rather than players. pid and pname are the team code; the
+   * engine swaps in the full name from the teams view. */
+  team?: boolean;
   /** Plural noun for the ranked group: "passers". */
   noun: string;
   /** Aggregate counting the role's opportunities and its label: "dropbacks". */
@@ -71,6 +74,14 @@ export type SportProof = {
 };
 
 export const FRAC = 0.4;
+
+/** A role's rows with team codes replaced by full names for team roles. */
+export const named = (role: Pick<Role, "team">, sql: string) =>
+  role.team
+    ? `SELECT b.* REPLACE (coalesce(t.team_name, b.pname) AS pname) FROM (${sql}) b
+       LEFT JOIN (SELECT team_abbr, any_value(team_name) AS team_name FROM teams GROUP BY 1) t
+         ON t.team_abbr = b.pid`
+    : sql;
 
 /** Phrase for "on the road"-style booleans. */
 export const either = (cond: string, yes: string, no: string | null) =>

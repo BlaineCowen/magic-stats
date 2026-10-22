@@ -29,7 +29,9 @@ export const mlbViews: SportViews = {
     // Game logs only exist after the first full refresh; keep the views valid.
     for (const v of ["batting_games", "pitching_games"]) {
       if (!has(v))
-        await run(`CREATE VIEW ${v} AS SELECT NULL::INT AS season, NULL::DATE AS game_date WHERE false`);
+        await run(
+          `CREATE VIEW ${v} AS SELECT NULL::INT AS season, NULL::DATE AS game_date WHERE false`,
+        );
     }
 
     // One row per team per game, so records and splits don't need a home/away UNION.
@@ -49,7 +51,12 @@ export const mlbViews: SportViews = {
     const sv = (name: string) => `savant/${name}`;
     for (const [viewName, quality, expected, extra] of [
       ["statcast_batting", "statcast_batting", "expected_batting", ""],
-      ["statcast_pitching", "statcast_pitching", "expected_pitching", ", x.era, x.xera"],
+      [
+        "statcast_pitching",
+        "statcast_pitching",
+        "expected_pitching",
+        ", x.era, x.xera",
+      ],
     ] as const) {
       if (!has(sv(quality)) || !has(sv(expected))) continue;
       await run(`

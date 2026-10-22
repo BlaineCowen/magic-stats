@@ -252,8 +252,102 @@ const pitcher: Role = {
   ],
 };
 
+const teamDims: Dim[] = [
+  {
+    key: "opp",
+    sql: either(
+      "opp_win_pct >= 0.5",
+      "against winning teams",
+      "against losing teams",
+    ),
+  },
+  {
+    key: "dn",
+    sql: either("day_night = 'night'", "under the lights", "in day games"),
+  },
+  { key: "loc", sql: either("is_home", "at home", "on the road") },
+  {
+    key: "close",
+    sql: "CASE WHEN abs(runs_for - runs_against) = 1 THEN 'in one-run games' WHEN abs(runs_for - runs_against) >= 5 THEN 'in blowouts' END",
+  },
+  MONTHS,
+  WEEKDAYS,
+];
+
+const team: Role = {
+  key: "team",
+  team: true,
+  noun: "teams",
+  sample: { sql: "count(*)", label: "games" },
+  min: [40, 15, 10],
+  minPool: 20,
+  dims: teamDims,
+  skipPairs: [["month", "day"]],
+  from: (scope) => `
+    WITH rec AS (
+      SELECT team, season, season_type, avg(win) AS win_pct FROM team_games GROUP BY ALL
+    )
+    SELECT x.team AS pid, x.team AS pname,
+      NULL AS team,
+      ${cols(teamDims)},
+      win, runs_for AS rf, runs_against AS ra
+    FROM (
+      SELECT t.*, rec.win_pct AS opp_win_pct FROM team_games t
+      LEFT JOIN rec ON rec.team = t.opponent AND rec.season = t.season AND rec.season_type = t.season_type
+    ) x
+    WHERE ${scope}`,
+  ids: (scope) => `
+    SELECT x.team AS pid, x.team AS pname
+    FROM team_games x WHERE ${scope}`,
+  metrics: [
+    {
+      key: "w",
+      lead: "Most wins",
+      column: "Wins",
+      sql: "sum(win)",
+      fmt: "int",
+      weight: 1.3,
+    },
+    {
+      key: "wp",
+      lead: "Best winning percentage",
+      column: "Win %",
+      sql: "avg(win)",
+      rate: true,
+      fmt: "pct",
+      weight: 1.2,
+    },
+    {
+      key: "diff",
+      lead: "Best run differential per game",
+      column: "Margin",
+      sql: "avg(rf - ra)",
+      rate: true,
+      fmt: "plus1",
+      weight: 1.2,
+    },
+    {
+      key: "rf",
+      lead: "Most runs per game",
+      column: "Runs/G",
+      sql: "avg(rf)",
+      rate: true,
+      fmt: "2",
+    },
+    {
+      key: "ra",
+      lead: "Fewest runs allowed per game",
+      column: "Allowed/G",
+      sql: "avg(ra)",
+      rate: true,
+      low: true,
+      fmt: "2",
+    },
+  ],
+};
+
 export const mlbProof: SportProof = {
-  roles: [batter, pitcher],
+  roles: [batter, pitcher, team],
   league: "MLB",
   scopeSql: (s) =>
     `x.season BETWEEN ${s.from} AND ${s.to} AND x.season_type = '${s.type}'`,

@@ -1,7 +1,11 @@
 import type { Row } from "../../src/lib/sports/db";
 import type { ChartType } from "../../src/lib/nfl/chart-spec";
 
-export type Expect = { strings?: string[]; oneOf?: string[]; numbers?: number[] };
+export type Expect = {
+  strings?: string[];
+  oneOf?: string[];
+  numbers?: number[];
+};
 
 /** Every name tied with the leader (reference SQL must ORDER BY v DESC without LIMIT 1). */
 export const leaders = (r: Row[]): Expect => ({
@@ -9,7 +13,12 @@ export const leaders = (r: Row[]): Expect => ({
   numbers: [Number(r[0]!.v)],
 });
 
-export type ChartExpect = { type: ChartType; x?: RegExp; y?: RegExp; series?: RegExp };
+export type ChartExpect = {
+  type: ChartType;
+  x?: RegExp;
+  y?: RegExp;
+  series?: RegExp;
+};
 
 export type Case = {
   q: string;
@@ -22,4 +31,9 @@ export type Case = {
   scope?: "top1" | "any";
   /** Omitted: the answer must come back without a chart. "any": not checked. */
   chart?: ChartExpect | "any";
+  /** Slang/opinion question with no single right answer: passes on a
+   * leaderboard (3+ rows, 3+ columns) with an explanation. */
+  fuzzy?: true;
+  /** A prove-it question: the answer is a proof for a name containing this. */
+  proof?: string;
 };

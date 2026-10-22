@@ -6,8 +6,12 @@ import type { Scope } from "./kit";
 const PROVE =
   /\b(prove[sn]?|proving|proof|case for|make (?:a|the|my) case|argue|argument|convince|evidence|cherry[- ]?pick\w*|hot take|silly stats?|espn stats?|what (?:does|did) .+ lead|(?:is|was|are|were) (?:the |a )?(?:best|greatest|goat|top|elite|#1|number one|better))\b/i;
 
+// "Why are the Texans so good?"
+const WHY_GOOD =
+  /\bwhy (?:is|are|was|were) .+ (?:so )?(?:good|great|elite|dominant|the best|better|the goat|goated|unbeatable|undefeated)\b/i;
+
 export function isProofQuestion(q: string): boolean {
-  return PROVE.test(q);
+  return PROVE.test(q) || WHY_GOOD.test(q);
 }
 
 export type Candidate = {
@@ -15,6 +19,8 @@ export type Candidate = {
   name: string;
   /** Total volume across roles, the tiebreak between same-named players. */
   n: number;
+  /** A team rather than a player. Players win ties ("Stroud on the Texans"). */
+  team: boolean;
   roles: Record<string, number>;
 };
 
@@ -57,6 +63,18 @@ const NICKNAMES: [RegExp, string][] = [
   [/\bmvs\b/g, "valdes scantling"],
   [/\bbig dumper\b/g, "cal raleigh"],
   [/\bvlad( jr)?\b/g, "vladimir guerrero"],
+  [/\bniners\b/g, "49ers"],
+  [/\bpats\b/g, "patriots"],
+  [/\bbucs\b/g, "buccaneers"],
+  [/\bjags\b/g, "jaguars"],
+  [/\bphins\b/g, "dolphins"],
+  [/\bcommies\b/g, "commanders"],
+  [/\bcavs\b/g, "cavaliers"],
+  [/\bmavs\b/g, "mavericks"],
+  [/\bsixers\b/g, "76ers"],
+  [/\bwolves\b/g, "timberwolves"],
+  [/\bdbacks\b|\bsnakes\b/g, "diamondbacks"],
+  [/\bstros\b/g, "astros"],
 ];
 
 /**
@@ -81,6 +99,9 @@ export function findPlayer(
     const last = parts.at(-1)!;
     let score = 0;
     if (q.includes(` ${name} `)) score = 3;
+    // Two-word nicknames: "red sox", "trail blazers".
+    else if (parts.length > 2 && q.includes(` ${parts.slice(-2).join(" ")} `))
+      score = 3;
     else if (
       parts.length > 1 &&
       words.has(last) &&
@@ -91,8 +112,14 @@ export function findPlayer(
     else if (first.length >= 4 && words.has(first) && !STOP.has(first))
       score = 1;
     if (!score) continue;
-    if (!best || score > best.score || (score === best.score && c.n > best.c.n))
-      best = { c, score };
+    const better =
+      !best ||
+      score > best.score ||
+      (score === best.score &&
+        (best.c.team && !c.team
+          ? true
+          : best.c.team === c.team && c.n > best.c.n));
+    if (better) best = { c, score };
   }
   return best?.c ?? null;
 }

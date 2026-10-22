@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   extractChartBlock,
+  extractExplainBlock,
   extractSqlBlock,
   parseFast,
   toChartPick,
 } from "./llm-output";
 
 describe("parseFast", () => {
-  test("reads plan, sql and chart", () => {
+  test("reads explain, plan, sql and chart", () => {
     const chart = {
       type: "bar",
       x: "",
@@ -18,8 +19,11 @@ describe("parseFast", () => {
       title: "",
     };
     assert.deepEqual(
-      parseFast(JSON.stringify({ plan: "p", sql: "SELECT 1", chart })),
+      parseFast(
+        JSON.stringify({ explain: " e ", plan: "p", sql: "SELECT 1", chart }),
+      ),
       {
+        explain: "e",
         plan: "p",
         sql: "SELECT 1",
         chart,
@@ -36,9 +40,19 @@ describe("parseFast", () => {
       parseFast(
         '{"plan": "p", "sql": "SELECT \\"a\\" FROM t", "chart": {"type": "sca',
       ),
-      { plan: null, sql: 'SELECT "a" FROM t', chart: null },
+      { explain: null, plan: null, sql: 'SELECT "a" FROM t', chart: null },
     );
   });
+});
+
+test("extractExplainBlock reads explain from the deep-mode json block", () => {
+  assert.equal(
+    extractExplainBlock(
+      '```sql\nSELECT 1\n```\n```json\n{"explain": "Ranks QBs.", "type": "none"}\n```',
+    ),
+    "Ranks QBs.",
+  );
+  assert.equal(extractExplainBlock('```json\n{"type": "none"}\n```'), null);
 });
 
 describe("toChartPick", () => {

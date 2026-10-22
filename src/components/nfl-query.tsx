@@ -68,6 +68,7 @@ interface ApiResponse {
   error?: string;
   sql?: string;
   plan?: string | null;
+  explain?: string | null;
   mode?: Mode;
   attempts?: Attempt[];
   timings?: { total_ms: number };
@@ -705,6 +706,11 @@ export function NflQuery({
               <h2 className="font-display text-2xl leading-tight font-bold text-slate-900">
                 {lastQuery}
               </h2>
+              {response.explain && (
+                <p className="mt-2 max-w-prose text-slate-700">
+                  {response.explain}
+                </p>
+              )}
               <p className="mt-1 text-sm text-slate-500">
                 {results.length} {results.length === 1 ? "row" : "rows"}
                 {response.truncated && " (first rows only)"}
@@ -820,7 +826,7 @@ export function NflQuery({
           {response ? "Try another" : "Try one of these"}
           <span className="sr-only"> {SPORT_LABEL[sport]} question</span>
         </h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {SPORT_ASK[sport].groups.map((g) => (
             <div
               key={g.title}

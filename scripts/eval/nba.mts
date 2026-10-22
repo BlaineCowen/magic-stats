@@ -2,6 +2,11 @@ import { leaders, type Case } from "./types.mts";
 
 // NBA cases: reference SQL runs against data/nba (seasons named by the year they end).
 export const CASES: Case[] = [
+  // Slang and opinion questions: any sensible stand-in passes.
+  { q: "What team was the biggest fraud in 2025-26?", fuzzy: true },
+  { q: "Who pads their stats the most in garbage time?", fuzzy: true },
+  { q: "Who is the biggest brick layer?", fuzzy: true },
+  { q: "Why are the Thunder so good?", proof: "Thunder" },
   // No year or "this year": must mean the current season, not the model's training year.
   {
     q: "Who has scored the most points so far?",

@@ -139,6 +139,9 @@ export async function openaiCompatibleChat(
     temperature?: number;
     responseFormat?: ResponseFormat;
     timeoutMs?: number;
+    /** Cap on thinking tokens (OpenRouter `reasoning.max_tokens`) so a model
+     * that thinks at length still leaves room in maxTokens for the answer. */
+    reasoningMaxTokens?: number;
   },
 ): Promise<string> {
   let lastErr: Error | null = null;
@@ -155,6 +158,9 @@ export async function openaiCompatibleChat(
           temperature: opts.temperature ?? 0.15,
           ...(opts.responseFormat
             ? { response_format: opts.responseFormat }
+            : {}),
+          ...(opts.reasoningMaxTokens
+            ? { reasoning: { max_tokens: opts.reasoningMaxTokens } }
             : {}),
         }),
         signal: AbortSignal.timeout(opts.timeoutMs ?? 90_000),

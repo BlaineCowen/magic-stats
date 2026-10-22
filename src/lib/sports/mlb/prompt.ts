@@ -35,11 +35,17 @@ const PITCHING_COLS: Col[] = [
   ],
   ["era, whip, k_per_9, bb_per_9, hr_per_9, avg_against", ""],
   ["k_pct, bb_pct", "fractions 0-1 of batters faced"],
-  ["fip, xfip, era_minus, fip_minus, war", "ERA-/FIP- 100 = average, lower is better"],
+  [
+    "fip, xfip, era_minus, fip_minus, war",
+    "ERA-/FIP- 100 = average, lower is better",
+  ],
 ];
 
 const FIELDING_COLS: Col[] = [
-  ["season, player_id, player_name, team, position", "one row per position played"],
+  [
+    "season, player_id, player_name, team, position",
+    "one row per position played",
+  ],
   [
     "games, games_started, innings, putouts, assists, errors, chances, fielding_pct, double_plays, range_factor_per_9",
     "",
@@ -79,7 +85,10 @@ const TEAM_GAMES_COLS: Col[] = [
 
 const BATTING_GAMES_COLS: Col[] = [
   ["game_pk, season, game_type, season_type, game_date", ""],
-  ["player_id, player_name, team, opponent, is_home, position, batting_order", ""],
+  [
+    "player_id, player_name, team, opponent, is_home, position, batting_order",
+    "",
+  ],
   [
     "pa, ab, runs, hits, doubles, triples, home_runs, rbi, walks, strikeouts, hit_by_pitch, stolen_bases, caught_stealing, total_bases, left_on_base",
     "",
@@ -97,11 +106,11 @@ const PITCHING_GAMES_COLS: Col[] = [
 ];
 
 const STATCAST_COLS: Col[] = [
-  ["season, player_id, player_name, pa, batted_balls", "no team column: join batting_seasons/pitching_seasons ON player_id AND season"],
   [
-    "avg_exit_velo, max_exit_velo, ev50, avg_launch_angle",
-    "mph and degrees",
+    "season, player_id, player_name, pa, batted_balls",
+    "no team column: join batting_seasons/pitching_seasons ON player_id AND season",
   ],
+  ["avg_exit_velo, max_exit_velo, ev50, avg_launch_angle", "mph and degrees"],
   [
     "sweet_spot_pct, hard_hit_pct, barrel_pct, barrels_per_pa, barrels",
     "percents 0-100; hard hit = 95+ mph; barrel_pct per batted ball",
@@ -141,6 +150,14 @@ const OAA_COLS: Col[] = [
     "",
   ],
 ];
+
+const FUZZY = `- "fraud" team: wins - games * POW(rf, 1.83) / (POW(rf, 1.83) + POW(ra, 1.83)) from team_games summed runs; higher = won more than its run differential says. Show record, run differential and expected wins.
+- "clutch": no situational splits; use one-run games (team_games ABS(runs_for - runs_against) = 1) for teams, or games decided by one or two runs (batting_games joined to team_games) for players.
+- "lucky" hitter: woba - xwoba (statcast_batting), highest = luckiest; "unlucky" is the reverse. Pitchers: statcast_pitching woba allowed below xwoba.
+- "three true outcomes": (home_runs + walks + strikeouts) / pa.
+- "all or nothing": high home runs with low batting average.
+- "washed": biggest drop in WAR or wRC+ from the previous season (self-join on season - 1), min sample both years.
+- "carrying the team": share of the team's WAR or home runs.`;
 
 const IDIOMS = `MLB IDIOMS (use these exact definitions)
 - Single-season leaders: batting_seasons / pitching_seasons already have one row per player per season. Don't SUM within a season.
@@ -188,7 +205,8 @@ function seasonContext(info: DataInfo): string {
   const month = info.latestDate ? Number(info.latestDate.slice(5, 7)) : 12;
   // Still going during the regular season and October's postseason; done by November.
   const inProgress =
-    info.maxSeasonType === "REG" || (info.maxSeasonType === "POST" && month === 10);
+    info.maxSeasonType === "REG" ||
+    (info.maxSeasonType === "POST" && month === 10);
   const lastComplete = inProgress ? info.maxSeason - 1 : info.maxSeason;
   const logsFrom = Number(info.extra.game_logs_from) || null;
   const lines = [
@@ -208,28 +226,86 @@ export const mlbPrompt: SportPrompt = {
     RULE.onlyListed,
     "Season tables cover the regular season only. In games, team_games and the game logs, default to season_type = 'REG' unless the question mentions the playoffs/postseason/World Series.",
     RULE.leaderboard,
-    RULE.sample("games or plate appearances", "pa, innings, batted_balls, pitches"),
+    RULE.sample(
+      "games or plate appearances",
+      "pa, innings, batted_balls, pitches",
+    ),
     RULE.round("ORDER BY SUM(hits) / SUM(ab) DESC"),
     `Players: match the LAST NAME without accents: strip_accents(player_name) ILIKE '%acuna%'. Names have accents and suffixes ("Ronald Acuña Jr.", "Vladimir Guerrero Jr."), so never match the full name. For common last names (Garcia, Rodriguez, Martinez, Hernandez, Perez, Smith, Johnson, Williams, Jones, Brown, Castillo, Diaz, Ramirez) or families (Guerrero, Tatis, Bichette, Witt) add the start of the first name: ILIKE 'vlad%guerrero%'.`,
     "Teams are codes: ATH AZ ATL BAL BOS CHC CIN CLE COL CWS DET HOU KC LAA LAD MIA MIL MIN NYM NYY PHI PIT SD SEA SF STL TB TEX TOR WSH. Every season uses the franchise's current code (Expos = WSH, Marlins = MIA, Angels = LAA, A's = ATH, Guardians/Indians = CLE).",
     "A traded player's season row has team like 'BOS/NYY'. To find a team's players, use list_contains(string_split(team, '/'), 'NYY').",
   ],
   tables: [
-    { view: "batting_seasons", title: (i) => `one row per batter per season, ${i.minSeason}-${i.maxSeason}`, cols: BATTING_COLS },
-    { view: "pitching_seasons", title: () => "one row per pitcher per season", cols: PITCHING_COLS },
-    { view: "fielding_seasons", title: () => "one row per player per position per season", cols: FIELDING_COLS },
-    { view: "team_seasons", title: () => "one row per team per season (record, runs, team batting and pitching)", cols: TEAM_SEASONS_COLS },
-    { view: "games", title: () => "one row per game, regular season and postseason", cols: GAMES_COLS },
-    { view: "team_games", title: () => "one row per team per game", cols: TEAM_GAMES_COLS },
-    { view: "batting_games", title: () => "one row per batter per game (recent seasons only)", cols: BATTING_GAMES_COLS },
-    { view: "pitching_games", title: () => "one row per pitcher per game (recent seasons only)", cols: PITCHING_GAMES_COLS },
-    { view: "statcast_batting", title: () => "Statcast batted-ball quality per batter per season, 2015+", cols: STATCAST_COLS },
-    { view: "statcast_pitching", title: () => "the same, allowed by each pitcher, 2015+", cols: STATCAST_COLS },
-    { view: "pitch_arsenal", title: () => "one row per pitcher per pitch type per season, 2015+", cols: ARSENAL_COLS },
-    { view: "sprint_speed", title: () => "one row per runner per season, 2015+", cols: SPRINT_COLS },
-    { view: "outs_above_average", title: () => "fielding range per player per season, 2016+", cols: OAA_COLS },
+    {
+      view: "batting_seasons",
+      title: (i) =>
+        `one row per batter per season, ${i.minSeason}-${i.maxSeason}`,
+      cols: BATTING_COLS,
+    },
+    {
+      view: "pitching_seasons",
+      title: () => "one row per pitcher per season",
+      cols: PITCHING_COLS,
+    },
+    {
+      view: "fielding_seasons",
+      title: () => "one row per player per position per season",
+      cols: FIELDING_COLS,
+    },
+    {
+      view: "team_seasons",
+      title: () =>
+        "one row per team per season (record, runs, team batting and pitching)",
+      cols: TEAM_SEASONS_COLS,
+    },
+    {
+      view: "games",
+      title: () => "one row per game, regular season and postseason",
+      cols: GAMES_COLS,
+    },
+    {
+      view: "team_games",
+      title: () => "one row per team per game",
+      cols: TEAM_GAMES_COLS,
+    },
+    {
+      view: "batting_games",
+      title: () => "one row per batter per game (recent seasons only)",
+      cols: BATTING_GAMES_COLS,
+    },
+    {
+      view: "pitching_games",
+      title: () => "one row per pitcher per game (recent seasons only)",
+      cols: PITCHING_GAMES_COLS,
+    },
+    {
+      view: "statcast_batting",
+      title: () => "Statcast batted-ball quality per batter per season, 2015+",
+      cols: STATCAST_COLS,
+    },
+    {
+      view: "statcast_pitching",
+      title: () => "the same, allowed by each pitcher, 2015+",
+      cols: STATCAST_COLS,
+    },
+    {
+      view: "pitch_arsenal",
+      title: () => "one row per pitcher per pitch type per season, 2015+",
+      cols: ARSENAL_COLS,
+    },
+    {
+      view: "sprint_speed",
+      title: () => "one row per runner per season, 2015+",
+      cols: SPRINT_COLS,
+    },
+    {
+      view: "outs_above_average",
+      title: () => "fielding range per player per season, 2016+",
+      cols: OAA_COLS,
+    },
   ],
   idioms: IDIOMS,
+  fuzzy: FUZZY,
   chartTeamHint:
     "Player charts: include team (batting_seasons / pitching_seasons) so points get team colors.",
   examples: EXAMPLES,

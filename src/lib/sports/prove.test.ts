@@ -9,12 +9,12 @@ import {
   type Candidate,
 } from "./prove/parse";
 
-const cand = (pid: string, name: string, n: number): Candidate => ({
-  pid,
-  name,
-  n,
-  roles: {},
-});
+const cand = (
+  pid: string,
+  name: string,
+  n: number,
+  team = false,
+): Candidate => ({ pid, name, n, team, roles: {} });
 const CANDS = [
   cand("1", "C.J. Stroud", 300),
   cand("2", "Josh Allen", 320),
@@ -23,6 +23,10 @@ const CANDS = [
   cand("5", "Nikola Jokić", 70),
   cand("6", "Victor Wembanyama", 60),
   cand("7", "Amon-Ra St. Brown", 90),
+  cand("HOU", "Houston Texans", 5000, true),
+  cand("SF", "San Francisco 49ers", 5000, true),
+  cand("BOS", "Boston Red Sox", 160, true),
+  cand("CHW", "Chicago White Sox", 162, true),
 ];
 
 test("isProofQuestion", () => {
@@ -33,6 +37,8 @@ test("isProofQuestion", () => {
   assert.ok(isProofQuestion("Lamar is the GOAT"));
   assert.ok(!isProofQuestion("Most rushing yards in 2024"));
   assert.ok(!isProofQuestion("Top 10 quarterbacks by EPA"));
+  assert.ok(isProofQuestion("why are the Texans the best team?"));
+  assert.ok(!isProofQuestion("What team is the biggest fraud?"));
 });
 
 test("normalizeName strips punctuation, accents and suffixes", () => {
@@ -50,6 +56,14 @@ test("findPlayer", () => {
   assert.equal(findPlayer("prove wemby is elite", CANDS)?.pid, "6");
   assert.equal(findPlayer("make the case for the sun god", CANDS)?.pid, "7");
   assert.equal(findPlayer("prove the best qb is elite", CANDS), null);
+  assert.equal(findPlayer("why are the Texans so good", CANDS)?.pid, "HOU");
+  assert.equal(findPlayer("prove the niners are elite", CANDS)?.pid, "SF");
+  assert.equal(findPlayer("case for the red sox", CANDS)?.pid, "BOS");
+  // A player beats his team on a tie.
+  assert.equal(
+    findPlayer("prove stroud is the best texans qb", CANDS)?.pid,
+    "1",
+  );
 });
 
 test("parseScope", () => {

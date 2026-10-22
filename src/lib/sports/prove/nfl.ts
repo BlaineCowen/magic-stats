@@ -1,8 +1,9 @@
 import { cases, either, type Dim, type Role, type SportProof } from "./kit";
 
 // Splits every NFL role shares. Phrases read after the stat:
-// "Most passing yards" + "on 3rd down" + "on the road".
-const situation: Dim[] = [
+// "Most passing yards" + "on 3rd down" + "on the road". `own` is "his" or
+// "their"; null drops the backed-up bucket (it reads wrong for a defense).
+const situationDims = (own: string | null): Dim[] => [
   {
     key: "down",
     sql: cases("down", {
@@ -20,7 +21,7 @@ const situation: Dim[] = [
   {
     key: "zone",
     sql: `CASE WHEN yardline_100 <= 20 THEN 'in the red zone'
-      WHEN yardline_100 >= 80 THEN 'when backed up inside his own 20' END`,
+      ${own ? `WHEN yardline_100 >= 80 THEN 'when backed up inside ${own} own 20'` : ""} END`,
   },
   {
     key: "qtr",
@@ -74,6 +75,8 @@ const situation: Dim[] = [
     }),
   },
 ];
+
+const situation = situationDims("his");
 
 const SITUATION_SKIPS: [string, string][] = [
   ["down", "dd"],
@@ -393,8 +396,257 @@ const receiver: Role = {
   ],
 };
 
+const playDim: Dim = {
+  key: "play",
+  sql: cases("play_type", {
+    pass: "on passing plays",
+    run: "on running plays",
+  }),
+};
+const offenseDims = [playDim, ...situationDims("their")];
+const offense: Role = {
+  key: "offense",
+  team: true,
+  noun: "offenses",
+  sample: { sql: "count(*)", label: "plays" },
+  min: [200, 60, 30],
+  minPool: 20,
+  dims: offenseDims,
+  skipPairs: SITUATION_SKIPS,
+  from: (scope) => `
+    SELECT posteam AS pid, posteam AS pname, NULL AS team,
+      ${cols(offenseDims)},
+      coalesce(yards_gained, 0) AS yds, epa, success, touchdown AS td
+    FROM pbp
+    WHERE ${scope} AND play_type IN ('pass', 'run') AND posteam IS NOT NULL`,
+  ids: (scope) => `
+    SELECT posteam AS pid, posteam AS pname FROM pbp
+    WHERE ${scope} AND play_type IN ('pass', 'run') AND posteam IS NOT NULL`,
+  metrics: [
+    {
+      key: "epa",
+      lead: "Best offensive EPA per play",
+      column: "EPA/play",
+      sql: "avg(epa)",
+      rate: true,
+      fmt: "epa",
+      weight: 1.3,
+    },
+    {
+      key: "sr",
+      lead: "Best offensive success rate",
+      column: "Success",
+      sql: "avg(success)",
+      rate: true,
+      fmt: "pct",
+    },
+    {
+      key: "ypp",
+      lead: "Most yards per play",
+      column: "Yds/play",
+      sql: "avg(yds)",
+      rate: true,
+      fmt: "1",
+    },
+    {
+      key: "big",
+      lead: "Most 20-yard plays",
+      column: "20+ plays",
+      sql: "count(*) FILTER (WHERE yds >= 20)",
+      fmt: "int",
+      weight: 0.9,
+    },
+    {
+      key: "td",
+      lead: "Most offensive touchdowns",
+      column: "TD",
+      sql: "sum(td)",
+      fmt: "int",
+    },
+  ],
+};
+
+// Swap sides so the shared dims read from the defense's point of view.
+const defenseDims = [
+  playDim,
+  ...situationDims(null).filter(
+    (d) => d.key !== "shotgun" && d.key !== "tempo",
+  ),
+];
+const defense: Role = {
+  key: "defense",
+  team: true,
+  noun: "defenses",
+  sample: { sql: "count(*)", label: "plays" },
+  min: [200, 60, 30],
+  minPool: 20,
+  dims: defenseDims,
+  skipPairs: SITUATION_SKIPS,
+  from: (scope) => `
+    SELECT posteam AS pid, posteam AS pname, NULL AS team,
+      ${cols(defenseDims)},
+      coalesce(yards_gained, 0) AS yds, epa, success, sack, takeaway
+    FROM (
+      SELECT * REPLACE (defteam AS posteam, posteam AS defteam, -score_differential AS score_differential),
+        coalesce(interception, 0) + coalesce(fumble_lost, 0) AS takeaway
+      FROM pbp
+      WHERE ${scope} AND play_type IN ('pass', 'run') AND defteam IS NOT NULL
+    )`,
+  ids: (scope) => `
+    SELECT defteam AS pid, defteam AS pname FROM pbp
+    WHERE ${scope} AND play_type IN ('pass', 'run') AND defteam IS NOT NULL`,
+  metrics: [
+    {
+      key: "epa",
+      lead: "Lowest EPA per play allowed",
+      column: "EPA/play",
+      sql: "avg(epa)",
+      rate: true,
+      low: true,
+      fmt: "epa",
+      weight: 1.3,
+    },
+    {
+      key: "sr",
+      lead: "Lowest success rate allowed",
+      column: "Success",
+      sql: "avg(success)",
+      rate: true,
+      low: true,
+      fmt: "pct",
+    },
+    {
+      key: "ypp",
+      lead: "Fewest yards per play allowed",
+      column: "Yds/play",
+      sql: "avg(yds)",
+      rate: true,
+      low: true,
+      fmt: "1",
+    },
+    {
+      key: "sacks",
+      lead: "Most sacks",
+      column: "Sacks",
+      sql: "sum(sack)",
+      fmt: "int",
+    },
+    {
+      key: "take",
+      lead: "Most takeaways",
+      column: "Takeaways",
+      sql: "sum(takeaway)",
+      fmt: "int",
+    },
+  ],
+};
+
+const gameDims: Dim[] = [
+  {
+    key: "line",
+    sql: "CASE WHEN favored_by < 0 THEN 'as the underdog' WHEN favored_by > 0 THEN 'as the favorite' END",
+  },
+  {
+    key: "opp",
+    sql: either(
+      "opp_win_pct >= 0.5",
+      "against winning teams",
+      "against losing teams",
+    ),
+  },
+  { key: "loc", sql: either("is_home", "at home", "on the road") },
+  {
+    key: "div",
+    sql: "CASE WHEN div_game = 1 THEN 'against division rivals' END",
+  },
+  {
+    key: "cold",
+    sql: "CASE WHEN temp <= 40 THEN 'in games 40 degrees or colder' END",
+  },
+  {
+    key: "day",
+    weight: 0.6,
+    sql: cases("dayname(gameday::DATE)", {
+      Sunday: "on Sundays",
+      Monday: "on Monday nights",
+      Thursday: "on Thursday nights",
+      Saturday: "on Saturdays",
+    }),
+  },
+];
+const record: Role = {
+  key: "record",
+  team: true,
+  noun: "teams",
+  sample: { sql: "count(*)", label: "games" },
+  min: [4, 3, 2],
+  minPool: 16,
+  dims: gameDims,
+  from: (scope) => `
+    WITH rec AS (
+      SELECT team, season, season_type, avg(win) AS win_pct FROM team_games
+      WHERE points_for IS NOT NULL GROUP BY ALL
+    )
+    SELECT g.team AS pid, g.team AS pname, NULL AS team,
+      ${cols(gameDims)},
+      win, points_for AS pf, points_against AS pa
+    FROM (
+      SELECT t.*, rec.win_pct AS opp_win_pct
+      FROM (SELECT * FROM team_games WHERE ${scope} AND points_for IS NOT NULL) t
+      LEFT JOIN rec ON rec.team = t.opponent AND rec.season = t.season AND rec.season_type = t.season_type
+    ) g`,
+  ids: (scope) => `
+    SELECT team AS pid, team AS pname FROM team_games t
+    WHERE ${scope} AND points_for IS NOT NULL`,
+  metrics: [
+    {
+      key: "w",
+      lead: "Most wins",
+      column: "Wins",
+      sql: "sum(win)",
+      fmt: "int",
+      weight: 1.3,
+    },
+    {
+      key: "wp",
+      lead: "Best winning percentage",
+      column: "Win %",
+      sql: "avg(win)",
+      rate: true,
+      fmt: "pct",
+      weight: 1.2,
+    },
+    {
+      key: "diff",
+      lead: "Best point differential per game",
+      column: "Margin",
+      sql: "avg(pf - pa)",
+      rate: true,
+      fmt: "plus1",
+      weight: 1.2,
+    },
+    {
+      key: "pf",
+      lead: "Most points per game",
+      column: "PPG",
+      sql: "avg(pf)",
+      rate: true,
+      fmt: "1",
+    },
+    {
+      key: "pa",
+      lead: "Fewest points allowed per game",
+      column: "Allowed",
+      sql: "avg(pa)",
+      rate: true,
+      low: true,
+      fmt: "1",
+    },
+  ],
+};
+
 export const nflProof: SportProof = {
-  roles: [passer, rusher, receiver],
+  roles: [passer, rusher, receiver, offense, defense, record],
   league: "NFL",
   scopeSql: (s) =>
     `season BETWEEN ${s.from} AND ${s.to} AND season_type = '${s.type}'`,

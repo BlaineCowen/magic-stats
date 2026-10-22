@@ -2,6 +2,23 @@ import { leaders, type Case } from "./types.mts";
 
 // NFL cases: reference SQL runs against data/nfl.
 export const CASES: Case[] = [
+  // Slang and opinion questions: any sensible stand-in passes.
+  { q: "What team is the biggest fraud?", fuzzy: true },
+  { q: "What qb is carried the most by their receivers?", fuzzy: true },
+  { q: "Who gets the most garbage time fantasy points?", fuzzy: true },
+  {
+    q: "What rb has broken the most tackles this season?",
+    ref: "SELECT pfr_player_name n, SUM(rushing_broken_tackles) v FROM pfr_rush WHERE season = (SELECT max(season) FROM pfr_rush) AND game_type = 'REG' AND position = 'RB' GROUP BY ALL ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  { q: "Which receiver drops the most passes?", fuzzy: true },
+  { q: "Who is the most clutch quarterback?", fuzzy: true },
+  { q: "Why are the Texans the best team?", proof: "Texans" },
+  {
+    q: "Give me the stats that prove Cj stroud is the best qb in the nfl",
+    proof: "Stroud",
+  },
   // No year or "this year": must mean the current season, not the model's training year.
   {
     q: "Who leads the league in passing yards?",

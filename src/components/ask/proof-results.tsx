@@ -40,19 +40,20 @@ export function ProofResults({
   onCopyLink: () => void;
 }) {
   const leads = proof.findings.filter((f) => f.rank === 1).length;
+  const who = proof.isTeam ? `the ${proof.player}` : proof.player;
   return (
     <section className="mt-8 min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h2 className="font-display text-2xl leading-tight font-bold text-slate-900">
-            The case for {proof.player}
+            The case for {who}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
             {proof.findings.length === 0
-              ? `Couldn't find a split in the ${proof.scope} where ${proof.player} ranks in the top 3.`
+              ? `Couldn't find a split in the ${proof.scope} where ${who} ${proof.isTeam ? "rank" : "ranks"} in the top 3.`
               : leads === proof.findings.length
-                ? `${leads} splits from the ${proof.scope} where ${proof.player} ranks first among qualified players.`
-                : `${proof.player} doesn't lead many splits in the ${proof.scope}, so this includes the ones where he's 2nd or 3rd.`}
+                ? `${leads} splits from the ${proof.scope} where ${who} ${proof.isTeam ? "rank" : "ranks"} first among qualified ${proof.isTeam ? "teams" : "players"}.`
+                : `${who.charAt(0).toUpperCase()}${who.slice(1)} ${proof.isTeam ? "don't" : "doesn't"} lead many splits in the ${proof.scope}, so this includes the ones where ${proof.isTeam ? "they're" : "he's"} 2nd or 3rd.`}
           </p>
           {proof.note && (
             <p className="mt-1 text-sm text-amber-800">{proof.note}</p>
@@ -103,7 +104,7 @@ export function ProofResults({
                     #
                   </th>
                   <th scope="col" className="py-1.5 font-medium">
-                    Player
+                    {f.entity}
                   </th>
                   <th
                     scope="col"

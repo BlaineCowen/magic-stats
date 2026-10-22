@@ -20,12 +20,20 @@ export const SPORT_ASK: Record<
     placeholder: "Most rushing yards in 2024?",
     groups: [
       {
+        title: "Dumb stats",
+        questions: [
+          "What team is the biggest fraud?",
+          "Which QB is carried the most by his receivers?",
+          "Who gets the most garbage time fantasy points?",
+          "Prove CJ Stroud is the best QB in the NFL",
+        ],
+      },
+      {
         title: "Quarterbacks",
         questions: [
           "Top 10 quarterbacks in 2024 by EPA per dropback, minimum 300 dropbacks",
           "CJ Stroud's 10 longest completions by air yards in 2024",
           "Quarterbacks with the most touchdown passes on third down in 2024",
-          "Prove CJ Stroud is the best QB in the NFL",
         ],
       },
       {
@@ -61,12 +69,19 @@ export const SPORT_ASK: Record<
     source: "NBA Stats via sportsdataverse, ESPN",
     groups: [
       {
+        title: "Dumb stats",
+        questions: [
+          "Who pads their stats the most in garbage time?",
+          "Who is the biggest brick layer?",
+          "Why are the Thunder so good?",
+        ],
+      },
+      {
         title: "Scoring & shooting",
         questions: [
           "Highest scoring average in 2024-25, minimum 50 games",
           "Best three-point percentage in 2024-25 with at least 300 attempts",
           "Most 40-point games since 2020",
-          "Make the case that SGA is the best player in 2025-26",
         ],
       },
       {
@@ -102,12 +117,19 @@ export const SPORT_ASK: Record<
     source: "MLB Stats API, Baseball Savant",
     groups: [
       {
+        title: "Dumb stats",
+        questions: [
+          "Who is the luckiest hitter?",
+          "What team is the biggest fraud?",
+          "Prove Shohei Ohtani is the best player in baseball",
+        ],
+      },
+      {
         title: "Hitting",
         questions: [
           "Most home runs in 2025",
           "Best wRC+ among qualified hitters in 2025",
           "Career WAR leaders since 2000 among hitters",
-          "Prove Shohei Ohtani is the best player in baseball",
         ],
       },
       {

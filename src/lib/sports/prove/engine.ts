@@ -3,6 +3,7 @@ import type { Sport } from "../types";
 import {
   FRAC,
   formatValue,
+  named,
   ordinal,
   type Role,
   type Scope,
@@ -29,6 +30,8 @@ export type ProofRow = {
 };
 
 export type Finding = {
+  /** "Player" or "Team", the table's name column. */
+  entity: "Player" | "Team";
   title: string;
   rank: number;
   tied: boolean;
@@ -43,7 +46,9 @@ export type Finding = {
 export type ProofResult = {
   kind: "proof";
   sport: Sport;
+  /** The player or team the case is for. */
   player: string;
+  isTeam: boolean;
   team: string;
   scope: string;
   note: string | null;
@@ -63,14 +68,15 @@ async function candidates(
     .map(
       (
         r,
-      ) => `SELECT '${r.key}' AS role, pid::VARCHAR AS pid, any_value(pname) AS pname,
-        (${r.sample.sql})::DOUBLE AS n FROM (${r.ids(where)}) GROUP BY pid`,
+      ) => `SELECT '${r.key}' AS role, ${r.team ? "true" : "false"} AS is_team, pid::VARCHAR AS pid, any_value(pname) AS pname,
+        (${r.sample.sql})::DOUBLE AS n FROM (${named(r, r.ids(where))}) GROUP BY pid`,
     )
     .join(" UNION ALL ");
   // Every player with any volume; only names are matched, so a big list is fine.
   const { rows } = await runSafeSelect(
     sport,
-    `SELECT pid, any_value(pname) AS pname, string_agg(role || ':' || n, ',') AS roles,
+    `SELECT pid, any_value(pname) AS pname, bool_or(is_team) AS is_team,
+       string_agg(role || ':' || n, ',') AS roles,
        sum(n) AS n
      FROM (${sql}) WHERE pname IS NOT NULL GROUP BY pid`,
     { maxRows: 20_000 },
@@ -79,6 +85,7 @@ async function candidates(
     pid: String(r.pid),
     name: String(r.pname),
     n: Number(r.n),
+    team: r.is_team === true,
     roles: Object.fromEntries(
       String(r.roles)
         .split(",")
@@ -133,7 +140,7 @@ function splitSql(
     .map((m) => sqlStr(`m_${m.key}`));
   const nd = dims.map((d) => `(${d} IS NOT NULL)::INT`).join(" + ");
   return `
-WITH base AS (${role.from(where)}),
+WITH base AS (${named(role, role.from(where))}),
 agg AS (
   SELECT pid::VARCHAR AS pid, any_value(pname) AS pname, string_agg(DISTINCT team, '/') AS team,
     ${dims.join(", ")}, (${role.sample.sql})::DOUBLE AS sample,
@@ -231,6 +238,7 @@ function toFindings(role: Role, rows: Row[], pid: string): Candidate2[] {
       rank,
       tied,
       finding: {
+        entity: role.team ? "Team" : "Player",
         title: `${metric.lead}${split ? ` ${split}` : ""}`,
         rank,
         tied,
@@ -352,24 +360,25 @@ export async function proveClaim(
   const where = proof.scopeSql(scope);
   const pid = player.pid;
   const t0 = Date.now();
-  const results = await Promise.all(
-    roles.map(async (role) => {
-      const { rows } = await runSafeSelect(
-        sport,
-        // Pairs of splits over many seasons is too much data; single splits only.
-        splitSql(role, where, pid, scope.to - scope.from < 3),
-        { maxRows: 1000 },
-      );
-      return toFindings(role, rows, pid);
-    }),
-  );
-  const findings = pick(results.flat(), 12);
+  // One role at a time: each query holds every split in memory.
+  const results: Candidate2[] = [];
+  for (const role of roles) {
+    const { rows } = await runSafeSelect(
+      sport,
+      // Pairs of splits over many seasons is too much data; single splits only.
+      splitSql(role, where, pid, scope.to - scope.from < 3),
+      { maxRows: 1000 },
+    );
+    results.push(...toFindings(role, rows, pid));
+  }
+  const findings = pick(results, 12);
   const me = findings[0]?.rows.find((r) => r.target);
 
   return {
     kind: "proof",
     sport,
     player: me?.player ?? player.name,
+    isTeam: player.team,
     team: me?.team ?? "",
     scope: scopeLabel(proof, scope),
     note,

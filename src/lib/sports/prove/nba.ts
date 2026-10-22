@@ -170,8 +170,118 @@ const player: Role = {
   ],
 };
 
+const teamDims: Dim[] = [
+  {
+    key: "rest",
+    sql: `CASE WHEN rest_days = 1 THEN 'on the second night of back-to-backs'
+      WHEN rest_days >= 3 THEN 'with two or more days of rest' END`,
+  },
+  {
+    key: "opp",
+    sql: either(
+      "opp_win_pct >= 0.5",
+      "against winning teams",
+      "against losing teams",
+    ),
+  },
+  { key: "loc", sql: either("is_home", "at home", "on the road") },
+  MONTHS,
+  WEEKDAYS,
+];
+
+const team: Role = {
+  key: "team",
+  team: true,
+  noun: "teams",
+  sample: { sql: "count(*)", label: "games" },
+  min: [20, 8, 5],
+  minPool: 20,
+  dims: teamDims,
+  skipPairs: [["month", "day"]],
+  from: (scope) => `
+    WITH rec AS (
+      SELECT team, season, season_type, avg(win) AS win_pct FROM team_games GROUP BY ALL
+    )
+    SELECT p.team AS pid, p.team AS pname,
+      NULL AS team,
+      ${teamDims.map((d) => `${d.sql} AS d_${d.key}`).join(",\n      ")},
+      win, points_for AS pf, points_against AS pa, possessions, opp_possessions, fg3m
+    FROM (
+      SELECT t.*, rec.win_pct AS opp_win_pct,
+        t.game_date - lag(t.game_date) OVER (PARTITION BY t.team, t.season ORDER BY t.game_date) AS rest_days
+      FROM team_games t
+      LEFT JOIN rec ON rec.team = t.opponent AND rec.season = t.season AND rec.season_type = t.season_type
+    ) p
+    WHERE ${scope}`,
+  ids: (scope) => `
+    SELECT p.team AS pid, p.team AS pname
+    FROM team_games p WHERE ${scope}`,
+  metrics: [
+    {
+      key: "w",
+      lead: "Most wins",
+      column: "Wins",
+      sql: "sum(win)",
+      fmt: "int",
+      weight: 1.3,
+    },
+    {
+      key: "wp",
+      lead: "Best winning percentage",
+      column: "Win %",
+      sql: "avg(win)",
+      rate: true,
+      fmt: "pct",
+      weight: 1.2,
+    },
+    {
+      key: "net",
+      lead: "Best net rating",
+      column: "Net rtg",
+      sql: "100 * sum(pf) / nullif(sum(possessions), 0) - 100 * sum(pa) / nullif(sum(opp_possessions), 0)",
+      rate: true,
+      fmt: "plus1",
+      weight: 1.3,
+    },
+    {
+      key: "ortg",
+      lead: "Best offensive rating",
+      column: "Off rtg",
+      sql: "100 * sum(pf) / nullif(sum(possessions), 0)",
+      rate: true,
+      fmt: "1",
+    },
+    {
+      key: "drtg",
+      lead: "Best defensive rating",
+      column: "Def rtg",
+      sql: "100 * sum(pa) / nullif(sum(opp_possessions), 0)",
+      rate: true,
+      low: true,
+      fmt: "1",
+    },
+    {
+      key: "diff",
+      lead: "Best point differential per game",
+      column: "Margin",
+      sql: "avg(pf - pa)",
+      rate: true,
+      fmt: "plus1",
+    },
+    {
+      key: "threes",
+      lead: "Most threes per game",
+      column: "3PM/G",
+      sql: "avg(fg3m)",
+      rate: true,
+      fmt: "1",
+      weight: 0.8,
+    },
+  ],
+};
+
 export const nbaProof: SportProof = {
-  roles: [player],
+  roles: [player, team],
   league: "NBA",
   scopeSql: (s) =>
     `p.season BETWEEN ${s.from} AND ${s.to} AND p.season_type = '${s.type}'`,

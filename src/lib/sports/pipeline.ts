@@ -11,7 +11,12 @@ import {
   type ChartSpec,
   type TeamColors,
 } from "@/lib/nfl/chart-spec";
-import { extractChartBlock, extractSqlBlock, parseFast } from "@/lib/nfl/llm-output";
+import {
+  extractChartBlock,
+  extractExplainBlock,
+  extractSqlBlock,
+  parseFast,
+} from "@/lib/nfl/llm-output";
 import { dataVersion, getTeamColors, runSafeSelect, type Row } from "./db";
 import {
   buildSystemPrompt,
@@ -27,6 +32,7 @@ export type Attempt = {
   mode: QueryMode;
   sql: string;
   plan: string | null;
+  explain?: string | null;
   chart?: ChartPick | null;
   error?: string;
   rows?: number;
@@ -40,6 +46,8 @@ export type PipelineResult = {
   truncated: boolean;
   sql: string;
   plan: string | null;
+  /** Plain-English summary of what the table shows, for the top of the answer. */
+  explain: string | null;
   mode: QueryMode;
   sport: Sport;
   attempts: Attempt[];
@@ -60,7 +68,8 @@ export class PipelineError extends Error {
   }
 }
 
-// `plan` comes first so the model states its approach before writing SQL;
+// `explain` comes first so a fuzzy question gets its stand-in stat defined
+// before the SQL is written. `plan` comes next so the model states its approach before writing SQL;
 // without it the 9B model skips reasoning entirely (no thinking under a grammar).
 // `chart` comes last so its column names can refer to the SQL's aliases.
 // Strict mode requires every property, so unused chart fields are "".
@@ -73,6 +82,7 @@ const FAST_FORMAT = {
     schema: {
       type: "object",
       properties: {
+        explain: { type: "string", maxLength: 400 },
         plan: { type: "string", maxLength: 300 },
         sql: { type: "string" },
         chart: {
@@ -88,7 +98,7 @@ const FAST_FORMAT = {
           required: ["type", "x", "y", "label", "series", "title"],
         },
       },
-      required: ["plan", "sql", "chart"],
+      required: ["explain", "plan", "sql", "chart"],
     },
   },
 };
@@ -125,6 +135,7 @@ async function generate(
 ): Promise<{
   sql: string | null;
   plan: string | null;
+  explain: string | null;
   chart: ChartPick | null;
   stats?: NativeChatStats;
 }> {
@@ -135,6 +146,7 @@ async function generate(
     return {
       sql: extractSqlBlock(r.content),
       plan: null,
+      explain: extractExplainBlock(r.content),
       chart: extractChartBlock(r.content),
       stats: r.stats,
     };
@@ -146,7 +158,9 @@ async function generate(
     ],
     {
       model: getLlmModelName(),
-      maxTokens: 1000,
+      // Fuzzy questions can think for a while; the cap keeps room for the JSON.
+      maxTokens: 6000,
+      reasoningMaxTokens: 3000,
       // Deterministic first try; a little variety on repairs so the model
       // doesn't hand back the same failing query.
       temperature: attempts.length ? 0.4 : 0,
@@ -180,6 +194,7 @@ export async function answerQuestion(
       mode: attemptMode,
       sql: gen.sql ?? "",
       plan: gen.plan,
+      explain: gen.explain,
       chart: gen.chart,
       llm_ms: Date.now() - t0,
       db_ms: 0,
@@ -213,6 +228,8 @@ export async function answerQuestion(
         truncated: out.truncated,
         sql: gen.sql,
         plan: gen.plan ?? attempts.find((a) => a.plan)?.plan ?? null,
+        explain:
+          gen.explain ?? attempts.find((a) => a.explain)?.explain ?? null,
         mode,
         sport,
         attempts,
