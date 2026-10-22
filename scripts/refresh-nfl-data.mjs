@@ -82,6 +82,13 @@ const DATASETS = [
     url: (y) => `${RELEASES}/ftn_charting/ftn_charting_${y}.parquet`,
     order: ["nflverse_game_id", "nflverse_play_id"],
   },
+  // Weekly injury reports: who's out for the projection model.
+  {
+    name: "injuries",
+    first: 2016,
+    url: (y) => `${RELEASES}/injuries/injuries_${y}.parquet`,
+    order: ["week", "team", "gsis_id"],
+  },
   {
     name: "snaps",
     first: 2012,

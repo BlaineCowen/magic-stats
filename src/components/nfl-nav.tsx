@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/nfl/", label: "Home" },
   { href: "/magic-stats", label: "Magic Stats" },
+  { href: "/magic-stats/fantasy", label: "Fantasy" },
   { href: "/magic-stats/charts", label: "NFL charts" },
   { href: "/magic-stats/fourth-down", label: "NFL 4th down" },
 ];
@@ -15,6 +16,10 @@ function isActive(href: string, pathname: string) {
   if (href === "/nfl/") return pathname === "/nfl-hub" || pathname === "/nfl";
   if (href === "/magic-stats")
     return pathname === "/magic-stats" || pathname === "/magic-stats/testing";
+  if (href === "/magic-stats/fantasy")
+    return (
+      pathname.startsWith(href) || pathname.startsWith("/magic-stats/players")
+    );
   return pathname.startsWith(href);
 }
 

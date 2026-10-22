@@ -3,7 +3,7 @@ import { parquetView, sqlLit, type SportViews } from "../view-kit";
 /** nflverse data from scripts/refresh-nfl-data.mjs. */
 export const nflViews: SportViews = {
   envVar: "NFL_DATA_DIR",
-  rev: 6,
+  rev: 7,
   required: ["pbp", "players.parquet"],
   async create({ run, dir, has }) {
     await run(
@@ -145,6 +145,10 @@ export const nflViews: SportViews = {
         ) t ON t.team_nick = h.team
         WHERE regexp_matches(h.year, '^[0-9]{4}$')
         QUALIFY row_number() OVER (PARTITION BY player_name, player_id, h.year ORDER BY year_signed DESC) = 1`);
+    }
+    // Model output from scripts/projections (next game + breakout chance).
+    if (has("projections.parquet")) {
+      await run(parquetView("projections", `${dir}/projections.parquet`));
     }
     // Colors and logo URLs per team code (includes historical codes like OAK).
     if (has("teams.parquet")) {

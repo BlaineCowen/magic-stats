@@ -297,7 +297,33 @@ const CONTRACT_YEAR_COLS: Col[] = [
   ["cap_percent", "percent units (5.2 = 5.2% of the cap)"],
 ];
 
-const FUZZY = `- expected fantasy points / "due for regression" / lucky or unlucky in fantasy: xfp. SUM(fantasy_points_diff) per player; most negative = unlucky (due to bounce back), most positive = lucky (due to fall off). Show games, opportunities (targets + carries), actual and expected points.
+const PROJ_COLS: Col[] = [
+  [
+    "player_id, name, position, team, opp, season, week, game_id",
+    "each player's next game",
+  ],
+  [
+    "proj, floor, median, ceiling",
+    "projected PPR; floor/ceiling = 10th/90th percentile",
+  ],
+  [
+    "breakout_prob",
+    "chance a not-yet-starter averages starter PPR over his next 4 games (NULL if already a starter)",
+  ],
+  [
+    "ppr_pg, xfp_pg, ppr_l3, xfp_l3, luck_pg",
+    "season and last-3 PPR and expected PPR per game; luck = actual minus expected",
+  ],
+  [
+    "tgt_share, tgt_share_l3, car_share, car_share_l3, snap_pct, snap_l3",
+    "0-1 shares",
+  ],
+  ["vacated_tgt, vacated_car", "team share freed up by teammates who are out"],
+  ["implied_total, spread, temp_f, wind_mph, indoor", "game context"],
+];
+
+const FUZZY = `- projections, "who should I start", ceiling, upside, sleepers, breakouts this week: the projections table (this week only). Highest ceiling = ORDER BY ceiling DESC; breakout candidates = ORDER BY breakout_prob DESC.
+- expected fantasy points / "due for regression" / lucky or unlucky in fantasy: xfp. SUM(fantasy_points_diff) per player; most negative = unlucky (due to bounce back), most positive = lucky (due to fall off). Show games, opportunities (targets + carries), actual and expected points.
 - separation, cushion, YAC over expected, time to throw, aggressiveness, rush yards over expected (RYOE), stacked boxes: the ngs_* tables (week 0 for season numbers).
 - play action, motion, RPOs, screens, blitzes, contested or catchable targets, drops, created receptions, interception-worthy throws: pbp JOIN ftn USING (game_id, play_id), 2022 on.
 - QBR: qbr_season or qbr_week.
@@ -452,6 +478,12 @@ export const nflPrompt: SportPrompt = {
       view: "pfr_def",
       title: () => "the same for defenders",
       cols: PFR_DEF_COLS,
+    },
+    {
+      view: "projections",
+      title: () =>
+        "model projections for each skill player's next game (refreshed daily)",
+      cols: PROJ_COLS,
     },
     {
       view: "xfp",

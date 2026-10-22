@@ -37,3 +37,4 @@ scripts/nba-breakouts/__pycache__/
 !src/lib/fourth/models/boot/*.json.gz
 /data/nba/
 /data/mlb/
+scripts/projections/work/
