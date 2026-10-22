@@ -6,6 +6,7 @@ import {
   type PipelineResult,
   type QueryMode,
 } from "@/lib/nfl/pipeline";
+import { admit, MAX_QUESTION_CHARS, visitorKeys } from "@/lib/query-limits";
 
 // Deep mode waits on the model's thinking (~2-3 min on qwen 9B).
 export const maxDuration = 300;
@@ -45,10 +46,30 @@ export async function POST(request: Request) {
   if (!query) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
+  if (query.length > MAX_QUESTION_CHARS) {
+    return NextResponse.json(
+      { error: `Keep questions under ${MAX_QUESTION_CHARS} characters.` },
+      { status: 400 },
+    );
+  }
 
   const key = cacheKey(mode, query);
   const cached = body.nocache ? null : getCached(key);
   if (cached) return NextResponse.json({ ...cached, cached: true });
+
+  // only questions that reach the paid model count against the limits
+  const gate = admit(visitorKeys(request), mode === "deep");
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: gate.error, mode },
+      {
+        status: gate.status,
+        headers: gate.retryAfter
+          ? { "Retry-After": String(gate.retryAfter) }
+          : undefined,
+      },
+    );
+  }
 
   try {
     const result = await answerQuestion(query, mode);
@@ -71,5 +92,7 @@ export async function POST(request: Request) {
     }
     // LLM unreachable / timed out, or the data directory is missing.
     return NextResponse.json({ error: message, mode }, { status: 503 });
+  } finally {
+    gate.release();
   }
 }
