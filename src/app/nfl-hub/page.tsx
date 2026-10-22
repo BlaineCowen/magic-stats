@@ -23,6 +23,10 @@ import { ScoreboardStrip } from "@/components/scoreboard-strip";
  * blaine-auth in nfl-router, so they only open for Blaine.
  */
 
+// Rendered per request so browsers and Cloudflare always revalidate /nfl/. Before 2026-10-22 that URL
+// was the draft board, and browsers kept serving their old copy of it.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Blaine's Sports Tools",
   description:
