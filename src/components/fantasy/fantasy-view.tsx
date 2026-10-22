@@ -59,6 +59,19 @@ function PlayerCell({ p }: { p: Projection }) {
         </span>
         <span className="block text-xs text-slate-500">
           {p.position}, {p.team} · {matchup(p)}
+          {p.injury_status && p.injury_status !== "Active" && (
+            <span
+              className={cn(
+                "ml-1.5 font-semibold",
+                p.injury_status === "Questionable"
+                  ? "text-amber-700"
+                  : "text-red-700",
+              )}
+              title={p.injury_note ?? undefined}
+            >
+              {p.injury_status === "Injured Reserve" ? "IR" : p.injury_status}
+            </span>
+          )}
         </span>
       </span>
     </Link>
@@ -305,10 +318,20 @@ function RestOfSeason({
       (w): Column<Projection> => ({
         key: `w${w}`,
         label: `Wk ${w}`,
-        value: (p) => p.upcoming.find(([x]) => x === w)?.[2] ?? null,
+        value: (p) => {
+          const g = p.upcoming.find(([x]) => x === w);
+          return g && !g[3] ? g[2] : null;
+        },
         render: (p) => {
           const g = p.upcoming.find(([x]) => x === w);
-          return g ? (
+          return g?.[3] ? (
+            <span className="text-xs font-semibold text-red-700">
+              Out
+              <span className="block text-[11px] font-normal text-slate-400">
+                {g[1]}
+              </span>
+            </span>
+          ) : g ? (
             <span>
               {g[2].toFixed(1)}
               <span className="block text-[11px] text-slate-400">{g[1]}</span>

@@ -36,7 +36,7 @@ OUT = HERE.parents[1] / "data" / "nfl" / "projections.parquet"
 WEEKLY_OUT = OUT.with_name("projections_weekly.parquet")
 
 ID_COLS = ["player_id", "name", "season", "game_id", "team", "opp", "position", "upcoming", "ppr", "xfp_game",
-           "horizon", "out_next"]
+           "horizon", "out_next", "absent", "vacated_names", "injury_status", "return_date", "injury", "injury_note"]
 # Unknown more than about two weeks ahead.
 FAR_DROP = ["spread", "implied_total", "total_line", "temp_f", "wind_mph", "precip_mm"]
 # Columns that change from game to game when a player's numbers are frozen.
@@ -314,17 +314,20 @@ def predict(df: pd.DataFrame, feats: list[str]) -> None:
     for c in ["proj", "floor", "median", "ceiling"]:
         up[c] = up[c].astype("float64").round(1)
 
-    # Every remaining game, minus next week for players already ruled out.
-    weekly = up[~((up.horizon == 1) & up.out_next)]
-    weekly[["player_id", "name", "team", "position", "season", "week", "game_id", "opp", "home", "horizon",
-            "proj", "floor", "median", "ceiling", "implied_total", "model"]].sort_values(
+    # Every remaining game; games he's expected to miss stay in (absent, 0
+    # points) so the site can show "Out" rather than a bye.
+    up.loc[up.absent, ["proj", "floor", "median", "ceiling"]] = 0.0
+    up[["player_id", "name", "team", "position", "season", "week", "game_id", "opp", "home", "horizon",
+        "proj", "floor", "median", "ceiling", "implied_total", "model", "absent"]].sort_values(
         ["player_id", "week"]).to_parquet(WEEKLY_OUT, index=False)
+    weekly = up[~up.absent]
     ros = weekly.groupby("player_id").agg(
         ros_proj=("proj", "sum"), ros_games=("proj", "size"), ros_ppg=("proj", "mean"),
         ros_opp_allowed=("opp_pos_allowed", "mean"),
     )
 
     nxt = up[up.horizon == 1].copy()
+    nxt["out_next"] = nxt.absent
     nxt["why"] = ""
     for m, cols, mask in ((mean, feats, nxt.model == "near"), (far_mean, far_feats, nxt.model == "far")):
         if mask.any():
@@ -342,7 +345,8 @@ def predict(df: pd.DataFrame, feats: list[str]) -> None:
             "tgt_share", "tgt_share_l3", "car_share", "car_share_l3", "snap_pct", "snap_l3",
             "separation", "yac_oe", "ryoe_att", "vacated_tgt", "vacated_car",
             "implied_total", "spread", "home", "indoor", "temp_f", "wind_mph", "precip_mm",
-            "opp_pos_allowed", "age", "years_exp"]
+            "opp_pos_allowed", "age", "years_exp",
+            "vacated_names", "injury_status", "return_date", "injury", "injury_note"]
     res = nxt[keep].merge(ros, left_on="player_id", right_index=True, how="left")
     # Schedule strength: remaining opponents' PPR allowed to the position vs the league.
     league = res.groupby("position").ros_opp_allowed.transform("mean")

@@ -60,8 +60,15 @@ export type Projection = {
   ros_ppg: number | null;
   /** Remaining opponents' PPR allowed to the position minus the league average. */
   ros_sos: number | null;
-  /** Next few games: [week, opponent ("@KC" when away), projection]. */
-  upcoming: [number, string, number][];
+  /** Next few games: [week, opponent ("@KC" when away), projection, out]. */
+  upcoming: [number, string, number, boolean][];
+  /** ESPN injury status ("Injured Reserve", "Questionable"...) and expected return. */
+  injury_status: string | null;
+  return_date: string | null;
+  injury: string | null;
+  injury_note: string | null;
+  /** Teammates out for his next game whose targets/carries open up. */
+  vacated_names: string | null;
 };
 
 function toProjection(r: Row): Projection {
@@ -121,16 +128,28 @@ function toProjection(r: Row): Projection {
       .split("|")
       .filter(Boolean)
       .map((x) => {
-        const [w, o, v] = x.split(":");
-        return [Number(w), o!, Number(v)] as [number, string, number];
+        const [w, o, v, a] = x.split(":");
+        return [Number(w), o!, Number(v), a === "1"] as [
+          number,
+          string,
+          number,
+          boolean,
+        ];
       }),
+    injury_status: str(r.injury_status),
+    return_date:
+      r.return_date == null ? null : String(r.return_date).slice(0, 10),
+    injury: str(r.injury),
+    injury_note: str(r.injury_note),
+    vacated_names: str(r.vacated_names),
   };
 }
 
 const PROJ_SQL = `
   WITH nxt AS (
     SELECT player_id,
-      string_agg(week || ':' || CASE WHEN home = 1 THEN '' ELSE '@' END || opp || ':' || proj, '|' ORDER BY week) AS upcoming
+      string_agg(week || ':' || CASE WHEN home = 1 THEN '' ELSE '@' END || opp || ':' || proj
+        || ':' || CASE WHEN absent THEN '1' ELSE '0' END, '|' ORDER BY week) AS upcoming
     FROM projections_weekly WHERE horizon <= 5 GROUP BY player_id
   )
   SELECT p.*, pl.headshot, t.team_color, nxt.upcoming
@@ -180,6 +199,7 @@ export type WeekProjection = {
   floor: number;
   ceiling: number;
   implied_total: number | null;
+  absent: boolean;
 };
 
 export type PlayerPage = {
@@ -302,7 +322,7 @@ export async function getPlayerPage(
 
   const remaining = (
     await runSafeSelect(`
-      SELECT week, opp, home, proj, floor, ceiling, implied_total
+      SELECT week, opp, home, proj, floor, ceiling, implied_total, absent
       FROM projections_weekly WHERE player_id = ${lit} ORDER BY week`).catch(
       () => ({ rows: [] as Row[] }),
     )
@@ -314,6 +334,7 @@ export async function getPlayerPage(
     floor: Number(r.floor),
     ceiling: Number(r.ceiling),
     implied_total: num(r.implied_total),
+    absent: r.absent === true,
   }));
 
   const age = bio.birth_date

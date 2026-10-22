@@ -409,10 +409,62 @@ def main() -> None:
       UNION ALL BY NAME
       SELECT * FROM features_future""")
 
+    # Injuries with expected return dates (injuries.py, from ESPN). A player is
+    # out of a remaining game when it falls before his return date; on IR with
+    # no date (or a date already passed), the next 4 games / next game; Out,
+    # Doubtful or suspended with no date, the next game. Questionable plays.
+    # His teammates get his to-date target and carry share as vacated share
+    # for those games, as the model learned from past absences.
+    espn = WORK / "espn_injuries.parquet"
+    if espn.exists():
+        con.execute(f"""
+          CREATE TABLE inj_now AS
+          SELECT p.gsis_id AS player_id, e.status, e.return_date, e.injury, e.note
+          FROM read_parquet('{espn}') e
+          JOIN players p ON p.espn_id::VARCHAR = e.espn_id
+          WHERE e.status <> 'Active'""")
+    else:
+        con.execute("""CREATE TABLE inj_now (player_id VARCHAR, status VARCHAR, return_date DATE,
+          injury VARCHAR, note VARCHAR)""")
+    con.execute("""
+      CREATE TABLE absences AS
+      SELECT a.player_id, a.game_id, a.team,
+        coalesce(
+          a.out_next AND a.horizon = 1
+          OR (i.return_date IS NOT NULL AND tg.gameday::DATE < i.return_date)
+          OR (i.status = 'Injured Reserve' AND i.return_date IS NULL AND a.horizon <= 4)
+          OR (i.status = 'Injured Reserve' AND i.return_date IS NOT NULL AND a.horizon = 1)
+          OR (i.status IN ('Out', 'Doubtful', 'Suspension') AND i.return_date IS NULL AND a.horizon = 1),
+          false) AS absent
+      FROM all_rows a
+      JOIN team_games tg ON tg.game_id = a.game_id AND tg.team = a.team
+      LEFT JOIN inj_now i USING (player_id)
+      WHERE a.horizon > 0""")
+    con.execute("""
+      CREATE TABLE vac_future AS
+      SELECT a.team, a.game_id,
+        sum(coalesce(a.tgt_share, 0)) AS vacated_tgt, sum(coalesce(a.car_share, 0)) AS vacated_car,
+        string_agg(a.name, ', ' ORDER BY coalesce(a.tgt_share, 0) + coalesce(a.car_share, 0) DESC) AS vacated_names
+      FROM all_rows a JOIN absences b USING (player_id, game_id)
+      WHERE b.absent AND coalesce(a.tgt_share, 0) + coalesce(a.car_share, 0) >= 0.03
+      GROUP BY a.team, a.game_id""")
+    con.execute("""
+      CREATE TABLE all_rows2 AS
+      SELECT a.* REPLACE (
+          CASE WHEN a.horizon > 0 THEN coalesce(v.vacated_tgt, 0) ELSE a.vacated_tgt END AS vacated_tgt,
+          CASE WHEN a.horizon > 0 THEN coalesce(v.vacated_car, 0) ELSE a.vacated_car END AS vacated_car),
+        v.vacated_names,
+        coalesce(b.absent, false) AS absent,
+        i.status AS injury_status, i.return_date, i.injury, i.note AS injury_note
+      FROM all_rows a
+      LEFT JOIN vac_future v ON v.team = a.team AND v.game_id = a.game_id AND a.horizon > 0
+      LEFT JOIN absences b ON b.player_id = a.player_id AND b.game_id = a.game_id
+      LEFT JOIN inj_now i ON i.player_id = a.player_id AND a.horizon > 0""")
+
     WORK.mkdir(parents=True, exist_ok=True)
     out = WORK / "player_games.parquet"
-    con.execute(f"COPY all_rows TO '{out}' (FORMAT parquet)")
-    print(con.sql("SELECT horizon > 0 AS upcoming, count(*) n, max(horizon) max_horizon FROM all_rows GROUP BY 1").df())
+    con.execute(f"COPY all_rows2 TO '{out}' (FORMAT parquet)")
+    print(con.sql("SELECT horizon > 0 AS upcoming, count(*) n, max(horizon) max_horizon, sum(absent::INT) absent FROM all_rows2 GROUP BY 1").df())
 
 
 if __name__ == "__main__":

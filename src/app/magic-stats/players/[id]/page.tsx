@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { RangeBar } from "@/components/fantasy/range-bar";
-import { fmtPct, matchup, signals } from "@/components/fantasy/signals";
+import {
+  fmtPct,
+  injuryLine,
+  matchup,
+  signals,
+} from "@/components/fantasy/signals";
 import {
   PointsChart,
   ShareChart,
@@ -121,7 +126,21 @@ export default async function PlayerPageView(props: Props) {
         </div>
       </header>
 
-      {proj && (
+      {proj && injuryLine(proj) && (
+        <div
+          className={cn(
+            "mt-5 rounded-lg border px-4 py-3 text-sm",
+            proj.injury_status === "Questionable"
+              ? "border-amber-200 bg-amber-50 text-amber-900"
+              : "border-red-200 bg-red-50 text-red-900",
+          )}
+        >
+          <span className="font-semibold">{injuryLine(proj)}.</span>{" "}
+          {proj.injury_note}
+        </div>
+      )}
+
+      {proj && !proj.out_next && (
         <section className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-xl font-semibold text-slate-900">
@@ -209,7 +228,7 @@ export default async function PlayerPageView(props: Props) {
             </h2>
             <span className="text-sm text-slate-500">
               {p.remaining.reduce((a, g) => a + g.proj, 0).toFixed(1)} PPR over{" "}
-              {p.remaining.length} games
+              {p.remaining.filter((g) => !g.absent).length} games
               {proj?.ros_sos != null &&
                 ` · ${proj.ros_sos >= 1 ? "easy" : proj.ros_sos <= -1 ? "hard" : "average"} schedule`}
             </span>
@@ -218,17 +237,31 @@ export default async function PlayerPageView(props: Props) {
             {p.remaining.map((g) => (
               <li
                 key={g.week}
-                className="rounded-md border border-slate-200 px-2 py-1.5 text-center"
-                title={`Floor ${g.floor.toFixed(1)}, ceiling ${g.ceiling.toFixed(1)}`}
+                className={cn(
+                  "rounded-md border px-2 py-1.5 text-center",
+                  g.absent ? "border-red-200 bg-red-50" : "border-slate-200",
+                )}
+                title={
+                  g.absent
+                    ? "Expected to miss this game"
+                    : `Floor ${g.floor.toFixed(1)}, ceiling ${g.ceiling.toFixed(1)}`
+                }
               >
                 <div className="text-xs text-slate-500">
                   Wk {g.week} {g.home ? "vs" : "@"} {g.opp}
                 </div>
-                <div className="font-display text-lg font-bold text-slate-900 tabular-nums">
-                  {g.proj.toFixed(1)}
+                <div
+                  className={cn(
+                    "font-display text-lg font-bold tabular-nums",
+                    g.absent ? "text-red-700" : "text-slate-900",
+                  )}
+                >
+                  {g.absent ? "Out" : g.proj.toFixed(1)}
                 </div>
                 <div className="text-[11px] text-slate-400 tabular-nums">
-                  {g.floor.toFixed(0)}–{g.ceiling.toFixed(0)}
+                  {g.absent
+                    ? "–"
+                    : `${g.floor.toFixed(0)}–${g.ceiling.toFixed(0)}`}
                 </div>
               </li>
             ))}

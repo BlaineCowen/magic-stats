@@ -37,16 +37,18 @@ export function signals(p: Projection): Signal[] {
     p.car_share_l3 - p.car_share >= 0.08
   )
     out.push({ text: `Carry share up to ${pct(p.car_share_l3)}`, good: true });
-  if ((p.vacated_tgt ?? 0) >= 0.1)
+  if ((p.vacated_tgt ?? 0) >= 0.1 || (p.vacated_car ?? 0) >= 0.2) {
+    const opens = [
+      (p.vacated_tgt ?? 0) >= 0.1 ? `${pct(p.vacated_tgt!)} of targets` : null,
+      (p.vacated_car ?? 0) >= 0.2 ? `${pct(p.vacated_car!)} of carries` : null,
+    ]
+      .filter(Boolean)
+      .join(" and ");
     out.push({
-      text: `${pct(p.vacated_tgt!)} of the team's targets open up with teammates out`,
+      text: `${p.vacated_names ?? "Teammates"} out: ${opens} open up`,
       good: true,
     });
-  if ((p.vacated_car ?? 0) >= 0.2)
-    out.push({
-      text: `${pct(p.vacated_car!)} of the team's carries open up with teammates out`,
-      good: true,
-    });
+  }
   if (p.separation != null && p.separation >= 3.2)
     out.push({
       text: `Gets open: ${p.separation.toFixed(1)} yards of separation`,
@@ -78,6 +80,21 @@ export function signals(p: Projection): Signal[] {
       good: false,
     });
   return out;
+}
+
+/** "Injured Reserve, hamstring, back around Nov 25" style line, or null. */
+export function injuryLine(p: {
+  injury_status: string | null;
+  injury: string | null;
+  return_date: string | null;
+}): string | null {
+  if (!p.injury_status) return null;
+  const back = p.return_date
+    ? `expected back around ${new Date(`${p.return_date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : null;
+  return [p.injury_status, p.injury?.toLowerCase(), back]
+    .filter(Boolean)
+    .join(", ");
 }
 
 export const fmtPct = (v: number | null) =>
