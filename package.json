@@ -14,7 +14,7 @@
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx --test src/lib/nfl/*.test.ts src/lib/fourth/*.test.ts src/lib/sports/*.test.ts"
+    "test": "npx tsx --test src/lib/nfl/*.test.ts src/lib/fourth/*.test.ts src/lib/sports/*.test.ts src/lib/pickem/*.test.ts src/components/pickem/*.test.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",

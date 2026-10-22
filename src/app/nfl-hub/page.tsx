@@ -87,7 +87,7 @@ const SEASON: Item[] = [
     icon: Trophy,
   },
   {
-    href: "/nfl/pickem/",
+    href: "/magic-stats/pickem",
     title: "Pick'em assistant",
     blurb: "Confidence pool picks with live scores.",
     icon: ClipboardList,

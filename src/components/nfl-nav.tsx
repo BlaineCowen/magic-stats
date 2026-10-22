@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/nfl/", label: "Home" },
   { href: "/magic-stats", label: "Magic Stats" },
   { href: "/magic-stats/fantasy", label: "Fantasy" },
+  { href: "/magic-stats/pickem", label: "Pick'em" },
   { href: "/magic-stats/charts", label: "NFL charts" },
   { href: "/magic-stats/fourth-down", label: "NFL 4th down" },
 ];
