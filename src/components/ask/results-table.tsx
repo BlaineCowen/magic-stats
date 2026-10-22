@@ -11,7 +11,9 @@ export function formatValue(value: Cell | undefined): string {
   if (value === null || value === undefined) return "N/A";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
-    return Number.isInteger(value) ? value.toString() : value.toFixed(2);
+    if (Number.isInteger(value)) return value.toString();
+    // Rates below 1 (.287 average, .345 wOBA) need the third decimal.
+    return value.toFixed(Math.abs(value) < 1 ? 3 : 2);
   }
   return value.toString();
 }

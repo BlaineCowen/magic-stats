@@ -88,6 +88,8 @@ type QueryChartProps = {
   question: string;
   /** The answer's rows were cut short server-side; noted in the footnote. */
   truncated?: boolean;
+  /** Credited in the footnote. */
+  source?: string;
   onHide: () => void;
 };
 
@@ -176,6 +178,7 @@ function QueryChartBody({
   teamColors,
   question,
   truncated = false,
+  source = "nflverse",
   onHide,
 }: QueryChartProps) {
   const [spec, setSpec] = useState(initial);
@@ -191,7 +194,7 @@ function QueryChartBody({
   const footnoteNotes = truncated
     ? [...notes, `answer cut to the first ${rows.length} rows`]
     : notes;
-  const footnote = ["Data: nflverse", ...footnoteNotes].join(" · ");
+  const footnote = [`Data: ${source}`, ...footnoteNotes].join(" · ");
   const Plot = PLOTS[spec.type];
 
   const download = async () => {

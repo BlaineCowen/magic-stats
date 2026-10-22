@@ -427,15 +427,52 @@ const TERMS: Record<string, string> = {
   pat: "PAT",
   wopr: "WOPR",
   racr: "RACR",
+  // NBA
+  ts: "TS",
+  efg: "eFG",
+  usg: "usage",
+  bpm: "BPM",
+  rapm: "RAPM",
+  pie: "PIE",
+  ppg: "PPG",
+  pts: "points",
+  reb: "rebounds",
+  ast: "assists",
+  fg3a: "3PA",
+  fg3m: "3PM",
+  // MLB
+  war: "WAR",
+  woba: "wOBA",
+  xwoba: "xwOBA",
+  xba: "xBA",
+  xslg: "xSLG",
+  wrc: "wRC",
+  plus: "+",
+  fip: "FIP",
+  era: "ERA",
+  whip: "WHIP",
+  ops: "OPS",
+  obp: "OBP",
+  slg: "SLG",
+  iso: "ISO",
+  babip: "BABIP",
+  rbi: "RBI",
+  pa: "PA",
+  k: "K",
+  bb: "BB",
+  hr: "HR",
+  oaa: "OAA",
 };
 
 /** Column name as axis text: "epa_per_dropback" -> "EPA per dropback". */
 export function humanize(column: string): string {
-  const text = column
-    .split("_")
-    .filter(Boolean)
+  const words = column.split("_").filter(Boolean);
+  const text = words
     .map((w) => TERMS[w.toLowerCase()] ?? w.toLowerCase())
-    .join(" ");
+    .join(" ")
+    .replace(/ \+/g, "+"); // "wRC +" -> "wRC+"
+  // Mixed-case terms keep their casing ("wOBA", "xBA", "eFG"); anything else starts upper.
+  if (/^[a-z]+[A-Z]/.test(text)) return text;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 

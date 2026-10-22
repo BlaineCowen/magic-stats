@@ -6,10 +6,17 @@ export type ExampleGroup = { title: string; questions: string[] };
 // fills the box and runs it, so keep each one answerable from that sport's data.
 export const SPORT_ASK: Record<
   Sport,
-  { coverage: string; placeholder: string; groups: ExampleGroup[] }
+  {
+    coverage: string;
+    placeholder: string;
+    /** Credited under charts. */
+    source: string;
+    groups: ExampleGroup[];
+  }
 > = {
   nfl: {
     coverage: "Answers come from every NFL play since 1999.",
+    source: "nflverse",
     placeholder: "Most rushing yards in 2024?",
     groups: [
       {
@@ -50,6 +57,7 @@ export const SPORT_ASK: Record<
     coverage:
       "Answers come from every NBA box score since 1996-97, with advanced stats and crabsketball fantasy points.",
     placeholder: "Most points per game this season?",
+    source: "NBA Stats via sportsdataverse, ESPN",
     groups: [
       {
         title: "Scoring & shooting",
@@ -89,6 +97,7 @@ export const SPORT_ASK: Record<
     coverage:
       "Answers come from every MLB season since 2000, with Statcast data from 2015 on.",
     placeholder: "Highest wRC+ in 2025?",
+    source: "MLB Stats API, Baseball Savant",
     groups: [
       {
         title: "Hitting",

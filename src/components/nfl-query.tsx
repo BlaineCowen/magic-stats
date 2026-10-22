@@ -758,6 +758,7 @@ export function NflQuery({
                 teamColors={response?.team_colors ?? EMPTY_COLORS}
                 question={chart.question}
                 truncated={response?.truncated}
+                source={SPORT_ASK[sport].source}
                 onHide={hideChart}
               />
             </div>
