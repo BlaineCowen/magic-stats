@@ -107,7 +107,19 @@ function isTypingTarget(el: EventTarget | null) {
 const secondaryButton =
   "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-turf-700 disabled:opacity-50";
 
-export function NflQuery({ debug = false }: { debug?: boolean }) {
+export type QueryViewer = {
+  name: string;
+  tier: string;
+  perDay: number | null; // null: no personal limit
+};
+
+export function NflQuery({
+  debug = false,
+  viewer,
+}: {
+  debug?: boolean;
+  viewer?: QueryViewer;
+}) {
   const [query, setQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [response, setResponse] = useState<ApiResponse | null>(null);
@@ -392,6 +404,20 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
         Ask any NFL stats question the way you&apos;d text a friend. Answers
         come from every play since 1999.
       </p>
+      {viewer && (
+        <p className="mt-3 text-sm text-slate-500">
+          Signed in as{" "}
+          <span className="font-semibold text-slate-700">{viewer.name}</span>
+          <span className="bg-turf-950 text-line ml-2 rounded px-1.5 py-0.5 text-xs font-bold">
+            {viewer.tier}
+          </span>
+          <span className="ml-2">
+            {viewer.perDay === null
+              ? "No daily limit."
+              : `${viewer.perDay} questions a day.`}
+          </span>
+        </p>
+      )}
 
       <div className="mt-6 max-w-3xl">
         {aiStatus && !aiStatus.online && (

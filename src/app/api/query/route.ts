@@ -6,7 +6,7 @@ import {
   type PipelineResult,
   type QueryMode,
 } from "@/lib/nfl/pipeline";
-import { admit, MAX_QUESTION_CHARS, visitorKeys } from "@/lib/query-limits";
+import { admit, MAX_QUESTION_CHARS, viewerFrom } from "@/lib/query-limits";
 
 // Deep mode waits on the model's thinking (~2-3 min on qwen 9B).
 export const maxDuration = 300;
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   if (cached) return NextResponse.json({ ...cached, cached: true });
 
   // only questions that reach the paid model count against the limits
-  const gate = admit(visitorKeys(request), mode === "deep");
+  const gate = admit(viewerFrom(request.headers), mode === "deep");
   if (!gate.ok) {
     return NextResponse.json(
       { error: gate.error, mode },

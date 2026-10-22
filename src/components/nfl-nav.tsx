@@ -36,8 +36,9 @@ export function NflNav() {
           );
           return (
             <li key={l.href}>
-              {/* /nfl/ is the hub, which nfl-router serves from another route: a full page load */}
-              {l.href === "/nfl/" ? (
+              {/* full page loads for the hub (served from another route) and Magic Stats (its
+                  sign-in redirect can't happen inside a client-side fetch) */}
+              {l.href === "/nfl/" || l.href === "/magic-stats" ? (
                 <a
                   href={l.href}
                   className={cls}
