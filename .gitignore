@@ -35,3 +35,5 @@ scripts/nba-breakouts/__pycache__/
 
 # 4th down bootstrap replicates are compressed model files, not archives
 !src/lib/fourth/models/boot/*.json.gz
+/data/nba/
+/data/mlb/
