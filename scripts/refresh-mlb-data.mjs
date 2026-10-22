@@ -319,14 +319,15 @@ const GAME_TYPES = { R: "REG", F: "POST", D: "POST", L: "POST", W: "POST" };
 
 async function schedule(conn, season, codes, manifest) {
   const d = await get(`/schedule?sportId=1&season=${season}&gameType=R,F,D,L,W`);
-  const rows = [];
+  // Keyed by gamePk: a suspended game is listed on both dates; the later one wins.
+  const byPk = new Map();
   for (const day of d.dates ?? []) {
     for (const g of day.games) {
       if (g.status?.abstractGameState !== "Final" || g.status?.detailedState === "Postponed") continue;
       if (!GAME_TYPES[g.gameType]) continue;
       const h = g.teams.home;
       const a = g.teams.away;
-      rows.push({
+      byPk.set(g.gamePk, {
         game_pk: g.gamePk,
         season,
         game_type: g.gameType,
@@ -344,6 +345,7 @@ async function schedule(conn, season, codes, manifest) {
       });
     }
   }
+  const rows = [...byPk.values()];
   const out = path.join(DATA_DIR, "games", `${season}.parquet`);
   const n = await writeRows(conn, rows, out, TMP_DIR, "ORDER BY game_date, game_pk");
   manifest[`games/${season}`] = { storedBytes: fs.statSync(out).size, rows: n, refreshedAt: new Date().toISOString() };

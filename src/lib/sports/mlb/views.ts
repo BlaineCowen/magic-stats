@@ -19,9 +19,18 @@ export const mlbViews: SportViews = {
     await view("pitching_seasons", "pitching");
     await view("fielding_seasons", "fielding");
     await view("team_seasons", "team_seasons");
-    await view("games", "games");
+    // A suspended game is listed on both its dates; keep the day it finished.
+    await run(`
+      CREATE VIEW games AS
+      SELECT * FROM ${src("games")}
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY game_date DESC) = 1`);
     await view("batting_games", "batting_games");
     await view("pitching_games", "pitching_games");
+    // Game logs only exist after the first full refresh; keep the views valid.
+    for (const v of ["batting_games", "pitching_games"]) {
+      if (!has(v))
+        await run(`CREATE VIEW ${v} AS SELECT NULL::INT AS season, NULL::DATE AS game_date WHERE false`);
+    }
 
     // One row per team per game, so records and splits don't need a home/away UNION.
     const side = (t: string, o: string, isHome: boolean) => `
@@ -72,15 +81,19 @@ export const mlbViews: SportViews = {
           sprint_speed, competitive_runs, bolts, hp_to_1b
         FROM ${src(sv("sprint_speed"))}`);
     }
-    if (has(sv("oaa"))) {
+    if (has(sv("oaa")) && has("teams.parquet")) {
       await run(`
         CREATE VIEW outs_above_average AS
-        SELECT season, player_id, player_name, display_team_name AS team,
+        SELECT o.season, o.player_id, o.player_name,
+          -- Savant names teams by nickname ('Cubs', 'Red Sox')
+          coalesce(t.team_abbr, o.display_team_name) AS team,
           primary_pos_formatted AS position, outs_above_average, fielding_runs_prevented,
           outs_above_average_infront AS oaa_in, outs_above_average_behind AS oaa_back,
           outs_above_average_lateral_toward3bline AS oaa_toward_3b,
           outs_above_average_lateral_toward1bline AS oaa_toward_1b
-        FROM ${src(sv("oaa"))}`);
+        FROM ${src(sv("oaa"))} o
+        LEFT JOIN read_parquet(${sqlLit(`${dir}/teams.parquet`)}) t
+          ON t.team_name = o.display_team_name OR t.team_name LIKE '% ' || o.display_team_name`);
     }
     if (has("teams.parquet")) {
       await run(parquetView("teams", `${dir}/teams.parquet`));
@@ -92,6 +105,6 @@ export const mlbViews: SportViews = {
       arg_max(season_type, game_date) AS max_season_type,
       strftime(max(game_date), '%Y-%m-%d') AS latest_date,
       (SELECT min(season) FROM batting_games) AS game_logs_from,
-      (SELECT min(season) FROM statcast_batting) AS statcast_from
+      2015 AS statcast_from
     FROM games`,
 };
