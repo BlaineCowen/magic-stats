@@ -1,15 +1,17 @@
 import type { PipelineResult, QueryMode } from "./pipeline";
+import type { ProofResult } from "./prove/engine";
 import type { Sport } from "./types";
 
 // Bounded LRU keyed by sport + mode + question + that sport's data version, so
 // a data refresh naturally invalidates old answers.
 const CACHE_MAX = 200;
 const CACHE_TTL = 1000 * 60 * 60 * 24;
-const queryCache = new Map<string, { data: PipelineResult; at: number }>();
+type Answer = PipelineResult | ProofResult;
+const queryCache = new Map<string, { data: Answer; at: number }>();
 
 export function cacheKey(
   sport: Sport,
-  mode: QueryMode,
+  mode: QueryMode | "prove",
   version: string,
   query: string,
 ) {
@@ -24,7 +26,7 @@ export function getCached(key: string) {
   return hit.data;
 }
 
-export function setCache(key: string, data: PipelineResult) {
+export function setCache(key: string, data: Answer) {
   queryCache.set(key, { data, at: Date.now() });
   if (queryCache.size > CACHE_MAX) {
     queryCache.delete(queryCache.keys().next().value!);

@@ -6,6 +6,8 @@ import {
   PipelineError,
   type QueryMode,
 } from "@/lib/sports/pipeline";
+import { proveClaim } from "@/lib/sports/prove/engine";
+import { isProofQuestion } from "@/lib/sports/prove/parse";
 import { isSport, type Sport } from "@/lib/sports/types";
 import { admit, MAX_QUESTION_CHARS, viewerFrom } from "@/lib/query-limits";
 
@@ -34,6 +36,23 @@ export async function POST(request: Request) {
       { error: `Keep questions under ${MAX_QUESTION_CHARS} characters.` },
       { status: 400 },
     );
+  }
+
+  // "Prove X is the best": searched straight from the data, no model involved,
+  // so it doesn't count against the limits. Falls through when no player matches.
+  if (isProofQuestion(query)) {
+    const proofKey = cacheKey(sport, "prove", dataVersion(sport), query);
+    const hit = body.nocache ? null : getCached(proofKey);
+    if (hit) return NextResponse.json({ ...hit, cached: true });
+    try {
+      const proof = await proveClaim(sport, query);
+      if (proof) {
+        setCache(proofKey, proof);
+        return NextResponse.json(proof);
+      }
+    } catch (error) {
+      console.error("Proof error:", (error as Error).message);
+    }
   }
 
   const key = cacheKey(sport, mode, dataVersion(sport), query);

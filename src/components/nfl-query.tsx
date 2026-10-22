@@ -25,6 +25,7 @@ import {
   saveSport,
   type RecentQuestion,
 } from "@/components/ask/recent";
+import { ProofResults } from "@/components/ask/proof-results";
 import { formatValue, ResultsTable } from "@/components/ask/results-table";
 import {
   inferSpec,
@@ -34,6 +35,7 @@ import {
   type ChartSpec,
   type TeamColors,
 } from "@/lib/nfl/chart-spec";
+import type { ProofResult } from "@/lib/sports/prove/engine";
 import { isSport, SPORT_LABEL, SPORTS, type Sport } from "@/lib/sports/types";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +60,8 @@ type Attempt = {
 };
 
 interface ApiResponse {
+  /** "proof" for prove-it questions; the body is then a ProofResult. */
+  kind?: "proof";
   results?: QueryResult[];
   columns?: string[];
   truncated?: boolean;
@@ -151,6 +155,8 @@ export function NflQuery({
   const isLoading = loadingMode !== null;
   const tooLong = query.length > MAX_CHARS;
   const results = hideIdColumns(response?.results ?? []);
+  const proof =
+    response?.kind === "proof" ? (response as unknown as ProofResult) : null;
   const chartShown = !!chart && !chart.hidden && !error && results.length > 0;
   // Offered as "Chart this" when the answer came back as a table only.
   // inferSpec is a pile of heuristics over rows we don't control (LLM SQL
@@ -236,7 +242,12 @@ export function NflQuery({
         res = await fetch("/api/query", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: text, mode, sport: asked, nocache: debug }),
+          body: JSON.stringify({
+            query: text,
+            mode,
+            sport: asked,
+            nocache: debug,
+          }),
         });
       } catch {
         setResponse(null);
@@ -683,7 +694,11 @@ export function NflQuery({
         </section>
       )}
 
-      {!isLoading && !error && response && results.length > 0 && (
+      {!isLoading && !error && proof && (
+        <ProofResults proof={proof} onCopyLink={copyLink} />
+      )}
+
+      {!isLoading && !error && response && !proof && results.length > 0 && (
         <section className="mt-8 min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -773,7 +788,7 @@ export function NflQuery({
         </section>
       )}
 
-      {!isLoading && !error && response && results.length === 0 && (
+      {!isLoading && !error && response && !proof && results.length === 0 && (
         <section className="mt-8 max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-4 sm:p-6">
           <h2 className="font-display text-xl font-bold text-amber-900">
             No matches

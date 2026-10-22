@@ -25,6 +25,7 @@ export const SPORT_ASK: Record<
           "Top 10 quarterbacks in 2024 by EPA per dropback, minimum 300 dropbacks",
           "CJ Stroud's 10 longest completions by air yards in 2024",
           "Quarterbacks with the most touchdown passes on third down in 2024",
+          "Prove CJ Stroud is the best QB in the NFL",
         ],
       },
       {
@@ -65,6 +66,7 @@ export const SPORT_ASK: Record<
           "Highest scoring average in 2024-25, minimum 50 games",
           "Best three-point percentage in 2024-25 with at least 300 attempts",
           "Most 40-point games since 2020",
+          "Make the case that SGA is the best player in 2025-26",
         ],
       },
       {
@@ -105,6 +107,7 @@ export const SPORT_ASK: Record<
           "Most home runs in 2025",
           "Best wRC+ among qualified hitters in 2025",
           "Career WAR leaders since 2000 among hitters",
+          "Prove Shohei Ohtani is the best player in baseball",
         ],
       },
       {

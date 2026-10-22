@@ -72,7 +72,11 @@ async function createDb(sport: Sport): Promise<DbState> {
     autoload_known_extensions: "false",
   });
   const conn = await instance.connect();
-  await spec.create({ run: (sql) => conn.run(sql).then(() => undefined), dir, has });
+  await spec.create({
+    run: (sql) => conn.run(sql).then(() => undefined),
+    dir,
+    has,
+  });
   for (const s of spec.settings ?? []) await conn.run(s);
   // LLM-written SQL may only read this sport's data directory: no other files,
   // no network, and no changing these settings afterwards.
@@ -133,6 +137,7 @@ export function cleanSql(sql: string): string {
 export async function runSafeSelect(
   sport: Sport,
   rawSql: string,
+  { maxRows = MAX_ROWS }: { maxRows?: number } = {},
 ): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
   const sql = cleanSql(rawSql);
   const { instance } = await getDb(sport);
@@ -151,7 +156,7 @@ export async function runSafeSelect(
     }
     // Validated as a single SELECT, so wrapping it in a subquery is safe.
     const reader = await conn.runAndReadAll(
-      `SELECT * FROM (${sql}) LIMIT ${MAX_ROWS + 1}`,
+      `SELECT * FROM (${sql}) LIMIT ${maxRows + 1}`,
     );
     const columns = reader.columnNames();
     const rows = reader.getRowObjects().map((r) => {
@@ -159,8 +164,8 @@ export async function runSafeSelect(
       for (const c of columns) out[c] = toJsonValue(r[c]);
       return out;
     });
-    const truncated = rows.length > MAX_ROWS;
-    return { columns, rows: rows.slice(0, MAX_ROWS), truncated };
+    const truncated = rows.length > maxRows;
+    return { columns, rows: rows.slice(0, maxRows), truncated };
   } catch (e) {
     if (e instanceof Error && /interrupt/i.test(e.message)) {
       throw new Error(
