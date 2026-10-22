@@ -5,7 +5,7 @@ import { ChartsView } from "@/components/charts/charts-view";
 export const metadata: Metadata = {
   title: "NFL Charts",
   description:
-    "Team tiers and quarterback EPA charts from nflverse play-by-play",
+    "Team tiers and quarterback efficiency by season, week and situation.",
 };
 
 export default function ChartsPage() {

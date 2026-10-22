@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: "/nfl/", label: "Home" },
-  { href: "/magic-stats", label: "Ask" },
+  { href: "/magic-stats", label: "Magic Stats" },
   { href: "/magic-stats/charts", label: "Charts" },
   { href: "/magic-stats/fourth-down", label: "4th down" },
 ];

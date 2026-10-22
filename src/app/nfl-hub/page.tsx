@@ -24,8 +24,13 @@ import { ScoreboardStrip } from "@/components/scoreboard-strip";
  */
 
 export const metadata: Metadata = {
-  title: "NFL by the numbers",
-  description: "NFL stats, 4th down decisions, playoff odds and pick'em",
+  title: "Blaine's Sports Tools",
+  description:
+    "NFL stats you can ask about in plain English, 4th down calls, playoff odds and fantasy draft tools.",
+  icons: {
+    icon: { url: "/magic-stats/icon.svg", type: "image/svg+xml" },
+    apple: "/magic-stats/apple-icon",
+  },
 };
 
 type Item = {
@@ -38,9 +43,9 @@ type Item = {
 const TOOLS: (Item & { example: string })[] = [
   {
     href: "/magic-stats",
-    title: "Ask a question",
+    title: "Magic Stats",
     blurb:
-      "Type it like you'd text it. Answers come from every play since 1999.",
+      "Ask any NFL stats question in plain English. Answers come from every play since 1999.",
     example: "“Most rushing yards in 2024?”",
     icon: MessageSquareText,
   },

@@ -37,13 +37,10 @@ export function NflShell({ children }: { children: React.ReactNode }) {
           <a
             href="/nfl/"
             className="group shrink-0 pb-1 sm:pb-3"
-            aria-label="NFL home"
+            aria-label="Blaine's Sports Tools home"
           >
             <span className="font-display block text-[1.7rem] leading-none font-extrabold tracking-tight">
-              NFL
-              <span className="text-turf-100/70 ml-2 text-base font-semibold tracking-normal">
-                by the numbers
-              </span>
+              Blaine&apos;s Sports Tools
             </span>
             {/* the first-down line */}
             <span

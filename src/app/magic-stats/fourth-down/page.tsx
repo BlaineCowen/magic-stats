@@ -5,7 +5,7 @@ import { FourthDownView } from "@/components/fourth/fourth-down-view";
 export const metadata: Metadata = {
   title: "4th Down Decisions",
   description:
-    "Go for it, kick or punt: a win probability 4th down model after nfl4th, with live calls and every coach graded",
+    "Go for it, kick or punt? Every 4th down graded by chance to win, with live calls during games and every coach ranked.",
 };
 
 export default function FourthDownPage() {

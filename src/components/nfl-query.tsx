@@ -385,12 +385,12 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   return (
     <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
       <h1 className="font-display text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-        Ask a question
+        Magic Stats
         {debug && <span className="text-slate-400"> (testing)</span>}
       </h1>
       <p className="mt-2 max-w-2xl text-lg text-slate-600">
-        Type it like you&apos;d text it. Answers come from every NFL play since
-        1999.
+        Ask any NFL stats question the way you&apos;d text a friend. Answers
+        come from every play since 1999.
       </p>
 
       <div className="mt-6 max-w-3xl">
