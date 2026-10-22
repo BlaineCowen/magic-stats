@@ -34,12 +34,12 @@ async function readMeta(): Promise<BacktestMeta> {
 export default async function FantasyPage() {
   const [projections, meta] = await Promise.all([getProjections(), readMeta()]);
   return (
-    <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
-      <header className="mb-6">
-        <h1 className="font-display text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+    <main className="mx-auto max-w-6xl px-4 pt-5 pb-16 sm:pt-8">
+      <header className="mb-4 sm:mb-6">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900 sm:text-5xl">
           Fantasy
         </h1>
-        <p className="mt-2 max-w-2xl text-lg text-slate-600">
+        <p className="mt-1.5 max-w-2xl text-base text-slate-600 sm:mt-2 sm:text-lg">
           Who&apos;s about to break out, what everyone should score this week,
           and whose usage is moving. PPR scoring.
         </p>

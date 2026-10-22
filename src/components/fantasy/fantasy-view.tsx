@@ -48,10 +48,10 @@ function PlayerCell({ p }: { p: Projection }) {
           src={p.headshot}
           alt=""
           loading="lazy"
-          className="size-9 shrink-0 rounded-full bg-slate-100 object-cover object-top"
+          className="size-8 shrink-0 rounded-full bg-slate-100 object-cover object-top sm:size-9"
         />
       ) : (
-        <span className="size-9 shrink-0 rounded-full bg-slate-100" />
+        <span className="size-8 shrink-0 rounded-full bg-slate-100 sm:size-9" />
       )}
       <span className="min-w-0">
         <span className="group-hover:text-turf-800 block truncate font-semibold text-slate-900 group-hover:underline">
@@ -90,7 +90,7 @@ function Breakouts({ rows, meta }: { rows: Projection[]; meta: BacktestMeta }) {
   const max = Math.max(30, ...list.map((p) => p.ceiling));
   return (
     <>
-      <p className="mb-4 max-w-3xl text-sm text-slate-600">
+      <Note>
         Players who aren&apos;t weekly starters yet, ranked by the chance they
         average starter-level PPR over their next four games (15+ for RB and WR,
         11+ for TE, 20+ for QB). In backtests on 2021 to 2025, each week&apos;s
@@ -100,7 +100,7 @@ function Breakouts({ rows, meta }: { rows: Projection[]; meta: BacktestMeta }) {
         {meta.breakout_base ? fmtPct(meta.breakout_base) : "6%"} base rate. QB
         breakouts are much harder to call, so they only show under the QB
         filter.
-      </p>
+      </Note>
       {list.length === 0 ? (
         <Empty />
       ) : (
@@ -110,21 +110,22 @@ function Breakouts({ rows, meta }: { rows: Projection[]; meta: BacktestMeta }) {
             return (
               <li
                 key={p.player_id}
-                className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-[2.5rem_minmax(0,14rem)_6rem_minmax(0,1fr)] sm:items-start"
+                className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] gap-x-3 gap-y-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[2.5rem_minmax(0,14rem)_6rem_minmax(0,1fr)] sm:items-start sm:p-4"
               >
-                <span className="font-display text-2xl font-bold text-slate-300 tabular-nums">
+                <span className="font-display self-center text-xl font-bold text-slate-300 tabular-nums sm:self-auto sm:text-2xl">
                   {i + 1}
                 </span>
                 <PlayerCell p={p} />
-                <div>
-                  <div className="font-display text-turf-800 text-3xl leading-none font-bold tabular-nums">
+                <div className="text-right sm:text-left">
+                  <div className="font-display text-turf-800 text-2xl leading-none font-bold tabular-nums sm:text-3xl">
                     {fmtPct(p.breakout_prob)}
                   </div>
                   <div className="mt-1 text-xs text-slate-500">
-                    breakout chance
+                    <span className="sm:hidden">breakout</span>
+                    <span className="hidden sm:inline">breakout chance</span>
                   </div>
                 </div>
-                <div className="min-w-0 space-y-2">
+                <div className="col-span-3 min-w-0 space-y-2 sm:col-span-1">
                   <div className="flex items-center gap-3 text-sm">
                     <span className="w-28 shrink-0 text-slate-600 tabular-nums">
                       Next: {p.proj.toFixed(1)}{" "}
@@ -237,13 +238,13 @@ function Projections({ rows }: { rows: Projection[] }) {
   ];
   return (
     <>
-      <p className="mb-4 max-w-3xl text-sm text-slate-600">
+      <Note>
         PPR points for each player&apos;s next game. Floor and ceiling are the
         10th and 90th percentile outcomes: one game in ten should land below the
         floor and one in ten above the ceiling. &ldquo;Opp allows&rdquo; is the
         PPR the opponent gives up to the position per game. Click a column to
         sort.
-      </p>
+      </Note>
       {list.length === 0 ? (
         <Empty />
       ) : (
@@ -347,7 +348,7 @@ function RestOfSeason({
   ];
   return (
     <>
-      <p className="mb-4 max-w-3xl text-sm text-slate-600">
+      <Note>
         Projected PPR for every remaining regular-season game, added up. Each
         game uses the player&apos;s numbers as of now with that game&apos;s
         opponent, venue and rest; betting lines and weather only count once
@@ -355,7 +356,7 @@ function RestOfSeason({
         game, so injuries will cut into these.
         {meta.ros_mae != null &&
           ` Backtested from weeks 4, 8 and 12 of 2021 to 2025, the per-game miss is ${meta.ros_mae.toFixed(2)} points against ${meta.ros_mae_base?.toFixed(2)} for season-to-date averages.`}
-      </p>
+      </Note>
       {list.length === 0 ? (
         <Empty />
       ) : (
@@ -455,13 +456,13 @@ function Usage({ rows }: { rows: Projection[] }) {
   ];
   return (
     <>
-      <p className="mb-4 max-w-3xl text-sm text-slate-600">
+      <Note>
         Expected PPR points per game over each player&apos;s last 3 games
         compared with his season, with snap and target or carry share for the
         same games (change in percentage points). Expected points measure usage,
         so they move before the box scores do. Sort the change column either way
         for risers or fallers.
-      </p>
+      </Note>
       <SortableTable
         rows={list}
         columns={columns}
@@ -470,6 +471,28 @@ function Usage({ rows }: { rows: Projection[] }) {
         minWidth={820}
       />
     </>
+  );
+}
+
+/** Explanation above a list: two lines on phones with a toggle, full on wider screens. */
+function Note({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-4 max-w-3xl text-sm text-slate-600">
+      <p className={cn(!open && "line-clamp-2 sm:line-clamp-none")}>
+        {children}
+      </p>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "text-turf-800 mt-0.5 text-sm font-medium sm:hidden",
+          focusCls,
+        )}
+      >
+        {open ? "Less" : "How this works"}
+      </button>
+    </div>
   );
 }
 
@@ -519,29 +542,31 @@ export function FantasyView({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div
-          role="tablist"
-          aria-label="View"
-          className="inline-flex rounded-lg border border-slate-300 bg-white p-1"
-        >
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
-              className={cn(
-                "font-display rounded-md px-4 py-1.5 text-lg font-semibold whitespace-nowrap transition-colors",
-                focusCls,
-                tab === t.key
-                  ? "bg-turf-950 text-white"
-                  : "text-slate-600 hover:text-slate-900",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="nfl-scroll-fade -mx-4 w-[calc(100%+2rem)] overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:px-0">
+          <div
+            role="tablist"
+            aria-label="View"
+            className="inline-flex rounded-lg border border-slate-300 bg-white p-1"
+          >
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                onClick={() => setTab(t.key)}
+                className={cn(
+                  "font-display rounded-md px-3 py-1.5 text-base font-semibold whitespace-nowrap transition-colors sm:px-4 sm:text-lg",
+                  focusCls,
+                  tab === t.key
+                    ? "bg-turf-950 text-white"
+                    : "text-slate-600 hover:text-slate-900",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div
           role="group"

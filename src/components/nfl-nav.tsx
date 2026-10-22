@@ -30,11 +30,11 @@ export function NflNav() {
       aria-label="Site sections"
       className="nfl-scroll-fade -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     >
-      <ul className="font-display flex gap-6 text-lg font-semibold tracking-wide">
+      <ul className="font-display flex gap-5 text-base font-semibold tracking-wide sm:gap-6 sm:text-lg">
         {LINKS.map((l) => {
           const active = isActive(l.href, pathname);
           const cls = cn(
-            "block border-b-[3px] pt-2 pb-2.5 whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-line",
+            "block border-b-[3px] pt-1.5 pb-2 whitespace-nowrap sm:pt-2 sm:pb-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-line",
             active
               ? "border-line text-white"
               : "border-transparent text-turf-100/75 hover:text-white",

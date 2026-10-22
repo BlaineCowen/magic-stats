@@ -80,6 +80,9 @@ export function SortableTable<T>({
                   }
                   className={cn(
                     "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium whitespace-nowrap text-slate-600",
+                    // The name column stays put while the numbers scroll sideways.
+                    c === columns[0] &&
+                      "left-0 z-20 shadow-[1px_0_0_#e2e8f0] max-sm:min-w-36",
                     align === "right" ? "text-right" : "text-left",
                     c.className,
                   )}
@@ -122,12 +125,14 @@ export function SortableTable<T>({
         </thead>
         <tbody className="[&>tr:last-child>td]:border-0 [&>tr>td]:border-b [&>tr>td]:border-slate-100">
           {shown.map((r) => (
-            <tr key={rowKey(r)} className="hover:bg-slate-50/70">
+            <tr key={rowKey(r)}>
               {columns.map((c) => (
                 <td
                   key={c.key}
                   className={cn(
                     "px-3 py-2 tabular-nums",
+                    c === columns[0] &&
+                      "sticky left-0 z-[1] bg-white shadow-[1px_0_0_#e2e8f0] max-sm:max-w-40",
                     (c.align ?? "right") === "right"
                       ? "text-right"
                       : "text-left",

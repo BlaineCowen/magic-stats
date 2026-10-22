@@ -103,21 +103,21 @@ export default async function PlayerPageView(props: Props) {
       >
         ← Fantasy
       </Link>
-      <header className="mt-3 flex flex-wrap items-center gap-5">
+      <header className="mt-3 flex items-center gap-4 sm:gap-5">
         {p.headshot && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={p.headshot}
             alt=""
-            className="size-24 rounded-full bg-slate-100 object-cover object-top ring-4"
+            className="size-16 shrink-0 rounded-full bg-slate-100 object-cover object-top ring-4 sm:size-24"
             style={{ ["--tw-ring-color" as string]: color }}
           />
         )}
         <div className="min-w-0">
-          <h1 className="font-display text-4xl leading-tight font-bold tracking-tight text-slate-900 sm:text-5xl">
+          <h1 className="font-display text-3xl leading-tight font-bold tracking-tight text-slate-900 sm:text-5xl">
             {p.name}
           </h1>
-          <p className="mt-1 text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 sm:text-base">
             {p.position}, {p.team_name ?? p.team ?? "free agent"}
             {p.age != null && ` · age ${p.age}`} · {p.draft}
             {p.college && ` · ${p.college}`}
@@ -156,7 +156,7 @@ export default async function PlayerPageView(props: Props) {
               </span>
             )}
           </div>
-          <div className="mt-3 grid gap-4 sm:grid-cols-[repeat(4,minmax(0,8rem))_minmax(0,1fr)] sm:items-center">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[repeat(4,minmax(0,8rem))_minmax(0,1fr)] sm:items-center sm:gap-4">
             <Stat label="Projection" value={proj.proj.toFixed(1)} sub="PPR" />
             <Stat
               label="Floor"
@@ -179,7 +179,7 @@ export default async function PlayerPageView(props: Props) {
                   : "already a starter"
               }
             />
-            <div className="min-w-0">
+            <div className="col-span-2 min-w-0 sm:col-span-1">
               <RangeBar
                 floor={proj.floor}
                 proj={proj.proj}
