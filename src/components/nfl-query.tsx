@@ -9,7 +9,7 @@ import {
   Clock,
   Copy,
   Download,
-  Link2,
+  Share2,
   Loader2,
   Mail,
   Search,
@@ -26,7 +26,11 @@ import {
   type RecentQuestion,
 } from "@/components/ask/recent";
 import { ProofResults } from "@/components/ask/proof-results";
-import { formatValue, ResultsTable } from "@/components/ask/results-table";
+import {
+  formatValue,
+  hideIdColumns,
+  ResultsTable,
+} from "@/components/ask/results-table";
 import {
   inferSpec,
   type ChartPick,
@@ -69,6 +73,8 @@ interface ApiResponse {
   sql?: string;
   plan?: string | null;
   explain?: string | null;
+  /** Server-side id for making a public share page of this answer. */
+  answer_id?: string;
   mode?: Mode;
   attempts?: Attempt[];
   timings?: { total_ms: number };
@@ -88,13 +94,6 @@ type Problem = { kind: "notice" | "failure"; message: string };
 const MAX_CHARS = 300;
 const OFFLINE_MESSAGE =
   "The stats assistant isn't responding right now. Try again in a few minutes.";
-
-// IDs are for joins, not for reading.
-function hideIdColumns(rows: QueryResult[]): QueryResult[] {
-  return rows.map((row) =>
-    Object.fromEntries(Object.entries(row).filter(([k]) => !k.endsWith("_id"))),
-  );
-}
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
@@ -335,16 +334,49 @@ export function NflQuery({
     }
   };
 
-  const copyLink = async () => {
+  // The chart as the reader left it, so a share shows the same view.
+  const chartSpecRef = useRef<ChartSpec | null>(null);
+  const onSpecChange = useCallback((spec: ChartSpec) => {
+    chartSpecRef.current = spec;
+  }, []);
+
+  /** Publish this answer as a public page and hand over its link. */
+  const share = async () => {
+    if (!response?.answer_id) return;
+    let data: { url?: string; error?: string };
     try {
-      const url = new URL(window.location.href);
-      url.search = "";
-      url.searchParams.set("q", lastQuery);
-      url.searchParams.set("sport", sport);
-      await navigator.clipboard.writeText(url.toString());
-      toast.success("Link copied");
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          answer_id: response.answer_id,
+          chart: chartShown ? chartSpecRef.current : null,
+        }),
+      });
+      data = (await res.json()) as typeof data;
     } catch {
-      toast.error("Couldn't copy the link");
+      toast.error("Couldn't make a share link");
+      return;
+    }
+    if (!data.url) {
+      toast.error(data.error ?? "Couldn't make a share link");
+      return;
+    }
+    const url = new URL(data.url, window.location.origin).toString();
+    // Phones get the share sheet; desktops get the clipboard.
+    if (navigator.share && window.matchMedia("(pointer: coarse)").matches) {
+      try {
+        await navigator.share({ title: lastQuery, url });
+        return;
+      } catch {
+        // dismissed or unsupported: fall back to copying
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied. Anyone can open it.");
+    } catch {
+      window.prompt("Share link", url);
     }
   };
 
@@ -696,7 +728,7 @@ export function NflQuery({
       )}
 
       {!isLoading && !error && proof && (
-        <ProofResults proof={proof} onCopyLink={copyLink} />
+        <ProofResults proof={proof} onShare={share} />
       )}
 
       {!isLoading && !error && response && !proof && results.length > 0 && (
@@ -758,12 +790,12 @@ export function NflQuery({
               </button>
               <button
                 type="button"
-                onClick={copyLink}
+                onClick={() => void share()}
                 className={secondaryButton}
-                title="Copy a link that fills in this question"
+                title="Make a public page of this answer and copy its link"
               >
-                <Link2 className="size-4" aria-hidden />
-                Copy link
+                <Share2 className="size-4" aria-hidden />
+                Share
               </button>
             </div>
           </div>
@@ -781,6 +813,7 @@ export function NflQuery({
                 truncated={response?.truncated}
                 source={SPORT_ASK[sport].source}
                 onHide={hideChart}
+                onSpecChange={onSpecChange}
               />
             </div>
           )}
@@ -826,7 +859,7 @@ export function NflQuery({
           {response ? "Try another" : "Try one of these"}
           <span className="sr-only"> {SPORT_LABEL[sport]} question</span>
         </h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SPORT_ASK[sport].groups.map((g) => (
             <div
               key={g.title}

@@ -20,15 +20,6 @@ export const SPORT_ASK: Record<
     placeholder: "Most rushing yards in 2024?",
     groups: [
       {
-        title: "Dumb stats",
-        questions: [
-          "What team is the biggest fraud?",
-          "Which QB is carried the most by his receivers?",
-          "Who gets the most garbage time fantasy points?",
-          "Prove CJ Stroud is the best QB in the NFL",
-        ],
-      },
-      {
         title: "Quarterbacks",
         questions: [
           "Top 10 quarterbacks in 2024 by EPA per dropback, minimum 300 dropbacks",
@@ -69,14 +60,6 @@ export const SPORT_ASK: Record<
     source: "NBA Stats via sportsdataverse, ESPN",
     groups: [
       {
-        title: "Dumb stats",
-        questions: [
-          "Who pads their stats the most in garbage time?",
-          "Who is the biggest brick layer?",
-          "Why are the Thunder so good?",
-        ],
-      },
-      {
         title: "Scoring & shooting",
         questions: [
           "Highest scoring average in 2024-25, minimum 50 games",
@@ -116,14 +99,6 @@ export const SPORT_ASK: Record<
     placeholder: "Highest wRC+ in 2025?",
     source: "MLB Stats API, Baseball Savant",
     groups: [
-      {
-        title: "Dumb stats",
-        questions: [
-          "Who is the luckiest hitter?",
-          "What team is the biggest fraud?",
-          "Prove Shohei Ohtani is the best player in baseball",
-        ],
-      },
       {
         title: "Hitting",
         questions: [

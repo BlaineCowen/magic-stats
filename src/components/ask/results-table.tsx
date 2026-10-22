@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils";
 export type Cell = string | number | boolean | null;
 export type Row = Record<string, Cell>;
 
+// IDs are for joins, not for reading.
+export function hideIdColumns(rows: Row[]): Row[] {
+  return rows.map((row) =>
+    Object.fromEntries(Object.entries(row).filter(([k]) => !k.endsWith("_id"))),
+  );
+}
+
 export function formatValue(value: Cell | undefined): string {
   if (value === null || value === undefined) return "N/A";
   if (typeof value === "boolean") return value ? "Yes" : "No";

@@ -1,7 +1,7 @@
 "use client";
 
 import toast from "react-hot-toast";
-import { Copy, Link2 } from "lucide-react";
+import { Copy, Share2 } from "lucide-react";
 import type { Finding, ProofResult } from "@/lib/sports/prove/engine";
 import { cn } from "@/lib/utils";
 
@@ -34,10 +34,11 @@ const secondaryButton =
 
 export function ProofResults({
   proof,
-  onCopyLink,
+  onShare,
 }: {
   proof: ProofResult;
-  onCopyLink: () => void;
+  /** Omitted on the public share page. */
+  onShare?: () => void;
 }) {
   const leads = proof.findings.filter((f) => f.rank === 1).length;
   const who = proof.isTeam ? `the ${proof.player}` : proof.player;
@@ -59,10 +60,12 @@ export function ProofResults({
             <p className="mt-1 text-sm text-amber-800">{proof.note}</p>
           )}
         </div>
-        <button type="button" onClick={onCopyLink} className={secondaryButton}>
-          <Link2 className="size-4" aria-hidden />
-          Copy link
-        </button>
+        {onShare && (
+          <button type="button" onClick={onShare} className={secondaryButton}>
+            <Share2 className="size-4" aria-hidden />
+            Share
+          </button>
+        )}
       </div>
 
       <ol className="mt-5 grid gap-4 lg:grid-cols-2">

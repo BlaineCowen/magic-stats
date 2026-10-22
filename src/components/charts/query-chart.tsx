@@ -3,6 +3,7 @@
 import {
   Component,
   memo,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -90,7 +91,10 @@ type QueryChartProps = {
   truncated?: boolean;
   /** Credited in the footnote. */
   source?: string;
-  onHide: () => void;
+  /** Omitted on read-only pages: no Hide button. */
+  onHide?: () => void;
+  /** Called with the spec whenever the reader changes the controls. */
+  onSpecChange?: (spec: ChartSpec) => void;
 };
 
 type Field = "x" | "y" | "series";
@@ -180,8 +184,10 @@ function QueryChartBody({
   truncated = false,
   source = "nflverse",
   onHide,
+  onSpecChange,
 }: QueryChartProps) {
   const [spec, setSpec] = useState(initial);
+  useEffect(() => onSpecChange?.(spec), [spec, onSpecChange]);
   const [showLabels, setShowLabels] = useState(true);
   const svgRef = useRef<SVGSVGElement>(null);
   const cols = useMemo(() => classifyColumns(rows, columns), [rows, columns]);
@@ -282,9 +288,11 @@ function QueryChartBody({
           >
             Download PNG
           </button>
-          <button type="button" onClick={onHide} className={button}>
-            Hide chart
-          </button>
+          {onHide && (
+            <button type="button" onClick={onHide} className={button}>
+              Hide chart
+            </button>
+          )}
         </div>
       </div>
       <ChartBoundary key={JSON.stringify(spec)}>

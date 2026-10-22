@@ -8,6 +8,7 @@ import {
 } from "@/lib/sports/pipeline";
 import { proveClaim } from "@/lib/sports/prove/engine";
 import { isProofQuestion } from "@/lib/sports/prove/parse";
+import { stashAnswer } from "@/lib/sports/shares";
 import { isSport, type Sport } from "@/lib/sports/types";
 import { admit, MAX_QUESTION_CHARS, viewerFrom } from "@/lib/query-limits";
 
@@ -43,12 +44,20 @@ export async function POST(request: Request) {
   if (isProofQuestion(query)) {
     const proofKey = cacheKey(sport, "prove", dataVersion(sport), query);
     const hit = body.nocache ? null : getCached(proofKey);
-    if (hit) return NextResponse.json({ ...hit, cached: true });
+    if (hit)
+      return NextResponse.json({
+        ...hit,
+        cached: true,
+        answer_id: stashAnswer(sport, query, hit),
+      });
     try {
       const proof = await proveClaim(sport, query);
       if (proof) {
         setCache(proofKey, proof);
-        return NextResponse.json(proof);
+        return NextResponse.json({
+          ...proof,
+          answer_id: stashAnswer(sport, query, proof),
+        });
       }
     } catch (error) {
       console.error("Proof error:", (error as Error).message);
@@ -57,7 +66,12 @@ export async function POST(request: Request) {
 
   const key = cacheKey(sport, mode, dataVersion(sport), query);
   const cached = body.nocache ? null : getCached(key);
-  if (cached) return NextResponse.json({ ...cached, cached: true });
+  if (cached)
+    return NextResponse.json({
+      ...cached,
+      cached: true,
+      answer_id: stashAnswer(sport, query, cached),
+    });
 
   // only questions that reach the paid model count against the limits
   const gate = admit(viewerFrom(request.headers), mode === "deep");
@@ -76,7 +90,10 @@ export async function POST(request: Request) {
   try {
     const result = await answerQuestion(query, mode, sport);
     setCache(key, result);
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      answer_id: stashAnswer(sport, query, result),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to process query";
