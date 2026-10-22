@@ -8,6 +8,7 @@ import {
   type ChartKind,
   type QbPoint,
   type TeamPoint,
+  type TeamWeek,
 } from "./chart-types";
 
 /**
@@ -176,6 +177,44 @@ async function teamTiers(f: ChartFilters): Promise<TeamPoint[]> {
   }));
 }
 
+/** Week-by-week sums per team under the same filters, for the season path. */
+async function teamWeeks(f: ChartFilters): Promise<TeamWeek[]> {
+  const { rows } = await runSafeSelect(
+    `
+    WITH plays AS (
+      SELECT week, posteam, defteam, epa, wp
+      FROM pbp WHERE ${playFilter(f)}
+    ),
+    off AS (
+      SELECT posteam AS team, week, any_value(defteam) AS opponent,
+             sum(epa) AS off_epa_sum, count(*) AS off_plays
+      FROM plays WHERE posteam IS NOT NULL AND ${wpFilter(f, "wp")}
+      GROUP BY ALL
+    ),
+    def AS (
+      SELECT defteam AS team, week, any_value(posteam) AS opponent,
+             sum(epa) AS def_epa_sum, count(*) AS def_plays
+      FROM plays WHERE defteam IS NOT NULL AND ${wpFilter(f, "1 - wp")}
+      GROUP BY ALL
+    )
+    SELECT team, week, coalesce(o.opponent, d.opponent) AS opponent,
+           coalesce(off_epa_sum, 0) AS off_epa_sum, coalesce(off_plays, 0) AS off_plays,
+           coalesce(def_epa_sum, 0) AS def_epa_sum, coalesce(def_plays, 0) AS def_plays
+    FROM off o FULL JOIN def d USING (team, week)
+    ORDER BY team, week`,
+    { maxRows: 2000 },
+  );
+  return rows.map((r) => ({
+    team: String(r.team),
+    week: num(r.week),
+    opponent: str(r.opponent),
+    off_epa_sum: num(r.off_epa_sum),
+    off_plays: num(r.off_plays),
+    def_epa_sum: num(r.def_epa_sum),
+    def_plays: num(r.def_plays),
+  }));
+}
+
 /**
  * QB EPA/play counts every dropback (passes, sacks, scrambles) plus designed
  * runs, using qb_epa so a receiver's fumble isn't charged to the QB. CPOE is
@@ -247,13 +286,20 @@ export async function buildChart(params: URLSearchParams): Promise<ChartData> {
   const started = Date.now();
   const { chart, filters, seasons } = await resolveParams(params);
   if (chart === "teams") {
-    const teams = await teamTiers(filters);
+    // Weeks repeat across seasons, so the path is a single-season view.
+    const [teams, weekly] = await Promise.all([
+      teamTiers(filters),
+      filters.seasonFrom === filters.seasonTo
+        ? teamWeeks(filters)
+        : Promise.resolve(undefined),
+    ]);
     return {
       chart,
       filters,
       seasons,
       minPlays: null,
       teams,
+      weekly,
       ms: Date.now() - started,
     };
   }

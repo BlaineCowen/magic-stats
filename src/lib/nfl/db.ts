@@ -17,7 +17,8 @@ export const NFL_DATA_DIR = sports.dataDir("nfl");
 
 export const dataVersion = () => sports.dataVersion("nfl");
 
-export const runSafeSelect = (sql: string) => sports.runSafeSelect("nfl", sql);
+export const runSafeSelect = (sql: string, opts?: { maxRows?: number }) =>
+  sports.runSafeSelect("nfl", sql, opts);
 
 export const describeView = (view: string) => sports.describeView("nfl", view);
 

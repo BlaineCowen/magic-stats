@@ -38,6 +38,18 @@ export type TeamPoint = {
   games: number;
 };
 
+/** One team's plays in one game week, for the season-path trail. Sums, not
+ * means, so the client can build season-to-date or rolling averages. */
+export type TeamWeek = {
+  team: string;
+  week: number;
+  opponent: string | null;
+  off_epa_sum: number;
+  off_plays: number;
+  def_epa_sum: number;
+  def_plays: number;
+};
+
 export type QbPoint = {
   id: string;
   name: string;
@@ -59,6 +71,8 @@ export type ChartData = {
   minPlays: number | null;
   seasons: { min: number; max: number };
   teams?: TeamPoint[];
+  /** Team chart, single season only: every team's week-by-week sums. */
+  weekly?: TeamWeek[];
   qbs?: QbPoint[];
   ms: number;
 };

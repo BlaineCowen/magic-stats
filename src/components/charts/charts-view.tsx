@@ -15,7 +15,7 @@ import {
 } from "@/lib/nfl/chart-types";
 import { downloadSvgAsPng, pct, signed } from "./chart-kit";
 import { QbChart } from "./qb-chart";
-import { TeamTiersChart } from "./team-tiers-chart";
+import { TeamTiersChart, type PathMode } from "./team-tiers-chart";
 
 const TABS: { kind: ChartKind; label: string }[] = [
   { kind: "teams", label: "Team tiers" },
@@ -268,8 +268,32 @@ export function ChartsView() {
   const [query, setQuery] = useState(() => {
     const p = new URLSearchParams(searchParams.toString());
     p.delete("chart");
+    p.delete("trace");
+    p.delete("path");
     return p.toString();
   });
+  // Teams whose week-by-week path is drawn, kept in the URL (?trace=HOU,KC)
+  // so a traced chart can be shared. Not part of `query`: no refetch needed.
+  const [traced, setTraced] = useState<string[]>(() =>
+    (searchParams.get("trace") ?? "")
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter((t) => /^[A-Z]{2,3}$/.test(t)),
+  );
+  const [pathMode, setPathMode] = useState<PathMode>(
+    searchParams.get("path") === "rolling" ? "rolling" : "season",
+  );
+  const traceParams = useRef({ traced, pathMode });
+  traceParams.current = { traced, pathMode };
+  const withTrace = (params: URLSearchParams) => {
+    const t = traceParams.current;
+    if (t.traced.length) params.set("trace", t.traced.join(","));
+    else params.delete("trace");
+    if (t.traced.length && t.pathMode === "rolling")
+      params.set("path", "rolling");
+    else params.delete("path");
+    return params;
+  };
   const [filters, setFilters] = useState<ChartFilters | null>(null);
   const [data, setData] = useState<ChartData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -286,7 +310,12 @@ export function ChartsView() {
     const params = new URLSearchParams(query);
     params.set("chart", chart);
     // Keeps the URL shareable: every filter change lands in the query string.
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    router.replace(
+      `${pathname}?${withTrace(new URLSearchParams(params)).toString()}`,
+      {
+        scroll: false,
+      },
+    );
     const ctrl = new AbortController();
     setLoading(true);
     fetch(`/api/charts?${params.toString()}`, { signal: ctrl.signal })
@@ -322,6 +351,13 @@ export function ChartsView() {
       });
     return () => ctrl.abort();
   }, [chart, query, pathname, router]);
+
+  // Tracing only changes the URL, so it doesn't go through the router.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    withTrace(url.searchParams);
+    window.history.replaceState(window.history.state, "", url);
+  }, [traced, pathMode]);
 
   const update = (patch: Partial<ChartFilters>) => {
     if (!filters) return;
@@ -788,7 +824,14 @@ export function ChartsView() {
             )}
           >
             {chart === "teams" ? (
-              <TeamTiersChart data={shown} svgRef={svgRef} />
+              <TeamTiersChart
+                data={shown}
+                svgRef={svgRef}
+                traced={traced}
+                onTracedChange={setTraced}
+                mode={pathMode}
+                onModeChange={setPathMode}
+              />
             ) : (
               <QbChart data={shown} svgRef={svgRef} />
             )}

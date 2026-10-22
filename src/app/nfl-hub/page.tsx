@@ -50,7 +50,7 @@ const TOOLS: (Item & { example: string })[] = [
     title: "Magic Stats",
     blurb:
       "Ask NFL, NBA or MLB stats questions in plain English. Box scores, advanced stats and Statcast.",
-    example: "“Most crabsketball points per game this season?”",
+    example: "“Who leads the league in rushing yards?”",
     icon: MessageSquareText,
   },
   {
