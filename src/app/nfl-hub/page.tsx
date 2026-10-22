@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Activity,
   BarChart3,
@@ -13,7 +13,7 @@ import {
   Volleyball,
   Waypoints,
 } from "lucide-react";
-import { NflShell } from "@/components/nfl-shell";
+import { NFL_VIEWPORT, NflShell } from "@/components/nfl-shell";
 import { ScoreboardStrip } from "@/components/scoreboard-strip";
 
 /**
@@ -26,6 +26,8 @@ import { ScoreboardStrip } from "@/components/scoreboard-strip";
 // Rendered per request so browsers and Cloudflare always revalidate /nfl/. Before 2026-10-22 that URL
 // was the draft board, and browsers kept serving their old copy of it.
 export const dynamic = "force-dynamic";
+
+export const viewport: Viewport = NFL_VIEWPORT;
 
 export const metadata: Metadata = {
   title: "Blaine's Sports Tools",

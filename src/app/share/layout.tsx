@@ -1,7 +1,9 @@
-import type { Metadata } from "next";
-import { NflShell } from "@/components/nfl-shell";
+import type { Metadata, Viewport } from "next";
+import { NFL_VIEWPORT, NflShell } from "@/components/nfl-shell";
 
 // Public, signed-out pages: the result and nothing that leads into the tools.
+export const viewport: Viewport = NFL_VIEWPORT;
+
 export const metadata: Metadata = {
   title: {
     template: "%s | Blaine's Sports Tools",

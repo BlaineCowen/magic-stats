@@ -1,3 +1,4 @@
+import type { Viewport } from "next";
 import { Barlow, Barlow_Condensed } from "next/font/google";
 import { NflNav } from "@/components/nfl-nav";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,17 @@ const barlowCondensed = Barlow_Condensed({
   weight: ["500", "600", "700", "800"],
   variable: "--font-barlow-condensed",
 });
+
+/**
+ * Viewport for every page in the shell: draw edge to edge on phones (the
+ * header pads itself by the safe-area insets) and tint Safari's bars to match.
+ */
+export const NFL_VIEWPORT: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0e2a1e",
+};
 
 /**
  * The frame every NFL page shares: a turf header with the wordmark and the section nav, then the
@@ -53,8 +65,12 @@ export function NflShell({
           Skip to content
         </a>
       )}
-      <header className="bg-turf-950 text-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 pt-4 sm:flex-row sm:items-end sm:justify-between sm:gap-8 sm:pt-5">
+      {/* Phones: sticky, and padded by the safe-area insets so the notch and
+          Safari's floating top bar never cover it (needs viewport-fit=cover,
+          set in NFL_VIEWPORT). Desktop: scrolls away as before, which keeps
+          the 4th-down page's sticky sidebars clear. */}
+      <header className="bg-turf-950 sticky top-0 z-40 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-white lg:static">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 pt-3 sm:flex-row sm:items-end sm:justify-between sm:gap-8 sm:pt-5">
           {bare ? (
             <div className="shrink-0 pb-3 sm:pb-4">{wordmark}</div>
           ) : (
@@ -71,7 +87,12 @@ export function NflShell({
           )}
         </div>
       </header>
-      <div id="content">{children}</div>
+      <div
+        id="content"
+        className="pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+      >
+        {children}
+      </div>
     </div>
   );
 }
