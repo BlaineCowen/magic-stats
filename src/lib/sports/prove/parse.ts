@@ -10,8 +10,31 @@ const PROVE =
 const WHY_GOOD =
   /\bwhy (?:is|are|was|were) .+ (?:so )?(?:good|great|elite|dominant|the best|better|the goat|goated|unbeatable|undefeated)\b/i;
 
+const BAD =
+  "worst|worse|bad|trash|garbage|terrible|awful|horrible|overrated|washed|frauds?|sucks?|struggl\\w*";
+
+// "Why is Dak Prescott the worst QB?", "why do the Jets suck"
+const WHY_BAD = new RegExp(
+  `\\bwhy (?:is|are|was|were|does|do) .+\\b(?:${BAD})\\b`,
+  "i",
+);
+// "Dak is trash", "the Cowboys are the worst"
+const IS_BAD =
+  /\b(?:is|are|was|were) (?:the |a |an |so |such an? )?(?:worst|trash|garbage|terrible|awful|horrible|overrated|washed|frauds?)\b/i;
+const AGAINST = /\b(?:case against|roast\w*|sucks)\b/i;
+
+/** Questions asking for the stats where someone ranks last ("the case against"). */
+export function isRoastQuestion(q: string): boolean {
+  return (
+    WHY_BAD.test(q) ||
+    IS_BAD.test(q) ||
+    AGAINST.test(q) ||
+    (PROVE.test(q) && new RegExp(`\\b(?:${BAD})\\b`, "i").test(q))
+  );
+}
+
 export function isProofQuestion(q: string): boolean {
-  return PROVE.test(q) || WHY_GOOD.test(q);
+  return PROVE.test(q) || WHY_GOOD.test(q) || isRoastQuestion(q);
 }
 
 export type Candidate = {
@@ -38,7 +61,7 @@ export function normalizeName(s: string): string {
 
 // Words in prove-style questions that are also somebody's name.
 const STOP = new Set(
-  "best prove proof stats stat the that case make greatest goat elite season year career playoffs game games quarterback qb receiver running back league player show give me why top number one ever all time history this last since against better than great king love young hill chase brown white green black gray grey rice will mark james king knight best case early long short deep".split(
+  "best worst worse trash garbage terrible awful overrated washed fraud sucks roast against prove proof stats stat the that case make greatest goat elite season year career playoffs game games quarterback qb receiver running back league player show give me why top number one ever all time history this last since against better than great king love young hill chase brown white green black gray grey rice will mark james king knight best case early long short deep".split(
     " ",
   ),
 );

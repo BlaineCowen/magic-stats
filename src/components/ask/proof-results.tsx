@@ -11,13 +11,13 @@ const ordinal = (n: number) => {
   return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]!);
 };
 
-const placeLabel = (f: Finding) =>
-  `${f.tied ? "Tied for " : ""}${ordinal(f.rank)} of ${f.pool} ${f.noun}`;
+const placeLabel = (f: Finding, worst = false) =>
+  `${f.tied ? "Tied for " : ""}${worst ? (f.rank === 1 ? "last" : `${ordinal(f.rank)}-worst`) : ordinal(f.rank)} of ${f.pool} ${f.noun}`;
 
 /** One line for the group chat. */
 function bragText(proof: ProofResult, f: Finding): string {
   const me = f.rows.find((r) => r.target);
-  return `${proof.player}: ${f.title.charAt(0).toLowerCase()}${f.title.slice(1)} (${me?.value}), ${placeLabel(f).toLowerCase()} in the ${proof.scope}.`;
+  return `${proof.player}: ${f.title.charAt(0).toLowerCase()}${f.title.slice(1)} (${me?.value}), ${placeLabel(f, proof.worst).toLowerCase()} in the ${proof.scope}.`;
 }
 
 async function copy(text: string, done: string) {
@@ -42,19 +42,27 @@ export function ProofResults({
 }) {
   const leads = proof.findings.filter((f) => f.rank === 1).length;
   const who = proof.isTeam ? `the ${proof.player}` : proof.player;
+  const Who = who.charAt(0).toUpperCase() + who.slice(1);
+  const ranks = proof.isTeam ? "rank" : "ranks";
   return (
     <section className="mt-8 min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h2 className="font-display text-2xl leading-tight font-bold text-slate-900">
-            The case for {who}
+            The case {proof.worst ? "against" : "for"} {who}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            {proof.findings.length === 0
-              ? `Couldn't find a split in the ${proof.scope} where ${who} ${proof.isTeam ? "rank" : "ranks"} in the top 3.`
-              : leads === proof.findings.length
-                ? `${leads} splits from the ${proof.scope} where ${who} ${proof.isTeam ? "rank" : "ranks"} first among qualified ${proof.isTeam ? "teams" : "players"}.`
-                : `${who.charAt(0).toUpperCase()}${who.slice(1)} ${proof.isTeam ? "don't" : "doesn't"} lead many splits in the ${proof.scope}, so this includes the ones where ${proof.isTeam ? "they're" : "he's"} 2nd or 3rd.`}
+            {proof.worst
+              ? proof.findings.length === 0
+                ? `Tough case to make: ${who} ${proof.isTeam ? "aren't" : "isn't"} in the bottom 3 of any split in the ${proof.scope}.`
+                : leads === proof.findings.length
+                  ? `${leads} splits from the ${proof.scope} where ${who} ${ranks} last among qualified ${proof.isTeam ? "teams" : "players"}.`
+                  : `${Who} ${proof.isTeam ? "aren't" : "isn't"} dead last in many splits in the ${proof.scope}, so this includes the ones where ${proof.isTeam ? "they're" : "he's"} 2nd- or 3rd-worst.`
+              : proof.findings.length === 0
+                ? `Couldn't find a split in the ${proof.scope} where ${who} ${ranks} in the top 3.`
+                : leads === proof.findings.length
+                  ? `${leads} splits from the ${proof.scope} where ${who} ${ranks} first among qualified ${proof.isTeam ? "teams" : "players"}.`
+                  : `${Who} ${proof.isTeam ? "don't" : "doesn't"} lead many splits in the ${proof.scope}, so this includes the ones where ${proof.isTeam ? "they're" : "he's"} 2nd or 3rd.`}
           </p>
           {proof.note && (
             <p className="mt-1 text-sm text-amber-800">{proof.note}</p>
@@ -87,7 +95,7 @@ export function ProofResults({
                       : "text-slate-600",
                   )}
                 >
-                  {placeLabel(f)}
+                  {placeLabel(f, proof.worst)}
                 </p>
               </div>
               <button

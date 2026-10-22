@@ -12,7 +12,12 @@ import {
 import { mlbProof } from "./mlb";
 import { nbaProof } from "./nba";
 import { nflProof } from "./nfl";
-import { findPlayer, parseScope, type Candidate } from "./parse";
+import {
+  findPlayer,
+  isRoastQuestion,
+  parseScope,
+  type Candidate,
+} from "./parse";
 
 const PROOF: Record<Sport, SportProof> = {
   nfl: nflProof,
@@ -49,6 +54,8 @@ export type ProofResult = {
   /** The player or team the case is for. */
   player: string;
   isTeam: boolean;
+  /** The case against: rank 1 means last. Missing on answers cached before it existed. */
+  worst?: boolean;
   team: string;
   scope: string;
   note: string | null;
@@ -295,11 +302,38 @@ function scopeLabel(proof: SportProof, s: Scope): string {
   return `${seasons} ${s.type === "POST" ? "playoffs" : "regular season"}`;
 }
 
+const OPPOSITE: Record<string, string> = {
+  Most: "Fewest",
+  Fewest: "Most",
+  Best: "Worst",
+  Highest: "Lowest",
+  Lowest: "Highest",
+};
+
+/**
+ * The role turned upside down for "the case against": every stat ranks worst
+ * first. Plain totals (most passing yards) are dropped, since the fewest just
+ * finds whoever barely qualified; rates and bad-is-high totals stay.
+ */
+export function flipRole(role: Role): Role {
+  return {
+    ...role,
+    metrics: role.metrics
+      .filter((m) => m.rate || m.low)
+      .map((m) => ({
+        ...m,
+        low: !m.low,
+        lead: m.lead.replace(/^\w+/, (w) => OPPOSITE[w] ?? w),
+      })),
+  };
+}
+
 /** Fewest of the role's own sample a player needs before we search that role. */
 const ROLE_FLOOR = 0.5;
 
 /**
- * "Prove X is the best": find the stat splits where X ranks first. Returns
+ * "Prove X is the best": find the stat splits where X ranks first ("why is X
+ * the worst": where X ranks last). Returns
  * null when no player in the question can be found, so the caller can fall
  * back to the normal question pipeline.
  */
@@ -357,6 +391,9 @@ export async function proveClaim(
     if (role) roles = [role];
   }
 
+  const worst = isRoastQuestion(question);
+  if (worst) roles = roles.map(flipRole).filter((r) => r.metrics.length);
+
   const where = proof.scopeSql(scope);
   const pid = player.pid;
   const t0 = Date.now();
@@ -379,6 +416,7 @@ export async function proveClaim(
     sport,
     player: me?.player ?? player.name,
     isTeam: player.team,
+    worst,
     team: me?.team ?? "",
     scope: scopeLabel(proof, scope),
     note,

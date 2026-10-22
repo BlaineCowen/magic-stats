@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { flipRole } from "./prove/engine";
 import { formatValue } from "./prove/kit";
+import { nflProof } from "./prove/nfl";
 import {
   findPlayer,
   isProofQuestion,
+  isRoastQuestion,
   normalizeName,
   parseScope,
   type Candidate,
@@ -101,4 +104,27 @@ test("formatValue", () => {
   assert.equal(formatValue(0.25, "epa"), "+0.25");
   assert.equal(formatValue(0.5, "pct"), "50.0%");
   assert.equal(formatValue(89143, "int"), "89,143");
+});
+
+test("isRoastQuestion", () => {
+  assert.ok(isRoastQuestion("why is dak prescott the worst qb in the nfl"));
+  assert.ok(isRoastQuestion("Why are the cowboys the worst team in the nfl"));
+  assert.ok(isRoastQuestion("prove the Jets are trash"));
+  assert.ok(isRoastQuestion("why do the Jets suck"));
+  assert.ok(isRoastQuestion("make the case against Russell Wilson"));
+  assert.ok(isProofQuestion("why is dak prescott the worst qb in the nfl"));
+  assert.ok(!isRoastQuestion("prove Cj stroud is the best qb"));
+  assert.ok(!isRoastQuestion("Cowboys worst losses since 2020"));
+  assert.ok(!isRoastQuestion("Worst passer rating in 2024"));
+});
+
+test("flipRole ranks worst first and drops plain totals", () => {
+  const role = nflProof.roles.find((r) => r.key === "passer")!;
+  const flipped = flipRole(role);
+  const leads = flipped.metrics.map((m) => m.lead);
+  assert.ok(leads.includes("Worst EPA per dropback"));
+  assert.ok(leads.includes("Lowest passer rating"));
+  assert.ok(!leads.some((l) => /passing yards$/.test(l)));
+  for (const m of flipped.metrics)
+    assert.notEqual(m.low, role.metrics.find((o) => o.key === m.key)!.low);
 });
