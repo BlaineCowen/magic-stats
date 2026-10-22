@@ -57,7 +57,8 @@ export async function buildSystemPrompt(
   mode: PromptMode,
 ): Promise<string> {
   const info = await getDataInfo(sport);
-  const key = `${sport}:${mode}:${info.version}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `${sport}:${mode}:${info.version}:${today}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -74,7 +75,10 @@ export async function buildSystemPrompt(
       ? `OUTPUT: JSON {"plan": one short sentence naming the table, filters and metric, "sql": the query, "chart": see CHARTS}.`
       : `OUTPUT: think it through, then reply with the final query in a \`\`\`sql fenced block, followed by the chart object in a \`\`\`json fenced block, e.g. {"type": "none", "x": "", "y": "", "label": "", "series": "", "title": ""}.`;
 
+  // Models default to the year their training data ends; pin "now" to the data.
   const prompt = `${p.intro}
+
+TODAY is ${today}. That is later than your training data, so never assume an earlier year: "this season", "this year", "currently" and "so far" mean the current season in DATA below. A question that names no season or span (e.g. "who leads in home runs?") means the current season. "Career" and "all-time" mean every season.
 
 ${p.seasonContext(info)}
 

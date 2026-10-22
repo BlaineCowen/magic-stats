@@ -2,6 +2,19 @@ import { leaders, type Case } from "./types.mts";
 
 // NFL cases: reference SQL runs against data/nfl.
 export const CASES: Case[] = [
+  // No year or "this year": must mean the current season, not the model's training year.
+  {
+    q: "Who leads the league in passing yards?",
+    ref: "SELECT player_display_name n, SUM(passing_yards) v FROM player_week WHERE season=(SELECT MAX(season) FROM player_week) AND season_type='REG' GROUP BY player_id, n ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  {
+    q: "Which team has scored the most points this year?",
+    ref: "SELECT team n, SUM(points_for) v FROM team_games WHERE season=(SELECT MAX(season) FROM team_games WHERE points_for IS NOT NULL) AND season_type='REG' AND points_for IS NOT NULL GROUP BY team ORDER BY v DESC LIMIT 5",
+    pick: leaders,
+    scope: "top1",
+  },
   {
     q: "Who threw the most passing touchdowns in 2024?",
     ref: "SELECT player_display_name n, SUM(passing_tds) v FROM player_week WHERE season=2024 AND season_type='REG' GROUP BY player_id, n ORDER BY v DESC LIMIT 20",

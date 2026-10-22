@@ -2,6 +2,19 @@ import { leaders, type Case } from "./types.mts";
 
 // NBA cases: reference SQL runs against data/nba (seasons named by the year they end).
 export const CASES: Case[] = [
+  // No year or "this year": must mean the current season, not the model's training year.
+  {
+    q: "Who has scored the most points so far?",
+    ref: "SELECT player_name n, SUM(pts) v FROM player_games WHERE season=(SELECT MAX(season) FROM player_games) AND season_type='REG' GROUP BY player_id, n ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  {
+    q: "Most rebounds in a game this year",
+    ref: "SELECT player_name n, reb v FROM player_games WHERE season=(SELECT MAX(season) FROM player_games) AND season_type='REG' ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
   {
     q: "Who averaged the most points per game in 2023-24, minimum 50 games?",
     ref: "SELECT player_name n, AVG(pts) v FROM player_games WHERE season=2024 AND season_type='REG' GROUP BY player_id, n HAVING COUNT(*) >= 50 ORDER BY v DESC LIMIT 20",

@@ -2,6 +2,19 @@ import { leaders, type Case } from "./types.mts";
 
 // MLB cases: reference SQL runs against data/mlb.
 export const CASES: Case[] = [
+  // No year or "this year": must mean the current season, not the model's training year.
+  {
+    q: "Who hit the most home runs?",
+    ref: "SELECT player_name n, home_runs v FROM batting_seasons WHERE season=(SELECT MAX(season) FROM batting_seasons) ORDER BY v DESC LIMIT 20",
+    pick: leaders,
+    scope: "top1",
+  },
+  {
+    q: "Which team won the most games this year?",
+    ref: "SELECT team n, wins v FROM team_seasons WHERE season=(SELECT MAX(season) FROM team_seasons) ORDER BY v DESC LIMIT 5",
+    pick: leaders,
+    scope: "top1",
+  },
   {
     q: "Who hit the most home runs in 2022?",
     ref: "SELECT player_name n, home_runs v FROM batting_seasons WHERE season=2022 ORDER BY v DESC LIMIT 20",
