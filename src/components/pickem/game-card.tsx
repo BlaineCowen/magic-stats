@@ -216,16 +216,20 @@ export function GameCard({
             className="flex h-2 overflow-hidden rounded-full bg-slate-100"
             aria-hidden
           >
+            {/* Your side in its team colour, the other grey, so two navy
+                teams stay readable. */}
             <div
               style={{
                 width: pct(1 - liveHome),
-                background: g.away.color ?? "#64748b",
+                background:
+                  pick === "away" ? (g.away.color ?? "#1e5a3a") : "#cbd5e1",
               }}
             />
             <div
               style={{
                 width: pct(liveHome),
-                background: g.home.color ?? "#1e5a3a",
+                background:
+                  pick === "home" ? (g.home.color ?? "#1e5a3a") : "#cbd5e1",
               }}
             />
           </div>
