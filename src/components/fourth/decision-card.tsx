@@ -38,7 +38,7 @@ export function WhyDetails({ d }: { d: Decision }) {
   const p = go.successProb ?? 0;
   const be = d.breakeven;
   return (
-    <div className="space-y-4 text-sm text-gray-700">
+    <div className="space-y-4 text-sm text-slate-700">
       <ul className="space-y-2">
         <li>
           Teams in this spot pick up the first down about <b>{outOf10(p)}</b>{" "}
@@ -80,20 +80,20 @@ export function BreakevenBar({ d }: { d: Decision }) {
   if (be == null || be <= 0 || be >= 1) return null;
   return (
     <div>
-      <div className="text-xs font-medium text-gray-600">
+      <div className="text-xs font-medium text-slate-600">
         How often they need to convert, and how often they do
       </div>
-      <div className="relative mt-3 mb-6 h-3 rounded-full bg-gray-100">
+      <div className="relative mt-3 mb-6 h-3 rounded-full bg-slate-100">
         <div
-          className="absolute inset-y-0 left-0 rounded-l-full bg-blue-100"
+          className="bg-turf-100 absolute inset-y-0 left-0 rounded-l-full"
           style={{ width: `${be * 100}%` }}
         />
         <div
-          className="absolute -top-1 h-5 w-0.5 bg-gray-700"
+          className="absolute -top-1 h-5 w-0.5 bg-slate-700"
           style={{ left: `${be * 100}%` }}
         />
         <div
-          className="absolute top-5 -translate-x-1/2 text-[11px] whitespace-nowrap text-gray-600"
+          className="absolute top-5 -translate-x-1/2 text-[11px] whitespace-nowrap text-slate-600"
           style={{ left: `${Math.min(88, Math.max(12, be * 100))}%` }}
         >
           needed {chance(be)}
@@ -121,7 +121,7 @@ export function GainsChart({ d }: { d: Decision }) {
   const bw = W / bars.length;
   return (
     <div>
-      <div className="text-xs font-medium text-gray-600">
+      <div className="text-xs font-medium text-slate-600">
         If they go for it: how many yards the play gains
       </div>
       <svg
@@ -171,7 +171,7 @@ export function GainsChart({ d }: { d: Decision }) {
           {yl <= 40 ? " (touchdown)" : "+"}
         </text>
       </svg>
-      <div className="mt-1 flex gap-4 text-xs text-gray-600">
+      <div className="mt-1 flex gap-4 text-xs text-slate-600">
         <span className="flex items-center gap-1">
           <span
             className="size-2.5 rounded-sm"
@@ -191,10 +191,10 @@ export function DecisionCard({ d }: { d: Decision }) {
   const go = d.options.find((o) => o.key === "go")!;
   const be = d.breakeven;
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
+    <div className="rounded-lg border border-slate-200 bg-white p-5 sm:p-6">
       <DecisionTable d={d} />
-      <Expand label="Why?" className="mt-4 border-t border-gray-100 pt-3">
-        <div className="space-y-4 text-sm text-gray-700">
+      <Expand label="Why?" className="mt-4 border-t border-slate-100 pt-3">
+        <div className="space-y-4 text-sm text-slate-700">
           {be != null && be > 0 && be < 1 && (
             <p>
               Going for it is worth it as long as they convert at least{" "}

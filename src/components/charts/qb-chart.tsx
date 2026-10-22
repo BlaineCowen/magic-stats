@@ -57,9 +57,10 @@ export function QbChart({
 
   return (
     <div ref={tip.wrapRef} className="relative">
-      <div className="overflow-x-auto">
+      <div>
         <ChartSvg
           svgRef={svgRef}
+          className="block h-auto w-full"
           title="Quarterbacks"
           subtitle={describeFilters(data.filters, data.minPlays)}
           x={x}

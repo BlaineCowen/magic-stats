@@ -75,9 +75,10 @@ export function TeamTiersChart({
 
   return (
     <div ref={tip.wrapRef} className="relative">
-      <div className="overflow-x-auto">
+      <div>
         <ChartSvg
           svgRef={svgRef}
+          className="block h-auto w-full"
           title="Team Tiers"
           subtitle={describeFilters(data.filters)}
           x={x}

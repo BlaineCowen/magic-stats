@@ -24,11 +24,11 @@ export const STRENGTH: Record<
   Decision["strength"],
   { label: string; cls: string }
 > = {
-  "toss-up": { label: "Coin flip", cls: "bg-gray-100 text-gray-700" },
-  lean: { label: "Slight edge", cls: "bg-sky-100 text-sky-800" },
-  strong: { label: "Clear call", cls: "bg-blue-100 text-blue-800" },
-  "very strong": { label: "Big call", cls: "bg-indigo-100 text-indigo-800" },
-  "no-brainer": { label: "Obvious", cls: "bg-violet-100 text-violet-800" },
+  "toss-up": { label: "Coin flip", cls: "bg-slate-100 text-slate-600" },
+  lean: { label: "Slight edge", cls: "bg-turf-50 text-turf-800" },
+  strong: { label: "Clear call", cls: "bg-turf-100 text-turf-900" },
+  "very strong": { label: "Big call", cls: "bg-turf-700 text-white" },
+  "no-brainer": { label: "Obvious", cls: "bg-turf-900 text-white" },
 };
 
 export const chance = (p: number | null | undefined) =>
@@ -70,7 +70,7 @@ export function Expand({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md py-1 text-sm font-medium text-blue-700 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+        className="text-turf-700 hover:text-turf-900 focus-visible:outline-turf-700 flex items-center gap-1.5 rounded-md py-1 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <ChevronDown
           className={cn(
@@ -81,11 +81,9 @@ export function Expand({
         />
         {label}
       </button>
-      {open && (
-        <div id={id} className="mt-2">
-          {children}
-        </div>
-      )}
+      <div id={id} hidden={!open} className="mt-2">
+        {open && children}
+      </div>
     </div>
   );
 }
@@ -123,7 +121,7 @@ export function ChanceBars({
             <span
               className={cn(
                 "text-sm",
-                isBest ? "font-semibold text-gray-900" : "text-gray-600",
+                isBest ? "font-semibold text-slate-900" : "text-slate-600",
               )}
             >
               {CHOICE[o.key]}
@@ -131,7 +129,7 @@ export function ChanceBars({
             <div className="relative">
               <div
                 className={cn(
-                  "rounded-full bg-gray-100",
+                  "rounded-full bg-slate-100",
                   size === "sm" ? "h-2.5" : "h-3.5",
                 )}
               >
@@ -154,7 +152,7 @@ export function ChanceBars({
                   </span>
                 )}
                 {actual === o.key && (
-                  <span className="font-semibold text-gray-700">
+                  <span className="font-semibold text-slate-700">
                     What they did
                   </span>
                 )}
@@ -163,7 +161,7 @@ export function ChanceBars({
             <span
               className={cn(
                 "text-right tabular-nums",
-                isBest ? "font-semibold text-gray-900" : "text-gray-600",
+                isBest ? "font-semibold text-slate-900" : "text-slate-600",
               )}
             >
               {chance(o.wp)}
@@ -171,7 +169,7 @@ export function ChanceBars({
           </div>
         );
       })}
-      <div className="text-xs text-gray-500">
+      <div className="text-xs text-slate-500">
         Chance to win the game after each choice
       </div>
     </div>

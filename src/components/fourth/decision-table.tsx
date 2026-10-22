@@ -77,7 +77,7 @@ const SURE: Record<Confidence["label"], { text: string; cls: string }> = {
   },
   unsure: {
     text: "Unsure",
-    cls: "bg-gray-50 text-gray-700 ring-1 ring-gray-300",
+    cls: "bg-slate-50 text-slate-700 ring-1 ring-slate-300",
   },
 };
 
@@ -118,7 +118,7 @@ function Margin({ d, k }: { d: Decision; k: OptionKey }) {
   const m = d.confidence?.margin[k];
   if (m == null || Math.round(m) < 1) return null;
   return (
-    <span className="ml-0.5 text-xs font-normal text-gray-500">
+    <span className="ml-0.5 text-xs font-normal text-slate-500">
       ±{Math.round(m)}
     </span>
   );
@@ -152,44 +152,73 @@ export function DecisionTable({
   const tight = d.strength === "toss-up";
 
   return (
-    <div className={cn("text-gray-800", compact ? "text-sm" : "")}>
+    <div className={cn("text-slate-800", compact ? "text-sm" : "")}>
       {showHeading && (
         <div className="mb-2">
           <div
             className={cn(
-              "font-semibold text-gray-900",
-              compact ? "text-base" : "text-lg",
+              "font-display leading-snug font-semibold text-slate-900",
+              compact ? "text-lg" : "text-xl",
             )}
           >
             {headline(d, team, opp)}
           </div>
-          <div className="text-sm text-gray-600">{context(d, team)}</div>
+          <div className="text-sm text-slate-600">{context(d, team)}</div>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-gray-600">Best call:</span>
-        <span
-          className={cn("font-bold", compact ? "text-base" : "text-xl")}
-          style={{ color: CHOICE_COLOR[d.best] }}
-        >
-          {CHOICE[d.best]}
-        </span>
-        <StrengthTag strength={d.strength} />
-        {d.confidence && <SureTag c={d.confidence} />}
-        {next && (
-          <span className="text-sm text-gray-600">
-            {tight ? "Either is fine: " : ""}
-            {chance(best.wp)} to win vs {chance(next.wp)} for{" "}
-            {next.key === "go"
-              ? "going for it"
-              : CHOICE[next.key].toLowerCase()}
+      {compact ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-slate-600">Best call:</span>
+          <span
+            className="font-display text-xl leading-tight font-bold"
+            style={{ color: CHOICE_COLOR[d.best] }}
+          >
+            {CHOICE[d.best]}
           </span>
-        )}
-      </div>
+          <StrengthTag strength={d.strength} />
+          {d.confidence && <SureTag c={d.confidence} />}
+          {next && (
+            <span className="text-sm text-slate-600">
+              {tight ? "Either is fine: " : ""}
+              {chance(best.wp)} to win vs {chance(next.wp)} for{" "}
+              {next.key === "go"
+                ? "going for it"
+                : CHOICE[next.key].toLowerCase()}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div className="text-sm font-medium text-slate-500">Best call</div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span
+              className="font-display text-5xl leading-none font-bold tracking-tight sm:text-6xl"
+              style={{ color: CHOICE_COLOR[d.best] }}
+            >
+              {CHOICE[d.best]}
+            </span>
+            <span className="flex flex-wrap gap-1.5">
+              <StrengthTag strength={d.strength} />
+              {d.confidence && <SureTag c={d.confidence} />}
+            </span>
+          </div>
+          {next && (
+            <div className="mt-2 text-base text-slate-700">
+              {tight ? "Either is fine: " : ""}
+              <b className="text-slate-900">{chance(best.wp)}</b> chance to win,
+              against {chance(next.wp)} for{" "}
+              {next.key === "go"
+                ? "going for it"
+                : `a ${CHOICE[next.key].toLowerCase()}`}
+              .
+            </div>
+          )}
+        </div>
+      )}
 
       {d.confidence && !compact && next && (
-        <p className="mt-1 text-sm text-gray-600">
+        <p className="mt-1 text-sm text-slate-600">
           {sureSentence(d.confidence, d.best, next.key)}
         </p>
       )}
@@ -199,7 +228,7 @@ export function DecisionTable({
         className={cn("mt-3 hidden w-full sm:table", compact ? "text-sm" : "")}
       >
         <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-600">
+          <tr className="border-b border-slate-200 text-left text-xs text-slate-600">
             <th className="py-1.5 pr-3 font-medium">Choice</th>
             <th className="w-[38%] py-1.5 pr-3 font-medium">Chance to win</th>
             <th className="py-1.5 pr-3 font-medium">How often it works</th>
@@ -214,14 +243,16 @@ export function DecisionTable({
               <tr
                 key={o.key}
                 className={cn(
-                  "border-b border-gray-100 last:border-0",
+                  "border-b border-slate-100 last:border-0",
                   isBest && "bg-slate-50",
                 )}
               >
                 <td className="py-2 pr-3">
                   <div
                     className={cn(
-                      isBest ? "font-semibold text-gray-900" : "text-gray-700",
+                      isBest
+                        ? "font-semibold text-slate-900"
+                        : "text-slate-700",
                     )}
                   >
                     {CHOICE[o.key]}
@@ -233,7 +264,7 @@ export function DecisionTable({
                       </span>
                     )}
                     {actual === o.key && (
-                      <span className="font-semibold text-gray-700">
+                      <span className="font-semibold text-slate-700">
                         What they did
                       </span>
                     )}
@@ -241,7 +272,7 @@ export function DecisionTable({
                 </td>
                 <td className="py-2 pr-3">
                   <div className="flex items-center gap-2">
-                    <div className="h-3 flex-1 rounded-full bg-gray-100">
+                    <div className="h-3 flex-1 rounded-full bg-slate-100">
                       <div
                         className="h-3 rounded-full"
                         style={{
@@ -254,7 +285,7 @@ export function DecisionTable({
                     <span
                       className={cn(
                         "w-16 text-right whitespace-nowrap tabular-nums",
-                        isBest ? "font-bold text-gray-900" : "text-gray-700",
+                        isBest ? "font-bold text-slate-900" : "text-slate-700",
                       )}
                     >
                       {chance(o.wp)}
@@ -263,14 +294,14 @@ export function DecisionTable({
                   </div>
                 </td>
                 {o.key === "punt" ? (
-                  <td colSpan={3} className="py-2 text-sm text-gray-600">
+                  <td colSpan={3} className="py-2 text-sm text-slate-600">
                     The {puntNote(o)}
                   </td>
                 ) : (
                   <>
                     <td className="py-2 pr-3 whitespace-nowrap tabular-nums">
                       {chance(o.successProb)}{" "}
-                      <span className="text-xs text-gray-600">
+                      <span className="text-xs text-slate-600">
                         {o.key === "fg"
                           ? `(${o.detail.distance} yd kick)`
                           : "convert"}
@@ -302,7 +333,7 @@ export function DecisionTable({
               <div className="flex items-baseline justify-between gap-2">
                 <span
                   className={cn(
-                    isBest ? "font-semibold text-gray-900" : "text-gray-700",
+                    isBest ? "font-semibold text-slate-900" : "text-slate-700",
                   )}
                 >
                   {CHOICE[o.key]}
@@ -312,7 +343,7 @@ export function DecisionTable({
                     </span>
                   )}
                   {actual === o.key && (
-                    <span className="ml-2 text-[11px] font-semibold text-gray-700">
+                    <span className="ml-2 text-[11px] font-semibold text-slate-700">
                       What they did
                     </span>
                   )}
@@ -322,7 +353,7 @@ export function DecisionTable({
                   <Margin d={d} k={o.key} /> to win
                 </span>
               </div>
-              <div className="mt-1 h-2 rounded-full bg-gray-100">
+              <div className="mt-1 h-2 rounded-full bg-slate-100">
                 <div
                   className="h-2 rounded-full"
                   style={{
@@ -332,7 +363,9 @@ export function DecisionTable({
                   }}
                 />
               </div>
-              <div className="mt-1 text-sm text-gray-600">{rowSentence(o)}</div>
+              <div className="mt-1 text-sm text-slate-600">
+                {rowSentence(o)}
+              </div>
             </div>
           );
         })}

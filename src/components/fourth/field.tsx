@@ -115,7 +115,7 @@ export function MiniField({
         y={6}
         width={Math.abs(target - ball)}
         height={H - 22}
-        fill="#facc15"
+        fill="#f2c230"
         fillOpacity={0.28}
       />
       <line
@@ -123,7 +123,7 @@ export function MiniField({
         x2={target}
         y1={2}
         y2={H - 14}
-        stroke="#facc15"
+        stroke="#f2c230"
         strokeWidth={3}
       />
       <ellipse

@@ -261,6 +261,8 @@ export type GameListItem = {
   week: number;
   home: string;
   away: string;
+  homeScore: number | null;
+  awayScore: number | null;
   label: string;
 };
 
@@ -276,6 +278,8 @@ export async function listGames(season: number): Promise<GameListItem[]> {
     week: Number(r.week),
     home: String(r.home),
     away: String(r.away),
+    homeScore: r.hs == null ? null : Number(r.hs),
+    awayScore: r.as_ == null ? null : Number(r.as_),
     label: `${r.away} ${r.as_ ?? ""} @ ${r.home} ${r.hs ?? ""}`,
   }));
 }

@@ -159,21 +159,23 @@ function Verdict({ p }: { p: FourthDownPlay }) {
   const best = d.options.find((o) => o.key === d.best)!;
   const chosen = d.options.find((o) => o.key === p.actual);
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
       {v === "right" && (
         <span className="text-emerald-700">
-          <b>Right call.</b> {chance(best.wp)} to win.
+          <b className="font-display text-lg">Right call.</b> {chance(best.wp)}{" "}
+          to win.
         </span>
       )}
       {v === "close" && (
-        <span className="text-gray-700">
-          <b>Coin flip.</b> Either choice was about {chance(best.wp)} to win.
+        <span className="text-slate-700">
+          <b className="font-display text-lg">Coin flip.</b> Either choice was
+          about {chance(best.wp)} to win.
         </span>
       )}
       {v === "wrong" && (
         <span className="text-red-700">
-          <b>Should have {DOING[d.best]}:</b> {chance(best.wp)} to win vs{" "}
-          {chance(chosen?.wp)}.
+          <b className="font-display text-lg">Should have {DOING[d.best]}:</b>{" "}
+          {chance(best.wp)} to win vs {chance(chosen?.wp)}.
         </span>
       )}
       {d.confidence && v !== "close" && <SureTag c={d.confidence} />}
@@ -199,10 +201,10 @@ function PlayCard({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
   const def = g.teams.home.abbr === p.posteam ? g.teams.away : g.teams.home;
   const s = p.decision?.situation;
   return (
-    <div className="grid gap-x-6 gap-y-3 border-b border-gray-100 py-5 last:border-0 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+    <div className="grid gap-x-6 gap-y-3 border-b border-slate-100 py-5 last:border-0 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
       <div>
-        <div className="mb-1.5 flex items-center justify-between text-xs text-gray-600">
-          <span className="font-semibold text-gray-900">{clock(p)}</span>
+        <div className="mb-1.5 flex items-center justify-between text-xs text-slate-600">
+          <span className="font-semibold text-slate-900">{clock(p)}</span>
           <Score p={p} g={g} />
         </div>
         {s ? (
@@ -213,7 +215,7 @@ function PlayCard({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
             defense={def}
           />
         ) : (
-          <div className="rounded-md bg-gray-100 p-4 text-center text-sm text-gray-600">
+          <div className="rounded-md bg-slate-100 p-4 text-center text-sm text-slate-600">
             Overtime
           </div>
         )}
@@ -226,10 +228,10 @@ function PlayCard({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
             aria-label={v}
           />
           <div className="min-w-0">
-            <div className="text-lg leading-snug font-semibold text-gray-900">
+            <div className="font-display text-xl leading-snug font-semibold text-slate-900">
               {s ? situationText(p) : "Overtime 4th down"}
             </div>
-            <div className="text-gray-700">{didText(p)}.</div>
+            <div className="text-slate-700">{didText(p)}.</div>
           </div>
         </div>
         {p.decision ? (
@@ -244,11 +246,11 @@ function PlayCard({ p, g }: { p: FourthDownPlay; g: GameAnalysis }) {
                 compact
                 showHeading={false}
               />
-              <p className="mt-3 text-xs text-gray-500 italic">{p.desc}</p>
+              <p className="mt-3 text-xs text-slate-500 italic">{p.desc}</p>
             </Expand>
           </div>
         ) : (
-          <p className="mt-2 pl-7 text-sm text-gray-600">
+          <p className="mt-2 pl-7 text-sm text-slate-600">
             Overtime calls are graded on their own.
           </p>
         )}
@@ -269,7 +271,7 @@ export function FeaturedCall({
   return (
     <div className="rounded-lg bg-slate-50 p-4">
       {heading && (
-        <div className="mb-2 text-sm font-semibold text-gray-600">
+        <div className="font-display mb-2 text-base font-semibold text-slate-700">
           {heading}
         </div>
       )}
@@ -280,16 +282,16 @@ export function FeaturedCall({
         actual={p.actual}
         compact
       />
-      <div className="mt-3 border-t border-gray-200 pt-2 text-gray-900">
+      <div className="mt-3 border-t border-slate-200 pt-2 text-slate-900">
         <span className="font-medium">{didText(p)}.</span>{" "}
         <span
           className={cn(
-            "font-semibold",
+            "font-display text-lg font-semibold",
             v === "wrong"
               ? "text-red-700"
               : v === "right"
                 ? "text-emerald-700"
-                : "text-gray-700",
+                : "text-slate-700",
           )}
         >
           {v === "right"
@@ -331,18 +333,18 @@ function Scoreboard({ g }: { g: GameAnalysis }) {
         className="size-8 shrink-0 object-contain sm:size-12"
       />
       <div className="min-w-0">
-        <div className="hidden truncate text-sm text-gray-600 sm:block">
+        <div className="hidden truncate text-sm text-slate-600 sm:block">
           {t.name.replace(` ${t.nick}`, "")}
         </div>
-        <div className="truncate text-base font-semibold text-gray-900 sm:text-xl">
+        <div className="font-display truncate text-xl leading-tight font-bold text-slate-900 sm:text-3xl">
           {t.nick}
         </div>
       </div>
       <div
         className={cn(
-          "ml-auto text-2xl tabular-nums sm:text-4xl",
+          "font-display ml-auto text-3xl leading-none tabular-nums sm:text-5xl",
           align === "right" && "mr-auto ml-0",
-          won ? "font-bold text-gray-900" : "text-gray-400",
+          won ? "font-bold text-slate-900" : "text-slate-400",
         )}
       >
         {score}
@@ -350,15 +352,17 @@ function Scoreboard({ g }: { g: GameAnalysis }) {
     </div>
   );
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <div className="flex h-1.5">
         <div className="flex-1" style={{ background: g.teams.away.color }} />
         <div className="flex-1" style={{ background: g.teams.home.color }} />
       </div>
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3 sm:gap-6 sm:px-6">
         {side(g.teams.away, g.awayScore, g.awayScore > g.homeScore, "left")}
-        <div className="text-center text-xs whitespace-nowrap text-gray-500">
-          <div className="font-semibold text-gray-700">Final</div>
+        <div className="text-center text-xs whitespace-nowrap text-slate-500">
+          <div className="font-display text-sm font-semibold text-slate-700">
+            Final
+          </div>
           {date && <div className="hidden sm:block">{date}</div>}
           <div>{g.week > 18 ? "Playoffs" : `Week ${g.week}`}</div>
         </div>
@@ -375,8 +379,10 @@ function Summary({ g, team }: { g: GameAnalysis; team: TeamInfo }) {
     .filter((p) => verdictOf(p) === "wrong")
     .reduce((a, p) => a + p.cost, 0);
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-700">
-      <span className="font-semibold text-gray-900">{team.nick}:</span>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-700">
+      <span className="font-display text-base font-semibold text-slate-900">
+        {team.nick}:
+      </span>
       <span className="flex items-center gap-1.5">
         <Check className="size-4 text-emerald-600" aria-hidden /> {n("right")}{" "}
         right
@@ -384,14 +390,14 @@ function Summary({ g, team }: { g: GameAnalysis; team: TeamInfo }) {
       <span className="flex items-center gap-1.5">
         <X className="size-4 text-red-600" aria-hidden /> {n("wrong")} wrong
         {n("wrong") > 0 && (
-          <span className="text-gray-500">
+          <span className="text-slate-500">
             (cost {Math.max(1, Math.round(lost))}% in chance to win)
           </span>
         )}
       </span>
       {n("close") > 0 && (
         <span className="flex items-center gap-1.5">
-          <Minus className="size-4 text-gray-400" aria-hidden /> {n("close")}{" "}
+          <Minus className="size-4 text-slate-400" aria-hidden /> {n("close")}{" "}
           coin {n("close") === 1 ? "flip" : "flips"}
         </span>
       )}
@@ -439,7 +445,8 @@ export function GameStudy({
         {error}
       </div>
     );
-  if (!g) return <div className="h-64 animate-pulse rounded-lg bg-gray-100" />;
+  if (!g)
+    return <div className="h-64 animate-pulse rounded-lg bg-slate-200/70" />;
 
   const teams = [g.teams.away, g.teams.home];
   const shown = view === "both" ? teams : teams.filter((t) => t.abbr === view);
@@ -448,11 +455,13 @@ export function GameStudy({
   return (
     <section className="space-y-4">
       {title && (
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-display text-2xl font-semibold text-slate-900">
+          {title}
+        </h3>
       )}
       <Scoreboard g={g} />
       {verdict && (
-        <p className="max-w-3xl text-xl leading-snug font-semibold text-gray-900">
+        <p className="font-display max-w-3xl text-2xl leading-snug font-semibold text-slate-900">
           {verdict}
         </p>
       )}
@@ -470,7 +479,7 @@ export function GameStudy({
 
       {children && (
         <Expand label="The full story">
-          <div className="max-w-3xl space-y-2 text-sm leading-relaxed text-gray-700">
+          <div className="max-w-[70ch] space-y-2 text-sm leading-relaxed text-slate-700">
             {children}
           </div>
         </Expand>
@@ -480,10 +489,10 @@ export function GameStudy({
         label="Every 4th down in this game"
         defaultOpen={featured.length === 0}
       >
-        <div className="rounded-lg border border-gray-200 bg-white px-4 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 py-4">
+        <div className="rounded-lg border border-slate-200 bg-white px-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-4">
             <div
-              className="flex overflow-hidden rounded-md border border-gray-300 text-sm"
+              className="flex overflow-hidden rounded-md border border-slate-300 text-sm"
               role="group"
               aria-label="Whose 4th downs"
             >
@@ -497,10 +506,10 @@ export function GameStudy({
                   aria-pressed={view === o.k}
                   onClick={() => setView(o.k)}
                   className={cn(
-                    "px-3 py-1.5",
+                    "focus-visible:outline-turf-700 px-3 py-1.5 focus-visible:outline-2 focus-visible:-outline-offset-2",
                     view === o.k
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-700 hover:bg-gray-50",
+                      ? "bg-turf-950 font-semibold text-white"
+                      : "bg-white text-slate-700 hover:bg-slate-50",
                   )}
                 >
                   {o.label}
@@ -514,8 +523,8 @@ export function GameStudy({
             </div>
           </div>
           {shown.length === 1 && (
-            <div className="border-b border-gray-100 py-4">
-              <div className="mb-1 text-xs text-gray-600">
+            <div className="border-b border-slate-100 py-4">
+              <div className="mb-1 text-xs text-slate-600">
                 {shown[0]!.nick}&apos; chance to win through the game. Dots are
                 their 4th downs.
               </div>

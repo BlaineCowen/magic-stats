@@ -123,3 +123,32 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* NFL pages (/nfl/, /magic-stats/*): turf, chalk and the yellow first-down line.
+   Fonts come from src/components/nfl-shell.tsx (Barlow + Barlow Condensed). */
+@theme {
+  --color-turf-950: #0e2a1e;
+  --color-turf-900: #133a29;
+  --color-turf-800: #18503a;
+  --color-turf-700: #1d6b45;
+  --color-turf-600: #23804f;
+  --color-turf-100: #dcebe1;
+  --color-turf-50: #eef5f0;
+  --color-chalk: #f5f6f1;
+  --color-line: #f2c230;
+  --color-line-soft: #fbefc4;
+}
+
+/* inline, so the font variables resolve on the NFL shell element where next/font sets them */
+@theme inline {
+  --font-display: var(--font-barlow-condensed), ui-sans-serif, system-ui, sans-serif;
+  --font-nfl: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+}
+
+@utility nfl-scroll-fade {
+  /* horizontal tab rows on phones: fade the right edge so it reads as scrollable */
+  mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+  @media (min-width: 640px) {
+    mask-image: none;
+  }
+}

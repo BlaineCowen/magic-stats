@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
-import { NflNav } from "@/components/nfl-nav";
 import { cn } from "@/lib/utils";
 import {
   ALL_DOWNS,
@@ -19,7 +18,7 @@ import { QbChart } from "./qb-chart";
 import { TeamTiersChart } from "./team-tiers-chart";
 
 const TABS: { kind: ChartKind; label: string }[] = [
-  { kind: "teams", label: "Team Tiers" },
+  { kind: "teams", label: "Team tiers" },
   { kind: "qbs", label: "Quarterbacks" },
 ];
 
@@ -43,8 +42,45 @@ function toQuery(f: ChartFilters): string {
   return p.toString();
 }
 
+const regWeeks = (season: number) => (season >= 2021 ? 18 : 17);
+
+function listLabel(values: number[], label: (n: number) => string = String) {
+  const s = [...values].sort((a, b) => a - b);
+  const run = s.every((v, i) => i === 0 || v === s[i - 1]! + 1);
+  return run && s.length > 2
+    ? `${label(s[0]!)}–${label(s.at(-1)!)}`
+    : s.map(label).join(", ");
+}
+
+/** Short one-line summary for the collapsed filter bar on phones. */
+function summarize(f: ChartFilters, chart: ChartKind): string {
+  const parts = [
+    f.seasonFrom === f.seasonTo
+      ? String(f.seasonFrom)
+      : `${f.seasonFrom}–${f.seasonTo}`,
+    f.playoffs === "only"
+      ? "Playoffs only"
+      : `Weeks ${f.weekFrom}–${f.weekTo}${f.playoffs === "include" ? " + playoffs" : ""}`,
+  ];
+  if (f.wpMin !== 0 || f.wpMax !== 100)
+    parts.push(`Win prob ${f.wpMin}–${f.wpMax}%`);
+  if (f.downs.length !== ALL_DOWNS.length)
+    parts.push(`Downs ${listLabel(f.downs)}`);
+  if (f.qtrs.length !== ALL_QTRS.length)
+    parts.push(
+      `Quarters ${listLabel(f.qtrs, (q) => (q === 5 ? "OT" : String(q)))}`,
+    );
+  if (f.plays === "pass") parts.push("Dropbacks only");
+  if (f.plays === "run") parts.push("Runs only");
+  if (chart === "qbs" && f.minPlays) parts.push(`${f.minPlays}+ plays`);
+  return parts.join(" · ");
+}
+
+const focusCls =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-turf-700";
+
 const selectCls =
-  "rounded-md border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none";
+  "min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus-visible:outline-2 focus-visible:outline-turf-700";
 
 function Field({
   label,
@@ -54,26 +90,32 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-500">{label}</span>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
       <div className="flex items-center gap-1.5">{children}</div>
     </div>
   );
 }
 
 function Chips({
+  name,
   values,
   selected,
   label = String,
   onChange,
 }: {
+  name: string;
   values: number[];
   selected: number[];
   label?: (v: number) => string;
   onChange: (next: number[]) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-md border border-gray-300">
+    <div
+      role="group"
+      aria-label={name}
+      className="flex w-full overflow-hidden rounded-md border border-slate-300 bg-white"
+    >
       {values.map((v) => {
         const on = selected.includes(v);
         return (
@@ -89,10 +131,11 @@ function Chips({
               if (next.length) onChange(next.sort((a, b) => a - b));
             }}
             className={cn(
-              "min-w-8 border-l border-gray-300 px-2 py-1 text-sm first:border-l-0",
+              "font-display flex-1 border-l border-slate-300 px-2 py-1 text-base font-semibold first:border-l-0 focus-visible:-outline-offset-2",
+              focusCls,
               on
-                ? "bg-blue-600 text-white"
-                : "bg-white text-gray-700 hover:bg-gray-50",
+                ? "bg-turf-950 text-white"
+                : "text-slate-600 hover:bg-slate-50",
             )}
           >
             {label(v)}
@@ -124,96 +167,93 @@ function MinPlaysInput({
       type="number"
       min={1}
       inputMode="numeric"
+      aria-label="Minimum plays"
       value={draft}
-      placeholder={auto ? `auto (${auto})` : "auto"}
+      placeholder={auto ? `Auto (${auto})` : "Auto"}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => e.key === "Enter" && commit()}
-      className={cn(selectCls, "w-28")}
+      className={selectCls}
     />
   );
 }
 
 function DataTable({ data }: { data: ChartData }) {
-  const head = "px-2 py-1.5 text-left font-medium text-gray-500";
-  const cell = "px-2 py-1 tabular-nums";
-  if (data.teams) {
-    return (
-      <table className="w-full text-sm">
-        <thead className="border-b border-gray-200">
-          <tr>
-            {[
-              "#",
-              "Team",
-              "Off EPA/play",
-              "Def EPA/play",
-              "Net",
-              "Off SR",
-              "Def SR",
-              "Games",
-            ].map((h) => (
-              <th key={h} className={head}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.teams.map((t, i) => (
-            <tr key={t.team} className="border-b border-gray-100">
-              <td className={cell}>{i + 1}</td>
-              <td className={cn(cell, "font-medium")}>
-                {t.team_name ?? t.team}
-              </td>
-              <td className={cell}>{signed(t.off_epa)}</td>
-              <td className={cell}>{signed(t.def_epa)}</td>
-              <td className={cell}>{signed(t.off_epa - t.def_epa)}</td>
-              <td className={cell}>{pct(t.off_success)}</td>
-              <td className={cell}>{pct(t.def_success)}</td>
-              <td className={cell}>{t.games}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    );
-  }
+  const th =
+    "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 font-medium whitespace-nowrap text-slate-600";
+  const num = "px-3 py-1.5 text-right tabular-nums";
+  const txt = "px-3 py-1.5 text-left";
+  const cols = data.teams
+    ? [
+        "#",
+        "Team",
+        "Off EPA/play",
+        "Def EPA/play",
+        "Net",
+        "Off success",
+        "Def success",
+        "Games",
+      ]
+    : ["#", "Quarterback", "Team", "EPA/play", "CPOE", "Success", "Plays"];
+  // Columns holding text; everything else is a right-aligned number.
+  const textCols = data.teams ? [1] : [1, 2];
   return (
-    <table className="w-full text-sm">
-      <thead className="border-b border-gray-200">
+    <table className="w-full border-separate border-spacing-0 text-sm">
+      <thead>
         <tr>
-          {[
-            "#",
-            "Quarterback",
-            "Team",
-            "EPA/play",
-            "CPOE",
-            "Success",
-            "Plays",
-          ].map((h) => (
-            <th key={h} className={head}>
+          {cols.map((h, i) => (
+            <th
+              key={h}
+              scope="col"
+              className={cn(
+                th,
+                textCols.includes(i) ? "text-left" : "text-right",
+              )}
+            >
               {h}
             </th>
           ))}
         </tr>
       </thead>
-      <tbody>
-        {(data.qbs ?? []).map((q, i) => (
-          <tr key={q.id} className="border-b border-gray-100">
-            <td className={cell}>{i + 1}</td>
-            <td className={cn(cell, "font-medium")}>{q.full_name ?? q.name}</td>
-            <td className={cell}>{q.team}</td>
-            <td className={cell}>{signed(q.epa)}</td>
-            <td
-              className={cell}
-            >{`${q.cpoe > 0 ? "+" : ""}${q.cpoe.toFixed(1)}`}</td>
-            <td className={cell}>{pct(q.success)}</td>
-            <td className={cell}>{q.plays}</td>
-          </tr>
-        ))}
+      <tbody className="[&>tr:nth-child(even)]:bg-slate-50/60 [&>tr>td]:border-b [&>tr>td]:border-slate-100">
+        {data.teams
+          ? data.teams.map((t, i) => (
+              <tr key={t.team}>
+                <td className={cn(num, "text-slate-400")}>{i + 1}</td>
+                <td className={cn(txt, "font-medium whitespace-nowrap")}>
+                  {t.team_name ?? t.team}
+                </td>
+                <td className={num}>{signed(t.off_epa)}</td>
+                <td className={num}>{signed(t.def_epa)}</td>
+                <td className={cn(num, "font-medium")}>
+                  {signed(t.off_epa - t.def_epa)}
+                </td>
+                <td className={num}>{pct(t.off_success)}</td>
+                <td className={num}>{pct(t.def_success)}</td>
+                <td className={num}>{t.games}</td>
+              </tr>
+            ))
+          : (data.qbs ?? []).map((q, i) => (
+              <tr key={q.id}>
+                <td className={cn(num, "text-slate-400")}>{i + 1}</td>
+                <td className={cn(txt, "font-medium whitespace-nowrap")}>
+                  {q.full_name ?? q.name}
+                </td>
+                <td className={txt}>{q.team}</td>
+                <td className={cn(num, "font-medium")}>{signed(q.epa)}</td>
+                <td
+                  className={num}
+                >{`${q.cpoe > 0 ? "+" : ""}${q.cpoe.toFixed(1)}`}</td>
+                <td className={num}>{pct(q.success)}</td>
+                <td className={num}>{q.plays}</td>
+              </tr>
+            ))}
       </tbody>
     </table>
   );
 }
+
+type PresetKey = "this" | "last4" | "last";
 
 export function ChartsView() {
   const router = useRouter();
@@ -235,10 +275,17 @@ export function ChartsView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Latest regular-season week with plays in the newest season. The server
+  // clamps weekTo to it, so we learn it whenever a request asks for more.
+  const [latestWeek, setLatestWeek] = useState<number | null>(null);
+  // "Last 4 weeks" picked before latestWeek was known: finish it on response.
+  const pendingLast4 = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(query);
     params.set("chart", chart);
+    // Keeps the URL shareable: every filter change lands in the query string.
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     const ctrl = new AbortController();
     setLoading(true);
@@ -246,8 +293,24 @@ export function ChartsView() {
       .then(async (res) => {
         const body = (await res.json()) as ChartData & { error?: string };
         if (!res.ok) throw new Error(body.error ?? "Failed to load chart");
+        const f = body.filters;
+        const askedTo = params.get("weekTo");
+        if (
+          f.seasonTo === body.seasons.max &&
+          (!askedTo || Number(askedTo) >= 18 || Number(askedTo) > f.weekTo)
+        ) {
+          setLatestWeek(f.weekTo);
+          if (pendingLast4.current) {
+            pendingLast4.current = false;
+            const next = { ...f, weekFrom: Math.max(1, f.weekTo - 3) };
+            setFilters(next);
+            setQuery(toQuery(next));
+            return;
+          }
+        }
+        pendingLast4.current = false;
         setData(body);
-        setFilters(body.filters);
+        setFilters(f);
         setError("");
       })
       .catch((e: unknown) => {
@@ -287,254 +350,499 @@ export function ChartsView() {
     }
   };
 
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy. Copy the address bar instead.");
+    }
+  };
+
+  const maxSeason = data?.seasons.max ?? null;
   const seasons: number[] = [];
   if (data) {
     for (let s = data.seasons.max; s >= data.seasons.min; s--) seasons.push(s);
   }
+
+  const applyPreset = (key: PresetKey) => {
+    if (!filters || maxSeason == null) return;
+    const base = { playoffs: "none" as Playoffs, weekFrom: 1 };
+    if (key === "this") {
+      update({
+        ...base,
+        seasonFrom: maxSeason,
+        seasonTo: maxSeason,
+        weekTo: 18,
+      });
+    } else if (key === "last") {
+      const s = maxSeason - 1;
+      update({ ...base, seasonFrom: s, seasonTo: s, weekTo: regWeeks(s) });
+    } else if (latestWeek != null) {
+      update({
+        ...base,
+        seasonFrom: maxSeason,
+        seasonTo: maxSeason,
+        weekFrom: Math.max(1, latestWeek - 3),
+        weekTo: latestWeek,
+      });
+    } else {
+      // Ask for the whole season; the response tells us the latest week.
+      pendingLast4.current = true;
+      update({
+        ...base,
+        seasonFrom: maxSeason,
+        seasonTo: maxSeason,
+        weekTo: 18,
+      });
+    }
+  };
+
+  const presetOn = (key: PresetKey): boolean => {
+    if (!filters || maxSeason == null || filters.playoffs === "only")
+      return false;
+    const f = filters;
+    const one = (s: number) => f.seasonFrom === s && f.seasonTo === s;
+    if (key === "last")
+      return (
+        one(maxSeason - 1) &&
+        f.weekFrom === 1 &&
+        f.weekTo === regWeeks(maxSeason - 1)
+      );
+    if (!one(maxSeason) || latestWeek == null || f.weekTo !== latestWeek)
+      return false;
+    if (key === "this") return f.weekFrom === 1;
+    return f.weekFrom === Math.max(1, latestWeek - 3) && latestWeek > 4;
+  };
+  const neutral = filters?.wpMin === 20 && filters?.wpMax === 80;
+
   // Only show a chart that matches the selected tab (not the previous one).
   const shown = data?.chart === chart ? data : null;
   const empty = shown && (shown.teams ?? shown.qbs ?? []).length === 0;
+  const busy = loading;
+
+  const presets: {
+    key: string;
+    label: string;
+    on: boolean;
+    run: () => void;
+  }[] = [
+    {
+      key: "this",
+      label: "This season",
+      on: presetOn("this"),
+      run: () => applyPreset("this"),
+    },
+    {
+      key: "last4",
+      label: "Last 4 weeks",
+      on: presetOn("last4"),
+      run: () => applyPreset("last4"),
+    },
+    {
+      key: "last",
+      label: "Last season",
+      on: presetOn("last"),
+      run: () => applyPreset("last"),
+    },
+    {
+      key: "neutral",
+      label: "Neutral situations (win prob 20–80%)",
+      on: neutral,
+      run: () =>
+        neutral
+          ? update({ wpMin: 0, wpMax: 100 })
+          : update({ wpMin: 20, wpMax: 80 }),
+    },
+  ];
+
+  const btnCls = cn(
+    "rounded-md px-3.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+    focusCls,
+  );
 
   return (
-    <main className="container mx-auto px-4 py-8">
-      <div className="mx-auto max-w-5xl">
-        <NflNav />
-
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-            {TABS.map((t) => (
-              <button
-                key={t.kind}
-                type="button"
-                onClick={() => setChart(t.kind)}
-                className={cn(
-                  "rounded-md px-4 py-1.5 text-sm font-medium",
-                  chart === t.kind
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="tablist"
+          aria-label="Chart"
+          className="inline-flex rounded-lg border border-slate-300 bg-white p-1"
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.kind}
+              type="button"
+              role="tab"
+              aria-selected={chart === t.kind}
+              onClick={() => setChart(t.kind)}
+              className={cn(
+                "font-display rounded-md px-4 py-1.5 text-lg font-semibold transition-colors",
+                focusCls,
+                chart === t.kind
+                  ? "bg-turf-950 text-white"
+                  : "text-slate-600 hover:text-slate-900",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void copyLink()}
+            className={cn(
+              btnCls,
+              "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+            )}
+          >
+            Copy link
+          </button>
           <button
             type="button"
             onClick={() => void download()}
-            disabled={!shown || exporting || loading}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400"
+            disabled={!shown || !!empty || exporting || busy}
+            className={cn(btnCls, "bg-turf-700 hover:bg-turf-800 text-white")}
           >
             {exporting ? "Exporting…" : "Download PNG"}
           </button>
         </div>
+      </div>
 
-        {filters && data && (
-          <div className="mb-4 flex flex-wrap items-end gap-x-5 gap-y-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <Field label="Seasons">
-              <select
-                className={selectCls}
-                value={filters.seasonFrom}
-                onChange={(e) => update({ seasonFrom: Number(e.target.value) })}
-              >
-                {seasons.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <span className="text-gray-400">–</span>
-              <select
-                className={selectCls}
-                value={filters.seasonTo}
-                onChange={(e) => update({ seasonTo: Number(e.target.value) })}
-              >
-                {seasons.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Weeks">
-              <select
-                className={selectCls}
-                value={filters.weekFrom}
-                disabled={filters.playoffs === "only"}
-                onChange={(e) => update({ weekFrom: Number(e.target.value) })}
-              >
-                {WEEKS.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
-                  </option>
-                ))}
-              </select>
-              <span className="text-gray-400">–</span>
-              <select
-                className={selectCls}
-                value={filters.weekTo}
-                disabled={filters.playoffs === "only"}
-                onChange={(e) => update({ weekTo: Number(e.target.value) })}
-              >
-                {WEEKS.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Playoffs">
-              <select
-                className={selectCls}
-                value={filters.playoffs}
-                onChange={(e) =>
-                  update({ playoffs: e.target.value as Playoffs })
-                }
-              >
-                <option value="none">Exclude</option>
-                <option value="include">Include</option>
-                <option value="only">Only playoffs</option>
-              </select>
-            </Field>
-
-            <Field label="Win probability">
-              <select
-                className={selectCls}
-                value={filters.wpMin}
-                onChange={(e) => update({ wpMin: Number(e.target.value) })}
-              >
-                {WP_STEPS.map((v) => (
-                  <option key={v} value={v}>
-                    {v}%
-                  </option>
-                ))}
-              </select>
-              <span className="text-gray-400">–</span>
-              <select
-                className={selectCls}
-                value={filters.wpMax}
-                onChange={(e) => update({ wpMax: Number(e.target.value) })}
-              >
-                {WP_STEPS.map((v) => (
-                  <option key={v} value={v}>
-                    {v}%
-                  </option>
-                ))}
-              </select>
+      {!filters || !data ? (
+        <div className="mb-4 space-y-3">
+          <div className="flex gap-2">
+            {[96, 104, 96, 220].map((w, i) => (
+              <div
+                key={i}
+                style={{ width: w }}
+                className="h-8 shrink-0 animate-pulse rounded-full bg-slate-200/70"
+              />
+            ))}
+          </div>
+          <div className="hidden h-36 animate-pulse rounded-lg bg-slate-200/70 sm:block" />
+          <div className="h-12 animate-pulse rounded-lg bg-slate-200/70 sm:hidden" />
+        </div>
+      ) : (
+        <section aria-label="Filters" className="mb-4 space-y-3">
+          <div
+            className="nfl-scroll-fade -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0"
+            role="group"
+            aria-label="Quick presets"
+          >
+            {presets.map((p) => (
               <button
+                key={p.key}
                 type="button"
-                onClick={() =>
-                  filters.wpMin === 20 && filters.wpMax === 80
-                    ? update({ wpMin: 0, wpMax: 100 })
-                    : update({ wpMin: 20, wpMax: 80 })
-                }
+                aria-pressed={p.on}
+                onClick={p.run}
                 className={cn(
-                  "rounded-md border px-2 py-1 text-xs",
-                  filters.wpMin === 20 && filters.wpMax === 80
-                    ? "border-blue-600 bg-blue-50 text-blue-700"
-                    : "border-gray-300 text-gray-600 hover:bg-gray-50",
+                  "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors",
+                  focusCls,
+                  p.on
+                    ? "border-turf-950 bg-turf-950 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
                 )}
-                title="Neutral game script: win probability 20–80%"
               >
-                Neutral
+                {p.label}
               </button>
-            </Field>
+            ))}
+          </div>
 
-            <Field label="Downs">
-              <Chips
-                values={ALL_DOWNS}
-                selected={filters.downs}
-                onChange={(downs) => update({ downs })}
-              />
-            </Field>
-
-            <Field label="Quarters">
-              <Chips
-                values={ALL_QTRS}
-                selected={filters.qtrs}
-                label={(q) => (q === 5 ? "OT" : String(q))}
-                onChange={(qtrs) => update({ qtrs })}
-              />
-            </Field>
-
-            <Field label="Plays">
-              <select
-                className={selectCls}
-                value={filters.plays}
-                onChange={(e) => update({ plays: e.target.value as PlayType })}
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <button
+              type="button"
+              aria-expanded={filtersOpen}
+              aria-controls="chart-filters"
+              onClick={() => setFiltersOpen((o) => !o)}
+              className={cn(
+                "flex w-full items-center gap-3 px-4 py-3 text-left sm:hidden",
+                focusCls,
+              )}
+            >
+              <span className="font-display text-lg font-semibold text-slate-900">
+                Filters
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm text-slate-500">
+                {summarize(filters, chart)}
+              </span>
+              <svg
+                aria-hidden
+                viewBox="0 0 20 20"
+                className={cn(
+                  "size-4 shrink-0 text-slate-500 transition-transform",
+                  filtersOpen && "rotate-180",
+                )}
               >
-                <option value="all">
-                  {chart === "qbs" ? "Dropbacks + QB runs" : "Dropbacks + runs"}
-                </option>
-                <option value="pass">Dropbacks only</option>
-                {chart === "teams" && <option value="run">Runs only</option>}
-              </select>
-            </Field>
+                <path
+                  d="M5 8l5 5 5-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              </svg>
+            </button>
 
-            {chart === "qbs" && (
-              <Field label="Min plays">
-                <MinPlaysInput
-                  value={filters.minPlays}
-                  auto={shown?.minPlays ?? null}
-                  onCommit={(minPlays) => update({ minPlays })}
+            <div
+              id="chart-filters"
+              className={cn(
+                "grid gap-x-5 gap-y-4 border-t border-slate-200 p-4 sm:grid sm:grid-cols-2 sm:border-t-0 lg:grid-cols-4",
+                filtersOpen ? "grid" : "hidden",
+              )}
+            >
+              <Field label="Seasons">
+                <select
+                  aria-label="First season"
+                  className={selectCls}
+                  value={filters.seasonFrom}
+                  onChange={(e) =>
+                    update({ seasonFrom: Number(e.target.value) })
+                  }
+                >
+                  {seasons.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-slate-400">to</span>
+                <select
+                  aria-label="Last season"
+                  className={selectCls}
+                  value={filters.seasonTo}
+                  onChange={(e) => update({ seasonTo: Number(e.target.value) })}
+                >
+                  {seasons.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Weeks">
+                <select
+                  aria-label="First week"
+                  className={selectCls}
+                  value={filters.weekFrom}
+                  disabled={filters.playoffs === "only"}
+                  onChange={(e) => update({ weekFrom: Number(e.target.value) })}
+                >
+                  {WEEKS.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-slate-400">to</span>
+                <select
+                  aria-label="Last week"
+                  className={selectCls}
+                  value={filters.weekTo}
+                  disabled={filters.playoffs === "only"}
+                  onChange={(e) => update({ weekTo: Number(e.target.value) })}
+                >
+                  {WEEKS.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Playoffs">
+                <select
+                  aria-label="Playoffs"
+                  className={selectCls}
+                  value={filters.playoffs}
+                  onChange={(e) =>
+                    update({ playoffs: e.target.value as Playoffs })
+                  }
+                >
+                  <option value="none">Regular season only</option>
+                  <option value="include">Include playoffs</option>
+                  <option value="only">Playoffs only</option>
+                </select>
+              </Field>
+
+              <Field label="Win probability">
+                <select
+                  aria-label="Minimum win probability"
+                  className={selectCls}
+                  value={filters.wpMin}
+                  onChange={(e) => update({ wpMin: Number(e.target.value) })}
+                >
+                  {WP_STEPS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}%
+                    </option>
+                  ))}
+                </select>
+                <span className="text-slate-400">to</span>
+                <select
+                  aria-label="Maximum win probability"
+                  className={selectCls}
+                  value={filters.wpMax}
+                  onChange={(e) => update({ wpMax: Number(e.target.value) })}
+                >
+                  {WP_STEPS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}%
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Downs">
+                <Chips
+                  name="Downs"
+                  values={ALL_DOWNS}
+                  selected={filters.downs}
+                  onChange={(downs) => update({ downs })}
                 />
               </Field>
+
+              <Field label="Quarters">
+                <Chips
+                  name="Quarters"
+                  values={ALL_QTRS}
+                  selected={filters.qtrs}
+                  label={(q) => (q === 5 ? "OT" : String(q))}
+                  onChange={(qtrs) => update({ qtrs })}
+                />
+              </Field>
+
+              <Field label="Plays">
+                <select
+                  aria-label="Plays"
+                  className={selectCls}
+                  value={filters.plays}
+                  onChange={(e) =>
+                    update({ plays: e.target.value as PlayType })
+                  }
+                >
+                  <option value="all">
+                    {chart === "qbs"
+                      ? "Dropbacks and QB runs"
+                      : "Dropbacks and runs"}
+                  </option>
+                  <option value="pass">Dropbacks only</option>
+                  {chart === "teams" && <option value="run">Runs only</option>}
+                </select>
+              </Field>
+
+              {chart === "qbs" && (
+                <Field label="Minimum plays">
+                  <MinPlaysInput
+                    value={filters.minPlays}
+                    auto={shown?.minPlays ?? null}
+                    onCommit={(minPlays) => update({ minPlays })}
+                  />
+                </Field>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+        >
+          {error}
+        </div>
+      )}
+
+      <div
+        className="relative overflow-hidden rounded-lg border border-slate-200 bg-white"
+        aria-busy={busy}
+      >
+        {!shown ? (
+          busy ? (
+            <div className="relative aspect-[1000/680] animate-pulse bg-slate-100">
+              <div className="absolute top-[6%] left-[2.4%] h-[5%] w-1/4 rounded bg-slate-200" />
+              <div className="absolute top-[11%] left-[2.4%] h-[2.5%] w-1/2 rounded bg-slate-200" />
+              <div className="absolute top-[13.5%] right-[2.4%] bottom-[11%] left-[8.4%] rounded bg-slate-200/70" />
+              <p className="absolute inset-x-0 bottom-[3%] text-center text-sm text-slate-500">
+                Crunching play-by-play. The first chart can take a few seconds.
+              </p>
+            </div>
+          ) : (
+            <div className="flex aspect-[1000/680] items-center justify-center p-6 text-center text-sm text-slate-500">
+              The chart didn&apos;t load. Try another filter or reload the page.
+            </div>
+          )
+        ) : empty ? (
+          <div className="flex aspect-[1000/680] items-center justify-center p-6 text-center text-sm text-slate-500">
+            No {chart === "teams" ? "teams" : "quarterbacks"} match these
+            filters
+            {chart === "qbs" && ". Try lowering the minimum plays"}.
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "transition-opacity",
+              busy && "pointer-events-none opacity-40",
+            )}
+          >
+            {chart === "teams" ? (
+              <TeamTiersChart data={shown} svgRef={svgRef} />
+            ) : (
+              <QbChart data={shown} svgRef={svgRef} />
             )}
           </div>
         )}
-
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {error}
+        {shown && busy && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-sm font-medium text-slate-700 shadow-sm">
+              <span className="border-t-turf-700 size-3.5 animate-spin rounded-full border-2 border-slate-300 motion-reduce:animate-none" />
+              Updating
+            </span>
           </div>
         )}
-
-        <div
-          className={cn(
-            "overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-opacity",
-            loading && shown && "opacity-60",
-          )}
-        >
-          {!shown ? (
-            <div className="flex aspect-[1000/680] items-center justify-center text-sm text-gray-500">
-              {loading ? "Loading chart…" : "No chart"}
-            </div>
-          ) : empty ? (
-            <div className="flex aspect-[1000/680] items-center justify-center p-6 text-center text-sm text-gray-500">
-              No {chart === "teams" ? "teams" : "quarterbacks"} match these
-              filters
-              {chart === "qbs" && " — try lowering the minimum plays"}.
-            </div>
-          ) : chart === "teams" ? (
-            <TeamTiersChart data={shown} svgRef={svgRef} />
-          ) : (
-            <QbChart data={shown} svgRef={svgRef} />
-          )}
-        </div>
-
-        {shown && !empty && (
-          <details className="mt-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <summary className="cursor-pointer text-sm font-medium text-gray-700">
-              Show data
-              <span className="ml-2 font-normal text-gray-400">
-                {(shown.teams ?? shown.qbs ?? []).length} rows · {shown.ms} ms
-              </span>
-            </summary>
-            <div className="mt-3 overflow-x-auto">
-              <DataTable data={shown} />
-            </div>
-          </details>
-        )}
-
-        <p className="mt-4 text-xs text-gray-500">
-          EPA/play counts dropbacks (passes, sacks, scrambles) and runs. Win
-          probability is from each team&apos;s own side, so on defense it is the
-          defending team&apos;s chance of winning. Charts in the style of Ben
-          Baldwin&apos;s rbsdm.com.
-        </p>
       </div>
+
+      {shown && !empty && (
+        <details className="group mt-4 rounded-lg border border-slate-200 bg-white">
+          <summary
+            className={cn(
+              "flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 [&::-webkit-details-marker]:hidden",
+              focusCls,
+            )}
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 20 20"
+              className="size-4 text-slate-500 transition-transform group-open:rotate-90"
+            >
+              <path
+                d="M8 5l5 5-5 5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+            </svg>
+            Show data
+            <span className="font-normal text-slate-500">
+              {(shown.teams ?? shown.qbs ?? []).length} rows
+            </span>
+          </summary>
+          <div className="max-h-[28rem] overflow-auto border-t border-slate-200">
+            <DataTable data={shown} />
+          </div>
+        </details>
+      )}
+
+      <p className="mt-4 max-w-3xl text-sm text-slate-500">
+        EPA (expected points added) per play counts dropbacks (passes, sacks,
+        scrambles) and runs. On the team chart the defense axis is flipped, so
+        defenses that give up fewer points sit higher. Win probability is from
+        each team&apos;s own side, so on defense it is the defending team&apos;s
+        chance of winning. Charts in the style of Ben Baldwin&apos;s rbsdm.com.
+      </p>
       <Toaster position="bottom-center" />
-    </main>
+    </div>
   );
 }

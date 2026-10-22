@@ -130,6 +130,7 @@ export function ChartSvg({
   footnote,
   plot,
   yCategories,
+  className = "block h-auto w-full min-w-[640px]",
   children,
 }: {
   svgRef: Ref<SVGSVGElement>;
@@ -142,6 +143,8 @@ export function ChartSvg({
   plot?: Partial<Plot>;
   /** Names drawn as y ticks instead of numbers (horizontal bars; y runs 0..n, inverted). */
   yCategories?: string[];
+  /** Classes on the <svg>; the default keeps a 640px minimum and scrolls. */
+  className?: string;
   children: (s: Scales & { clip: string; plot: Plot }) => ReactNode;
 }) {
   // useId output contains characters that break url(#...) references.
@@ -157,7 +160,7 @@ export function ChartSvg({
       fontFamily={FONT}
       role="img"
       aria-label={`${title}: ${subtitle}`}
-      className="block h-auto w-full min-w-[640px]"
+      className={className}
     >
       <rect width={W} height={H} fill="#ffffff" />
       <text x={24} y={42} fontSize={28} fontWeight={700} fill="#111827">
@@ -268,7 +271,7 @@ export function useChartTooltip() {
       className="pointer-events-none absolute z-10 w-56 rounded-md border border-gray-200 bg-white/95 p-2.5 text-xs text-gray-800 shadow-lg"
       style={{
         top: tip.y + 14,
-        left: tip.x + 240 > width ? tip.x - 236 : tip.x + 14,
+        left: Math.max(0, tip.x + 240 > width ? tip.x - 236 : tip.x + 14),
       }}
     >
       {tip.content}

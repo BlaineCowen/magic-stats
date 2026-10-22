@@ -1,10 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { NflNav } from "@/components/nfl-nav";
+import {
+  AlertTriangle,
+  BarChart3,
+  Brain,
+  Clock,
+  Copy,
+  Download,
+  Link2,
+  Loader2,
+  Mail,
+  Search,
+  X,
+} from "lucide-react";
 import { QueryChart } from "@/components/charts/query-chart";
-import { SimpleDataTable } from "@/components/simple-data-table";
+import { EXAMPLE_GROUPS } from "@/components/ask/examples";
+import { loadRecent, pushRecent, saveRecent } from "@/components/ask/recent";
+import { formatValue, ResultsTable } from "@/components/ask/results-table";
 import {
   inferSpec,
   type ChartPick,
@@ -53,26 +67,14 @@ interface ApiResponse {
 
 type AiStatus = { online: boolean; model: string; loaded: boolean };
 
-const QUERY_LIMIT = 50;
+// "notice" is the server saying no (limits, too long): amber, nothing to debug.
+// "failure" is something breaking: red, with the debug tools.
+type Problem = { kind: "notice" | "failure"; message: string };
 
-const EXAMPLES = [
-  "Top 10 quarterbacks in 2024 by EPA per dropback, minimum 300 dropbacks",
-  "Receivers in 2024 with at least 50 targets: target share, air yards share and yards per target",
-  "Running backs in 2024 with at least 100 carries ranked by rushing EPA per carry, with total rushing yards",
-  "Top 15 players in PPR fantasy points in 2024 who played at least 10 games",
-  "Which defenses allowed the lowest EPA per dropback from 2021 to 2025?",
-  "CJ Stroud's 10 longest completions by air yards in 2024",
-];
-
-// Utility function to format values for display
-function formatValue(value: string | number | boolean | null): string {
-  if (value === null || value === undefined) return "N/A";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? value.toString() : value.toFixed(2);
-  }
-  return value.toString();
-}
+// Matches MAX_QUESTION_CHARS in src/lib/query-limits.ts (server-only module).
+const MAX_CHARS = 300;
+const OFFLINE_MESSAGE =
+  "The stats assistant isn't responding right now. Try again in a few minutes.";
 
 // IDs are for joins, not for reading.
 function hideIdColumns(rows: QueryResult[]): QueryResult[] {
@@ -83,15 +85,38 @@ function hideIdColumns(rows: QueryResult[]): QueryResult[] {
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 
+function waitHint(retryAfter: string | null): string {
+  const s = Number(retryAfter);
+  if (!retryAfter || !Number.isFinite(s) || s <= 0) return "";
+  if (s < 90) return " You can ask again in about a minute.";
+  if (s < 2 * 3600)
+    return ` You can ask again in about ${Math.round(s / 60)} minutes.`;
+  return ` You can ask again in about ${Math.round(s / 3600)} hours.`;
+}
+
+function isTypingTarget(el: EventTarget | null) {
+  if (!(el instanceof HTMLElement)) return false;
+  return (
+    el.isContentEditable ||
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    el.tagName === "SELECT"
+  );
+}
+
+const secondaryButton =
+  "inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-turf-700 disabled:opacity-50";
+
 export function NflQuery({ debug = false }: { debug?: boolean }) {
   const [query, setQuery] = useState("");
   const [lastQuery, setLastQuery] = useState("");
   const [response, setResponse] = useState<ApiResponse | null>(null);
   const [loadingMode, setLoadingMode] = useState<Mode | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [error, setError] = useState("");
-  const [queryCount, setQueryCount] = useState(0);
+  const [problem, setProblem] = useState<Problem | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
+  const [recent, setRecent] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
   // The chart on screen; a new `key` remounts QueryChart so its controls
   // reset. `question` is the question it answers, shown as the subtitle.
   const [chart, setChart] = useState<{
@@ -101,8 +126,9 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
     question: string;
   } | null>(null);
 
+  const error = problem?.message ?? "";
   const isLoading = loadingMode !== null;
-  const isLimitReached = !debug && queryCount >= QUERY_LIMIT;
+  const tooLong = query.length > MAX_CHARS;
   const results = hideIdColumns(response?.results ?? []);
   const chartShown = !!chart && !chart.hidden && !error && results.length > 0;
   // Offered as "Chart this" when the answer came back as a table only.
@@ -123,63 +149,124 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("nfl_query_count");
-    setQueryCount(saved ? parseInt(saved, 10) : 0);
+    setRecent(loadRecent());
+    // ?q= prefills the box but never runs it: every question costs money.
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setQuery(q);
     fetch("/api/ai-status")
       .then((r) => r.json())
       .then((d: AiStatus) => setAiStatus(d))
       .catch(() => setAiStatus({ online: false, model: "", loaded: false }));
   }, []);
 
-  // Deep mode is slow; show a running clock so it doesn't look stuck.
+  // "/" jumps to the box from anywhere that isn't already a text field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // A running clock so a slow answer doesn't look stuck.
   useEffect(() => {
     if (!isLoading) return;
     const started = Date.now();
     setElapsed(0);
-    const id = setInterval(() => setElapsed(Date.now() - started), 500);
+    const id = setInterval(() => setElapsed(Date.now() - started), 250);
     return () => clearInterval(id);
   }, [isLoading]);
 
-  const runQuery = async (text: string, mode: Mode) => {
-    if (isLimitReached) {
-      setError(
-        `You've reached the limit of ${QUERY_LIMIT} queries. Please clear your browser data to reset.`,
-      );
+  const runQuery = async (raw: string, mode: Mode) => {
+    const text = raw.trim();
+    if (!text || isLoading) return;
+    if (text.length > MAX_CHARS) {
+      setProblem({
+        kind: "notice",
+        message: `Keep questions under ${MAX_CHARS} characters.`,
+      });
       return;
     }
     setLoadingMode(mode);
-    setError("");
+    setProblem(null);
     setLastQuery(text);
     setChart(null);
     try {
-      const res = await fetch("/api/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text, mode, nocache: debug }),
-      });
-      const data = (await res.json()) as ApiResponse;
+      let res: Response;
+      try {
+        res = await fetch("/api/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: text, mode, nocache: debug }),
+        });
+      } catch {
+        setResponse(null);
+        setProblem({ kind: "failure", message: OFFLINE_MESSAGE });
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as ApiResponse;
       setResponse(data);
+      if (res.status === 429 || res.status === 400) {
+        setProblem({
+          kind: "notice",
+          message:
+            (data.error ?? "That question can't be asked right now.") +
+            (res.status === 429
+              ? waitHint(res.headers.get("Retry-After"))
+              : ""),
+        });
+        return;
+      }
+      if (!res.ok) {
+        setProblem({
+          kind: "failure",
+          message:
+            res.status === 503 && !debug
+              ? OFFLINE_MESSAGE
+              : (data.error ?? "Something went wrong answering that."),
+        });
+        return;
+      }
       setChart(
         data.chart
           ? { spec: data.chart, key: Date.now(), hidden: false, question: text }
           : null,
       );
-      if (!res.ok) throw new Error(data.error ?? "Failed to fetch results");
-      if (!debug) {
-        const next = queryCount + 1;
-        setQueryCount(next);
-        localStorage.setItem("nfl_query_count", next.toString());
+      setRecent((r) => {
+        const next = pushRecent(r, text);
+        saveRecent(next);
+        return next;
+      });
+      // Reflect the question in the address bar so it can be shared; loading
+      // that URL only prefills the box.
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set("q", text);
+        window.history.replaceState(null, "", url);
+      } catch {
+        // not fatal
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch results");
     } finally {
       setLoadingMode(null);
     }
   };
 
+  const ask = (text: string) => {
+    setQuery(text);
+    void runQuery(text, "fast");
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     void runQuery(query, "fast");
+  };
+
+  const clearRecent = () => {
+    setRecent([]);
+    saveRecent([]);
   };
 
   const debugText = () =>
@@ -193,6 +280,18 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
       toast.success("Debug info copied");
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.searchParams.set("q", lastQuery);
+      await navigator.clipboard.writeText(url.toString());
+      toast.success("Link copied");
+    } catch {
+      toast.error("Couldn't copy the link");
     }
   };
 
@@ -214,7 +313,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success("CSV downloaded successfully!");
+    toast.success("CSV downloaded");
   };
 
   const sendEmail = () => {
@@ -226,17 +325,19 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
 
   const thinkHarder = lastQuery && !isLoading && response?.mode !== "deep" && (
     <button
+      type="button"
       onClick={() => void runQuery(lastQuery, "deep")}
-      className="rounded border border-purple-300 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-800 hover:bg-purple-100"
-      title="Re-ask and let the model reason it through first"
+      className={secondaryButton}
+      title="Ask again and let the model reason it through first. Takes a few extra seconds."
     >
-      Think harder (slower)
+      <Brain className="text-turf-700 size-4" aria-hidden />
+      Think harder
     </button>
   );
 
   const queryDetails = response?.sql && (
     <details className="mt-4 text-sm" open={debug}>
-      <summary className="cursor-pointer text-gray-600">
+      <summary className="cursor-pointer text-slate-600 hover:text-slate-900">
         How this was answered
         {response.timings &&
           ` · ${response.mode === "deep" ? "thought it through" : "fast"} · ${seconds(response.timings.total_ms)}`}
@@ -247,15 +348,15 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
           ` · chart ${response.chart_source === "model" ? "picked by model" : "inferred"}`}
         {response.cached && " · cached"}
       </summary>
-      {response.plan && <p className="mt-2 text-gray-700">{response.plan}</p>}
-      <pre className="mt-2 overflow-x-auto rounded bg-gray-100 p-3 text-xs whitespace-pre-wrap text-gray-800">
+      {response.plan && <p className="mt-2 text-slate-700">{response.plan}</p>}
+      <pre className="mt-2 overflow-x-auto rounded-md bg-slate-100 p-3 text-xs whitespace-pre-wrap text-slate-800">
         {response.sql}
       </pre>
       {debug &&
         response.attempts?.map((a, i) => (
           <div
             key={i}
-            className="mt-2 rounded border border-gray-200 p-2 text-xs"
+            className="mt-2 rounded-md border border-slate-200 bg-white p-2 text-xs"
           >
             <div className="font-medium">
               Attempt {i + 1} ({a.mode}) · LLM {seconds(a.llm_ms)} · DB{" "}
@@ -264,11 +365,11 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
             </div>
             {a.error && <div className="mt-1 text-red-700">{a.error}</div>}
             {a.chart && a.chart.type !== "none" && (
-              <div className="mt-1 text-gray-500">
+              <div className="mt-1 text-slate-500">
                 chart: {JSON.stringify(a.chart)}
               </div>
             )}
-            <pre className="mt-1 whitespace-pre-wrap text-gray-600">
+            <pre className="mt-1 whitespace-pre-wrap text-slate-600">
               {a.sql}
             </pre>
           </div>
@@ -276,235 +377,373 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
     </details>
   );
 
+  // A steady line that eases toward full; it never claims to be done early.
+  const expectedMs = loadingMode === "deep" ? 25000 : 6000;
+  const progress = 1 - Math.exp(-elapsed / expectedMs);
+  const showCounter = query.length >= MAX_CHARS - 50;
+
   return (
-    <main className="container mx-auto px-4 py-8">
-      <div className={cn("mx-auto", chartShown ? "max-w-5xl" : "max-w-3xl")}>
-        {/* Header, search and errors keep the narrow width when a chart widens the page. */}
-        <div className="mx-auto max-w-3xl">
-          <NflNav />
-          <h1 className="mb-8 text-center text-2xl font-bold text-gray-900 sm:text-4xl">
-            NFL Stats Query{debug && " - Testing"}
-          </h1>
+    <main className="mx-auto max-w-6xl px-4 pt-8 pb-16">
+      <h1 className="font-display text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+        Ask a question
+        {debug && <span className="text-slate-400"> (testing)</span>}
+      </h1>
+      <p className="mt-2 max-w-2xl text-lg text-slate-600">
+        Type it like you&apos;d text it. Answers come from every NFL play since
+        1999.
+      </p>
 
-          {aiStatus && !aiStatus.online && (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              ⚠ The local AI (LM Studio on the Mac mini) is not responding.
-              Queries will fail until it&apos;s back.
-            </div>
-          )}
-          {aiStatus?.online && !aiStatus.loaded && (
-            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-              {aiStatus.model} isn&apos;t loaded yet; the first query will take
-              longer while LM Studio loads it.
-            </div>
-          )}
-
-          {!debug && queryCount > 0 && (
-            <div className="mb-4 text-center text-sm text-gray-600">
-              Queries used: {queryCount}/{QUERY_LIMIT}
-              {isLimitReached && (
-                <span className="ml-2 font-medium text-red-600">
-                  (Limit reached)
-                </span>
-              )}
-            </div>
-          )}
-
-          <form onSubmit={handleSearch} className="mb-8">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ask any question about NFL stats..."
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none sm:px-4 sm:text-base"
-              />
-              <button
-                type="submit"
-                disabled={isLoading || !query.trim() || isLimitReached}
-                className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-blue-400 sm:gap-2 sm:px-4 sm:text-base"
-              >
-                {isLoading ? (
-                  <svg
-                    className="h-4 w-4 animate-spin"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                ) : (
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7l5 5m0 0l-5 5m5-5H6"
-                    />
-                  </svg>
-                )}
-                <span className="hidden sm:inline">
-                  {isLoading ? seconds(elapsed) : "Execute"}
-                </span>
-              </button>
-            </div>
-            {isLoading && (
-              <p className="mt-2 text-sm text-gray-500">
-                {loadingMode === "deep"
-                  ? `Thinking it through… ${seconds(elapsed)} (can take a minute or more)`
-                  : `Writing a query… ${seconds(elapsed)}`}
-              </p>
-            )}
-          </form>
-
-          {error && (
-            <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700">
-              <p className="whitespace-pre-wrap">{error}</p>
-              {queryDetails}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {thinkHarder}
-                <button
-                  onClick={copyToClipboard}
-                  className="rounded bg-yellow-600 px-3 py-1.5 text-sm text-white hover:bg-yellow-700"
-                >
-                  Copy Debug Info
-                </button>
-                <button
-                  onClick={sendEmail}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
-                >
-                  Email Debug Info
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {!error && response && results.length > 0 && (
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-            <div className="mb-4 flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">
-                Results
-              </h2>
-              <div className="flex items-center gap-2">
-                {thinkHarder}
-                {chart?.hidden && (
-                  <button
-                    onClick={() => setChart({ ...chart, hidden: false })}
-                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-3 sm:py-2 sm:text-sm"
-                  >
-                    Show chart
-                  </button>
-                )}
-                {!isLoading && inferred && (
-                  <button
-                    onClick={() =>
-                      setChart({
-                        spec: inferred,
-                        key: Date.now(),
-                        hidden: false,
-                        question: lastQuery,
-                      })
-                    }
-                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 sm:px-3 sm:py-2 sm:text-sm"
-                  >
-                    Chart this
-                  </button>
-                )}
-                <button
-                  onClick={downloadCSV}
-                  className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 sm:px-3 sm:py-2 sm:text-sm"
-                  title="Download as CSV"
-                >
-                  CSV
-                </button>
-              </div>
-            </div>
-            {/* Stays mounted while hidden so Hide/Show keeps the user's
-                control changes (X/Y/series/type); only its wrapper toggles. */}
-            {chart && (
-              <div className={chartShown ? undefined : "hidden"}>
-                <QueryChart
-                  key={chart.key}
-                  rows={response?.results ?? EMPTY_ROWS}
-                  columns={response?.columns ?? EMPTY_COLUMNS}
-                  initial={chart.spec}
-                  teamColors={response?.team_colors ?? EMPTY_COLORS}
-                  question={chart.question}
-                  truncated={response?.truncated}
-                  onHide={hideChart}
-                />
-              </div>
-            )}
-            <SimpleDataTable data={results} />
-            {response.truncated && (
-              <p className="mt-2 text-xs text-gray-500">
-                Showing the first {results.length} rows.
-              </p>
-            )}
-            {queryDetails}
+      <div className="mt-6 max-w-3xl">
+        {aiStatus && !aiStatus.online && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            {OFFLINE_MESSAGE}
+          </div>
+        )}
+        {aiStatus?.online && !aiStatus.loaded && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600"
+          >
+            <Clock className="mt-0.5 size-4 shrink-0" aria-hidden />
+            The stats assistant is warming up, so the first answer may take a
+            little longer.
           </div>
         )}
 
-        {!error && !isLoading && response && results.length === 0 && (
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 sm:p-6">
-            <h3 className="mb-2 text-base font-semibold text-yellow-800 sm:text-lg">
-              No Results Found
-            </h3>
-            <p className="text-sm text-yellow-800">
-              The query ran but matched nothing. Check spelling of player or
-              team names, or let the model think it through.
+        <form onSubmit={handleSearch}>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-slate-400"
+                aria-hidden
+              />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setQuery("");
+                  }
+                }}
+                placeholder="Most rushing yards in 2024?"
+                aria-label="Your question"
+                aria-describedby={showCounter ? "ask-counter" : undefined}
+                aria-invalid={tooLong || undefined}
+                enterKeyHint="search"
+                className={cn(
+                  "focus:border-turf-700 focus:ring-turf-700/25 h-12 w-full rounded-lg border bg-white pr-10 pl-11 text-base text-slate-900 shadow-sm placeholder:text-slate-400 focus:ring-4 focus:outline-none sm:h-14 sm:text-lg",
+                  tooLong ? "border-red-400" : "border-slate-300",
+                )}
+              />
+              {query && !isLoading ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    inputRef.current?.focus();
+                  }}
+                  className="focus-visible:outline-turf-700 absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2"
+                  aria-label="Clear question"
+                  title="Clear (Esc)"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              ) : (
+                <kbd
+                  aria-hidden
+                  className="absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border border-slate-200 bg-slate-50 px-1.5 text-xs text-slate-400 sm:block"
+                >
+                  /
+                </kbd>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={isLoading || !query.trim() || tooLong}
+              className="bg-turf-700 hover:bg-turf-800 focus-visible:outline-turf-700 inline-flex h-12 items-center gap-2 rounded-lg px-5 text-base font-semibold text-white shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:h-14 sm:px-7 sm:text-lg"
+            >
+              {isLoading && (
+                <Loader2 className="size-5 animate-spin" aria-hidden />
+              )}
+              {isLoading ? "Asking" : "Ask"}
+            </button>
+          </div>
+          {showCounter && (
+            <p
+              id="ask-counter"
+              className={cn(
+                "mt-1.5 text-right text-sm tabular-nums",
+                tooLong ? "font-medium text-red-700" : "text-slate-500",
+              )}
+            >
+              {query.length}/{MAX_CHARS}
+              {tooLong && " · shorten it a little to ask"}
             </p>
+          )}
+        </form>
+
+        {recent.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-500">Recent</span>
+            {recent.map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => ask(q)}
+                disabled={isLoading}
+                title={q}
+                className="hover:border-turf-700 hover:text-turf-800 focus-visible:outline-turf-700 max-w-[16rem] truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700 focus-visible:outline-2 disabled:opacity-50"
+              >
+                {q}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={clearRecent}
+              className="focus-visible:outline-turf-700 rounded px-1 text-sm text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline focus-visible:outline-2"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {problem?.kind === "notice" && (
+          <div
+            role="alert"
+            className="mt-6 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900"
+          >
+            <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden />
+            <p>{problem.message}</p>
+          </div>
+        )}
+
+        {problem?.kind === "failure" && (
+          <div
+            role="alert"
+            className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"
+          >
+            <p className="font-semibold">That one didn&apos;t work.</p>
+            <p className="mt-1 whitespace-pre-wrap">{problem.message}</p>
             {queryDetails}
             <div className="mt-3 flex flex-wrap gap-2">
               {thinkHarder}
               <button
+                type="button"
                 onClick={copyToClipboard}
-                className="rounded bg-yellow-600 px-3 py-1.5 text-sm text-white hover:bg-yellow-700"
+                className={secondaryButton}
               >
-                Copy Debug Info
+                <Copy className="size-4" aria-hidden />
+                Copy debug info
+              </button>
+              <button
+                type="button"
+                onClick={sendEmail}
+                className={secondaryButton}
+              >
+                <Mail className="size-4" aria-hidden />
+                Email debug info
               </button>
             </div>
           </div>
         )}
-
-        {!query && !response && (
-          <div className="rounded-lg bg-blue-50 p-4 text-blue-700 sm:p-6">
-            <h2 className="mb-2 text-base font-semibold sm:text-lg">
-              Example queries:
-            </h2>
-            <ul className="space-y-2 sm:space-y-3">
-              {EXAMPLES.map((example) => (
-                <li key={example}>
-                  <button
-                    onClick={() => setQuery(example)}
-                    className="text-left hover:underline"
-                    title="Use this query"
-                  >
-                    {example}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
+
+      {isLoading && (
+        <section
+          aria-live="polite"
+          className="mt-8 overflow-hidden rounded-lg border border-slate-200 bg-white"
+        >
+          <div className="h-1 bg-slate-100">
+            <div
+              className="bg-turf-700 h-full transition-[width] duration-300 ease-out"
+              style={{ width: `${Math.min(progress, 0.95) * 100}%` }}
+            />
+          </div>
+          <div className="p-4 sm:p-6">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-slate-700">
+              <span className="font-medium">
+                {loadingMode === "deep"
+                  ? "Thinking it through"
+                  : "Looking it up"}
+              </span>
+              <span className="text-slate-500 tabular-nums">
+                {Math.floor(elapsed / 1000)}s
+              </span>
+              <span className="text-sm text-slate-500">
+                {loadingMode === "deep"
+                  ? "This takes a little longer, usually under a minute."
+                  : "Usually a few seconds."}
+              </span>
+            </p>
+            <p className="mt-1 truncate text-sm text-slate-500">{lastQuery}</p>
+            <div className="mt-5 space-y-2" aria-hidden>
+              <div className="h-8 rounded bg-slate-100" />
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-6 animate-pulse rounded bg-slate-100/70"
+                  style={{ animationDelay: `${i * 120}ms` }}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!isLoading && !error && response && results.length > 0 && (
+        <section className="mt-8 min-w-0 rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="font-display text-2xl leading-tight font-bold text-slate-900">
+                {lastQuery}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {results.length} {results.length === 1 ? "row" : "rows"}
+                {response.truncated && " (first rows only)"}
+                {response.cached && " · saved answer"}
+                {response.mode === "deep" && " · thought it through"}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {thinkHarder}
+              {chart?.hidden && (
+                <button
+                  type="button"
+                  onClick={() => setChart({ ...chart, hidden: false })}
+                  className={secondaryButton}
+                >
+                  <BarChart3 className="size-4" aria-hidden />
+                  Show chart
+                </button>
+              )}
+              {inferred && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setChart({
+                      spec: inferred,
+                      key: Date.now(),
+                      hidden: false,
+                      question: lastQuery,
+                    })
+                  }
+                  className={secondaryButton}
+                >
+                  <BarChart3 className="size-4" aria-hidden />
+                  Chart this
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={downloadCSV}
+                className={secondaryButton}
+                title="Download as CSV"
+              >
+                <Download className="size-4" aria-hidden />
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={copyLink}
+                className={secondaryButton}
+                title="Copy a link that fills in this question"
+              >
+                <Link2 className="size-4" aria-hidden />
+                Copy link
+              </button>
+            </div>
+          </div>
+          {/* Stays mounted while hidden so Hide/Show keeps the user's
+              control changes (X/Y/series/type); only its wrapper toggles. */}
+          {chart && (
+            <div className={chartShown ? "mb-4" : "hidden"}>
+              <QueryChart
+                key={chart.key}
+                rows={response?.results ?? EMPTY_ROWS}
+                columns={response?.columns ?? EMPTY_COLUMNS}
+                initial={chart.spec}
+                teamColors={response?.team_colors ?? EMPTY_COLORS}
+                question={chart.question}
+                truncated={response?.truncated}
+                onHide={hideChart}
+              />
+            </div>
+          )}
+          <ResultsTable data={results} />
+          {response.truncated && (
+            <p className="mt-2 text-xs text-slate-500">
+              Showing the first {results.length} rows.
+            </p>
+          )}
+          {queryDetails}
+        </section>
+      )}
+
+      {!isLoading && !error && response && results.length === 0 && (
+        <section className="mt-8 max-w-3xl rounded-lg border border-amber-200 bg-amber-50 p-4 sm:p-6">
+          <h2 className="font-display text-xl font-bold text-amber-900">
+            No matches
+          </h2>
+          <p className="mt-1 text-amber-900">
+            The question ran but nothing matched. Check how player or team names
+            are spelled, or let the model think it through.
+          </p>
+          {queryDetails}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {thinkHarder}
+            <button
+              type="button"
+              onClick={copyToClipboard}
+              className={secondaryButton}
+            >
+              <Copy className="size-4" aria-hidden />
+              Copy debug info
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section aria-labelledby="examples" className="mt-10">
+        <h2
+          id="examples"
+          className="font-display text-2xl font-bold text-slate-900"
+        >
+          {response ? "Try another" : "Try one of these"}
+        </h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {EXAMPLE_GROUPS.map((g) => (
+            <div
+              key={g.title}
+              className="rounded-lg border border-slate-200 bg-white p-4"
+            >
+              <h3 className="font-display text-lg font-semibold text-slate-900">
+                {g.title}
+              </h3>
+              <ul className="mt-2 space-y-1">
+                {g.questions.map((q) => (
+                  <li key={q}>
+                    <button
+                      type="button"
+                      onClick={() => ask(q)}
+                      disabled={isLoading}
+                      className="hover:bg-turf-50 hover:text-turf-800 focus-visible:outline-turf-700 -mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-1.5 text-left text-sm text-slate-700 focus-visible:outline-2 disabled:opacity-50"
+                    >
+                      {q}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
       <Toaster position="bottom-center" />
     </main>
   );

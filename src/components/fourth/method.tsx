@@ -11,9 +11,15 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-gray-100 py-2 last:border-0">
-      <Expand label={title}>
-        <div className="max-w-3xl space-y-2 pb-2 text-sm leading-relaxed text-gray-700">
+    <div className="border-b border-slate-100 py-2.5 last:border-0">
+      <Expand
+        label={
+          <span className="font-display text-lg font-semibold text-slate-900">
+            {title}
+          </span>
+        }
+      >
+        <div className="max-w-[70ch] space-y-2 pb-3 pl-5.5 text-[15px] leading-relaxed text-slate-700">
           {children}
         </div>
       </Expand>
@@ -28,7 +34,7 @@ function Table({ head, rows }: { head: Row; rows: Row[] }) {
     <div className="overflow-x-auto">
       <table className="mt-2 w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
+          <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
             {head.map((h) => (
               <th key={h} className="py-1.5 pr-4 font-medium">
                 {h}
@@ -38,7 +44,7 @@ function Table({ head, rows }: { head: Row; rows: Row[] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r[0]} className="border-b border-gray-100 last:border-0">
+            <tr key={r[0]} className="border-b border-slate-100 last:border-0">
               {r.map((c, i) => (
                 <td
                   key={i}
@@ -58,29 +64,41 @@ function Table({ head, rows }: { head: Row; rows: Row[] }) {
 export function Method() {
   return (
     <div className="space-y-6">
-      <div className="max-w-3xl space-y-4">
-        <h2 className="text-2xl font-bold text-gray-900">How it works</h2>
-        <ol className="space-y-3 text-gray-700">
+      <div className="max-w-[70ch] space-y-4">
+        <h2 className="font-display text-3xl font-bold text-slate-900">
+          How it works
+        </h2>
+        <ol className="space-y-3 text-slate-700">
           <li>
-            <b className="text-gray-900">1. Look at the situation.</b> Score,
-            time left, where the ball is, how far to go, timeouts, and which
-            team Vegas favored.
+            <b className="text-slate-900">
+              <span className="font-display text-turf-700 mr-1 text-lg">1</span>
+              Look at the situation.
+            </b>{" "}
+            Score, time left, where the ball is, how far to go, timeouts, and
+            which team Vegas favored.
           </li>
           <li>
-            <b className="text-gray-900">2. Play out each choice.</b> For going
-            for it, kicking and punting, look at everything that usually happens
-            next in that spot, from thousands of real NFL plays since 1999.
+            <b className="text-slate-900">
+              <span className="font-display text-turf-700 mr-1 text-lg">2</span>
+              Play out each choice.
+            </b>{" "}
+            For going for it, kicking and punting, look at everything that
+            usually happens next in that spot, from thousands of real NFL plays
+            since 1999.
           </li>
           <li>
-            <b className="text-gray-900">3. Pick the one most likely to win.</b>{" "}
+            <b className="text-slate-900">
+              <span className="font-display text-turf-700 mr-1 text-lg">3</span>
+              Pick the one most likely to win.
+            </b>{" "}
             Each choice ends up with a chance to win the game. The highest one
             is the call. If two are within about 1%, it&apos;s a coin flip.
           </li>
         </ol>
-        <p className="text-gray-700">
+        <p className="text-slate-700">
           It&apos;s the same idea as Ben Baldwin&apos;s{" "}
           <a
-            className="text-blue-700 underline"
+            className="text-turf-700 hover:text-turf-900 focus-visible:outline-turf-700 rounded font-medium underline underline-offset-2 focus-visible:outline-2"
             href="https://www.nfl4th.com/"
             target="_blank"
             rel="noreferrer"
@@ -92,7 +110,7 @@ export function Method() {
         </p>
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white px-5 py-2">
+      <div className="max-w-4xl rounded-lg border border-slate-200 bg-white px-5 py-2">
         <Section title="The models behind it">
           <p>
             On 4th down a coach has three choices. For each one the model asks:
@@ -215,7 +233,7 @@ export function Method() {
           <div className="overflow-x-auto">
             <table className="mt-2 w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
+                <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
                   <th className="py-1.5 pr-3 font-medium">Issue</th>
                   <th className="py-1.5 pr-3 font-medium">Type</th>
                   <th className="py-1.5 font-medium">Effect</th>
@@ -261,15 +279,15 @@ export function Method() {
                 ].map(([a, b, c]) => (
                   <tr
                     key={a}
-                    className="border-b border-gray-100 last:border-0"
+                    className="border-b border-slate-100 last:border-0"
                   >
-                    <td className="py-1.5 pr-3 font-medium text-gray-800">
+                    <td className="py-1.5 pr-3 font-medium text-slate-800">
                       {a}
                     </td>
-                    <td className="py-1.5 pr-3 whitespace-nowrap text-gray-500">
+                    <td className="py-1.5 pr-3 whitespace-nowrap text-slate-500">
                       {b}
                     </td>
-                    <td className="py-1.5 text-gray-700">{c}</td>
+                    <td className="py-1.5 text-slate-700">{c}</td>
                   </tr>
                 ))}
               </tbody>
@@ -323,7 +341,7 @@ export function Method() {
               ],
             ]}
           />
-          <p className="text-gray-500">
+          <p className="text-slate-500">
             Lower is better. nflfastR&apos;s win probability was trained on
             those same seasons, so matching it out of sample is the bar.
           </p>
