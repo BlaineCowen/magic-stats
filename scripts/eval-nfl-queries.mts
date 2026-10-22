@@ -243,7 +243,14 @@ for (const [i, c] of CASES.entries()) {
   const t = Date.now();
   const res = await fetch(`${url}/api/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    // Owner tier so a full run isn't stopped by the per-hour limit; the server
+    // must share AUTH_PROXY_SECRET with this process (see src/lib/query-limits.ts).
+    headers: {
+      "Content-Type": "application/json",
+      "x-authentik-username": "eval",
+      "x-blaine-tier": "owner",
+      "x-blaine-auth": process.env.AUTH_PROXY_SECRET ?? "",
+    },
     body: JSON.stringify({ query: c.q, mode, nocache: true }),
   });
   const data = (await res.json()) as {

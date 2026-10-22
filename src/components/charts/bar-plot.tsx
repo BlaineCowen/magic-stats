@@ -6,6 +6,7 @@ import {
   humanize,
   labelsAreTeams,
   teamCode,
+  teamLogo,
 } from "@/lib/nfl/chart-spec";
 import {
   CHAR_W,
@@ -126,7 +127,7 @@ export function BarPlot({
                       />
                       {logos && (
                         <image
-                          href={`/api/charts/logo/${String(r[spec.label])}`}
+                          href={teamLogo(String(r[spec.label]), teamColors)}
                           x={p.x0 - 16 - names[i]!.length * CHAR_W - LOGO}
                           y={sy(i + 0.5) - LOGO / 2}
                           width={LOGO}

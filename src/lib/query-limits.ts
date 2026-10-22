@@ -4,10 +4,13 @@
  * own credit limit is the backstop behind these.
  *
  * Magic Stats sits behind blaine-auth, and nfl-router forwards who is asking (X-Authentik-Username)
- * and their tier (X-Blaine-Tier, from their Authentik groups). nginx sets both headers on the gated
- * paths, so a client can't supply its own. Signed-in people are counted by username; without the
- * headers (dev, or a misrouted request) the visitor is counted by IP at the Homie limits.
+ * and their tier (X-Blaine-Tier, from their Authentik groups). Anyone can send those headers on an
+ * ungated path, so they only count when X-Blaine-Auth carries AUTH_PROXY_SECRET, which only nginx
+ * knows. Signed-in people are counted by username; anyone else (dev, a misrouted request, a forged
+ * header) is counted by IP at the Homie limits.
  */
+
+import { timingSafeEqual } from "node:crypto";
 
 export const MAX_QUESTION_CHARS = 300;
 
@@ -52,8 +55,18 @@ function prune(stamps: number[], now: number) {
 
 export type Viewer = { name: string | null; tier: Tier; keys: string[] };
 
+/** The request came through the blaine-auth gate in nginx. */
+function fromAuthProxy(h: Headers): boolean {
+  const secret = process.env.AUTH_PROXY_SECRET;
+  const sent = h.get("x-blaine-auth");
+  if (!secret || !sent) return false;
+  const a = Buffer.from(sent);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function viewerFrom(h: Headers): Viewer {
-  const name = h.get("x-authentik-username");
+  const name = fromAuthProxy(h) ? h.get("x-authentik-username") : null;
   const raw = h.get("x-blaine-tier");
   const tier: Tier =
     name && (raw === "owner" || raw === "bae" || raw === "homie")

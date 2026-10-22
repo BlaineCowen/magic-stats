@@ -10,10 +10,16 @@ import {
   type ChartSource,
   type ChartSpec,
   type TeamColors,
-} from "./chart-spec";
+} from "@/lib/nfl/chart-spec";
+import { extractChartBlock, extractSqlBlock, parseFast } from "@/lib/nfl/llm-output";
 import { dataVersion, getTeamColors, runSafeSelect, type Row } from "./db";
-import { extractChartBlock, extractSqlBlock, parseFast } from "./llm-output";
-import { buildSystemPrompt, type PromptMode } from "./prompt";
+import {
+  buildSystemPrompt,
+  emptyHint,
+  errorHint,
+  type PromptMode,
+} from "./prompt";
+import type { Sport } from "./types";
 
 export type QueryMode = PromptMode;
 
@@ -35,6 +41,7 @@ export type PipelineResult = {
   sql: string;
   plan: string | null;
   mode: QueryMode;
+  sport: Sport;
   attempts: Attempt[];
   chart: ChartSpec | null;
   chart_source: ChartSource | null;
@@ -61,7 +68,7 @@ const CHART_FIELD = { type: "string", maxLength: 60 } as const;
 const FAST_FORMAT = {
   type: "json_schema" as const,
   json_schema: {
-    name: "nfl_sql",
+    name: "stats_sql",
     strict: true,
     schema: {
       type: "object",
@@ -88,36 +95,16 @@ const FAST_FORMAT = {
 
 const MAX_ATTEMPTS = 3;
 
-/** Extra guidance for errors the 9B model tends to repeat verbatim. */
-function errorHint(error: string, sql: string): string {
-  // Most common mix-up: pbp's passer_/rusher_/receiver_ columns used on player_week.
-  if (
-    /Referenced column "(passer|rusher|receiver)_\w+"/.test(error) &&
-    /\bplayer_week\b/i.test(sql)
-  ) {
-    return "\nHint: player_week has no passer_/rusher_/receiver_ columns. Players there are player_id and player_display_name, with stats like completions, attempts, passing_yards, carries, rushing_yards, targets, receptions.";
-  }
-  if (
-    error.includes("Binder Error: Referenced column") &&
-    /^\s*with\b/i.test(sql)
-  ) {
-    return "\nHint: a CTE only exposes the columns listed in its SELECT. Add the missing column to the CTE, or compute the value inside it.";
-  }
-  if (error.includes("Binder Error: Referenced column")) {
-    return "\nHint: use only the columns listed for that table in the TABLES section.";
-  }
-  if (error.includes("must appear in the GROUP BY")) {
-    return "\nHint: every non-aggregated column in SELECT must be in GROUP BY.";
-  }
-  return "";
-}
-
-function withFeedback(question: string, attempts: Attempt[]): string {
+function withFeedback(
+  sport: Sport,
+  question: string,
+  attempts: Attempt[],
+): string {
   const prev = attempts.at(-1);
   if (!prev) return question;
   const problem = prev.error
-    ? prev.error + errorHint(prev.error, prev.sql)
-    : "It ran but returned 0 rows. Names contain punctuation (e.g. 'C.J. Stroud'), so match players on last name only (ILIKE '%stroud%'). Also check team codes, season_type and season filters.";
+    ? prev.error + errorHint(sport, prev.error, prev.sql)
+    : emptyHint(sport);
   const repeated = attempts
     .slice(0, -1)
     .some((a) => a.sql.trim() === prev.sql.trim());
@@ -131,6 +118,7 @@ ${repeated ? "You already returned this exact query before. Write a different qu
 }
 
 async function generate(
+  sport: Sport,
   mode: QueryMode,
   question: string,
   attempts: Attempt[],
@@ -140,8 +128,8 @@ async function generate(
   chart: ChartPick | null;
   stats?: NativeChatStats;
 }> {
-  const system = await buildSystemPrompt(mode);
-  const input = withFeedback(question, attempts);
+  const system = await buildSystemPrompt(sport, mode);
+  const input = withFeedback(sport, question, attempts);
   if (mode === "deep") {
     const r = await nativeChat({ systemPrompt: system, input });
     return {
@@ -176,6 +164,7 @@ async function generate(
 export async function answerQuestion(
   question: string,
   mode: QueryMode,
+  sport: Sport = "nfl",
 ): Promise<PipelineResult> {
   const started = Date.now();
   const attempts: Attempt[] = [];
@@ -185,7 +174,7 @@ export async function answerQuestion(
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const attemptMode: QueryMode = i === 0 ? mode : "fast";
     const t0 = Date.now();
-    const gen = await generate(attemptMode, question, attempts);
+    const gen = await generate(sport, attemptMode, question, attempts);
     if (i === 0) llmStats = gen.stats;
     const attempt: Attempt = {
       mode: attemptMode,
@@ -205,7 +194,7 @@ export async function answerQuestion(
 
     const t1 = Date.now();
     try {
-      const out = await runSafeSelect(gen.sql);
+      const out = await runSafeSelect(sport, gen.sql);
       attempt.db_ms = Date.now() - t1;
       attempt.rows = out.rows.length;
       if (out.rows.length === 0 && !retriedEmpty && i < MAX_ATTEMPTS - 1) {
@@ -225,17 +214,18 @@ export async function answerQuestion(
         sql: gen.sql,
         plan: gen.plan ?? attempts.find((a) => a.plan)?.plan ?? null,
         mode,
+        sport,
         attempts,
         chart,
         chart_source,
         // Sent with every answer so "Chart this" on a table can use them too.
-        team_colors: await getTeamColors(),
+        team_colors: await getTeamColors(sport),
         timings: {
           llm_ms: attempts.reduce((s, a) => s + a.llm_ms, 0),
           db_ms: attempts.reduce((s, a) => s + a.db_ms, 0),
           total_ms: Date.now() - started,
         },
-        data_version: dataVersion(),
+        data_version: dataVersion(sport),
         llm_stats: llmStats,
       };
     } catch (e) {

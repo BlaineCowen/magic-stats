@@ -32,7 +32,8 @@ export type ChartSource = "model" | "inferred";
 
 export type TeamColors = Record<
   string,
-  { color: string | null; color2: string | null }
+  // logo: where to load the team's logo; NFL's /api/charts/logo/<code> when absent
+  { color: string | null; color2: string | null; logo?: string }
 >;
 
 export type ColumnInfo = {
@@ -447,7 +448,8 @@ export function chartTitle(spec: ChartSpec): string {
   return y;
 }
 
-const PERSON_COLUMN = /^(?!.*team).*(name|passer|rusher|receiver|player)/;
+const PERSON_COLUMN =
+  /^(?!.*team).*(name|passer|rusher|receiver|player|batter|pitcher)/;
 
 /** "Patrick Mahomes" -> "P.Mahomes" in player-name columns, like nflfastR's pbp names. */
 export function shortLabel(column: string, value: Cell | undefined): string {
@@ -473,6 +475,7 @@ export const TEAM_COLUMNS: readonly string[] = [
   "posteam",
   "defteam",
   "opponent_team",
+  "opponent",
   "home_team",
   "away_team",
 ];
@@ -488,6 +491,11 @@ export function teamCode(
     if (typeof v === "string" && Object.hasOwn(colors, v)) return v;
   }
   return null;
+}
+
+/** The team's logo URL; codes without one get the NFL logo route. */
+export function teamLogo(code: string, colors: TeamColors): string {
+  return colors[code]?.logo ?? `/api/charts/logo/${code}`;
 }
 
 /** Every row's label is a team code, so the chart can draw logos. */

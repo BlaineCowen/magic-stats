@@ -1,13 +1,10 @@
-import { describeView, getDataInfo, type DataInfo } from "./db";
+import type { DataInfo } from "../db";
+import { NO_CHART, RULE, type Col, type SportPrompt } from "../prompt-kit";
 
 /**
- * System prompt for text-to-SQL with a small local model (qwen 9B, ~26k ctx).
- * Kept to a few thousand tokens: a curated column list per table, the
- * nflfastR idioms small models get wrong, and worked examples. Column lists are
- * filtered against the live parquet schema so a renamed column can't slip in.
+ * NFL prompt content: nflverse tables, the nflfastR idioms small models get
+ * wrong, and worked examples.
  */
-
-type Col = [name: string, desc: string];
 
 const PBP_COLS: Col[] = [
   ["season, week", "int"],
@@ -136,23 +133,6 @@ const ROSTER_COLS: Col[] = [
   ],
 ];
 
-async function renderTable(view: string, cols: Col[]): Promise<string> {
-  const have = await describeView(view).catch(() => null);
-  if (!have) return "";
-  const lines = cols
-    .map(([names, desc]) => {
-      // Prose placeholders (with spaces) pass through; real names must exist.
-      const kept = names
-        .split(",")
-        .map((s) => s.trim())
-        .filter((n) => n.includes(" ") || have.has(n));
-      if (!kept.length) return null;
-      return `  ${kept.join(", ")}${desc ? ` -- ${desc}` : ""}`;
-    })
-    .filter(Boolean);
-  return lines.join("\n");
-}
-
 const IDIOMS = `NFL IDIOMS (use these exact definitions)
 - QB season totals (passing yards, TDs, INTs, completion %): player_week, named player_display_name. passer_full_name/passer_id exist ONLY in pbp.
 - QB efficiency / "per dropback": pbp WHERE qb_dropback = 1, GROUP BY passer_id, passer_full_name.
@@ -164,17 +144,6 @@ const IDIOMS = `NFL IDIOMS (use these exact definitions)
 - "Neutral"/"competitive" situations only if asked: wp BETWEEN 0.1 AND 0.9.
 - Player season or career TOTALS (yards, TDs, sacks, fantasy points): SUM over player_week, GROUP BY player_id, player_display_name. Don't GROUP BY team (traded players would split); show STRING_AGG(DISTINCT team, '/') AS team instead. Use pbp only for situational splits or play-level metrics (EPA, CPOE, success, air yards).
 - Team records, points scored/allowed, home/away splits: team_games (one row per team per game). Filter points_for IS NOT NULL to skip unplayed games.`;
-
-const CHARTS = `CHARTS
-Default to "none" (every field ""). Only chart if the question literally asks for a chart/plot/graph, asks for a trend over time, or compares two different stats as two columns per row (e.g. CPOE vs EPA). A same-stat split like "home vs away" is not a chart -- stays "none".
-- x, y, label and series are column aliases from your own SELECT.
-- scatter: one row per player/team with both stats as columns; x = the first stat named, y = the second, label = the name column. Return every qualifying row (LIMIT 100) with a sensible minimum sample.
-- line: one row per season (or week) per player/team, ORDER BY the time column. x = season or week, y = the stat, series = the player/team column ("" for one player or team).
-- bar: 10-25 rows ordered by the stat. y = the stat, label = the name column, x = "".
-- Player charts: include the latest team as ARG_MAX(posteam, game_id) AS team (pbp) or ARG_MAX(team, game_id) AS team (player_week) so points get team colors.
-- title: a short chart title, or "".`;
-
-const NO_CHART = `"chart": {"type": "none", "x": "", "y": "", "label": "", "series": "", "title": ""}`;
 
 const EXAMPLES = `EXAMPLES
 Q: Who led the league in rushing yards in 2024?
@@ -210,74 +179,6 @@ Q: Chart the Bills and Chiefs point differential by season since 2018
 Q: Bar chart of the top 15 running backs by rushing EPA per carry in 2023, min 150 carries
 {"plan": "player_week RBs 2023 REG: rushing_epa / carries per player, min 150 carries, top 15.", "sql": "SELECT player_display_name, ARG_MAX(team, game_id) AS team, SUM(carries) AS carries, ROUND(SUM(rushing_epa) / SUM(carries), 3) AS epa_per_carry FROM player_week WHERE season = 2023 AND season_type = 'REG' AND position = 'RB' GROUP BY player_id, player_display_name HAVING SUM(carries) >= 150 ORDER BY SUM(rushing_epa) / SUM(carries) DESC LIMIT 15", "chart": {"type": "bar", "x": "", "y": "epa_per_carry", "label": "player_display_name", "series": "", "title": "Rushing EPA per carry, 2023 RBs"}}`;
 
-export type PromptMode = "fast" | "deep";
-
-let cached: { key: string; prompt: string } | null = null;
-
-export async function buildSystemPrompt(mode: PromptMode): Promise<string> {
-  const info = await getDataInfo();
-  const key = `${mode}:${info.version}`;
-  if (cached?.key === key) return cached.prompt;
-
-  const [pbp, pw, tw, teamGames, games, rosters] = await Promise.all([
-    renderTable("pbp", PBP_COLS),
-    renderTable("player_week", PLAYER_WEEK_COLS),
-    renderTable("team_week", TEAM_WEEK_COLS),
-    renderTable("team_games", TEAM_GAMES_COLS),
-    renderTable("games", GAMES_COLS),
-    renderTable("rosters", ROSTER_COLS),
-  ]);
-
-  const output =
-    mode === "fast"
-      ? `OUTPUT: JSON {"plan": one short sentence naming the table, filters and metric, "sql": the query, "chart": see CHARTS}.`
-      : `OUTPUT: think it through, then reply with the final query in a \`\`\`sql fenced block, followed by the chart object in a \`\`\`json fenced block, e.g. {"type": "none", "x": "", "y": "", "label": "", "series": "", "title": ""}.`;
-
-  const prompt = `You write one DuckDB SQL SELECT that answers an NFL stats question using nflverse data.
-
-${seasonContext(info)}
-
-RULES
-1. Exactly one SELECT statement (CTEs allowed). DuckDB SQL dialect.
-2. Use ONLY the tables and columns listed below. Never invent column names.
-3. Default to the regular season (season_type = 'REG', or game_type = 'REG' in games) unless the question mentions playoffs/postseason.
-4. Leaderboards: ORDER BY the requested metric itself (not sample size) and LIMIT 25 unless asked otherwise (max 100). Charts follow the CHARTS row counts.
-5. When averaging over plays or games, include a sample-size column (n_plays, dropbacks, attempts, games). When ranking a rate, require a sensible minimum sample unless the user gives one.
-6. ROUND rates to 3 decimals and percentages to 1 in the SELECT list, but ORDER BY the unrounded expression (e.g. ORDER BY SUM(completions) / SUM(attempts) DESC) so rounding does not create ties.
-7. Players: match on LAST NAME with ILIKE, e.g. player_display_name ILIKE '%stroud%' (player_week) or passer_full_name / rusher_full_name / receiver_full_name ILIKE '%stroud%' (pbp). Names contain punctuation ("C.J. Stroud", "Amon-Ra St. Brown"), so never match the full name. For common last names (Allen, Brown, Davis, Harris, Jackson, Johnson, Jones, Moore, Smith, Taylor, Thomas, Williams, Wilson) also match the first initial: ILIKE 'j%allen%'.
-8. If the question names a position ("running backs", "QBs", "tight ends"), filter it: player_week.position = 'RB' (QB, RB, WR, TE, K, ...). pbp has no position column; join player_week or players on the id if needed.
-9. Teams are abbreviations: ARI ATL BAL BUF CAR CHI CIN CLE DAL DEN DET GB HOU IND JAX KC LA(Rams) LAC LV MIA MIN NE NO NYG NYJ PHI PIT SEA SF TB TEN WAS. Relocated teams use the current code for every season.
-
-TABLES
-pbp -- one row per play, ${info.minSeason}-${info.maxSeason}
-${pbp}
-
-player_week -- one row per player per game (box score stats)
-${pw}
-
-team_week -- one row per team per game
-${tw}
-
-team_games -- one row per team per game (records, scoring, home/away)
-${teamGames}
-
-games -- one row per game (schedule, scores, betting lines)
-${games}
-
-rosters -- one row per player per season
-${rosters}
-
-${IDIOMS}
-
-${CHARTS}
-
-${EXAMPLES}
-
-${output}`;
-  cached = { key, prompt };
-  return prompt;
-}
-
 function seasonContext(info: DataInfo): string {
   const inProgress = info.maxSeasonType === "REG" && info.maxWeek < 18;
   const lastComplete = inProgress ? info.maxSeason - 1 : info.maxSeason;
@@ -293,3 +194,44 @@ function seasonContext(info: DataInfo): string {
   }
   return lines.join("\n");
 }
+
+export const nflPrompt: SportPrompt = {
+  intro:
+    "You write one DuckDB SQL SELECT that answers an NFL stats question using nflverse data.",
+  seasonContext,
+  rules: [
+    RULE.oneSelect,
+    RULE.onlyListed,
+    "Default to the regular season (season_type = 'REG', or game_type = 'REG' in games) unless the question mentions playoffs/postseason.",
+    RULE.leaderboard,
+    RULE.sample("plays or games", "n_plays, dropbacks, attempts, games"),
+    RULE.round("ORDER BY SUM(completions) / SUM(attempts) DESC"),
+    `Players: match on LAST NAME with ILIKE, e.g. player_display_name ILIKE '%stroud%' (player_week) or passer_full_name / rusher_full_name / receiver_full_name ILIKE '%stroud%' (pbp). Names contain punctuation ("C.J. Stroud", "Amon-Ra St. Brown"), so never match the full name. For common last names (Allen, Brown, Davis, Harris, Jackson, Johnson, Jones, Moore, Smith, Taylor, Thomas, Williams, Wilson) also match the first initial: ILIKE 'j%allen%'.`,
+    `If the question names a position ("running backs", "QBs", "tight ends"), filter it: player_week.position = 'RB' (QB, RB, WR, TE, K, ...). pbp has no position column; join player_week or players on the id if needed.`,
+    "Teams are abbreviations: ARI ATL BAL BUF CAR CHI CIN CLE DAL DEN DET GB HOU IND JAX KC LA(Rams) LAC LV MIA MIN NE NO NYG NYJ PHI PIT SEA SF TB TEN WAS. Relocated teams use the current code for every season.",
+  ],
+  tables: [
+    { view: "pbp", title: (i) => `one row per play, ${i.minSeason}-${i.maxSeason}`, cols: PBP_COLS },
+    { view: "player_week", title: () => "one row per player per game (box score stats)", cols: PLAYER_WEEK_COLS },
+    { view: "team_week", title: () => "one row per team per game", cols: TEAM_WEEK_COLS },
+    { view: "team_games", title: () => "one row per team per game (records, scoring, home/away)", cols: TEAM_GAMES_COLS },
+    { view: "games", title: () => "one row per game (schedule, scores, betting lines)", cols: GAMES_COLS },
+    { view: "rosters", title: () => "one row per player per season", cols: ROSTER_COLS },
+  ],
+  idioms: IDIOMS,
+  chartTeamHint:
+    "Player charts: include the latest team as ARG_MAX(posteam, game_id) AS team (pbp) or ARG_MAX(team, game_id) AS team (player_week) so points get team colors.",
+  examples: EXAMPLES,
+  errorHint(error, sql) {
+    // Most common mix-up: pbp's passer_/rusher_/receiver_ columns used on player_week.
+    if (
+      /Referenced column "(passer|rusher|receiver)_\w+"/.test(error) &&
+      /\bplayer_week\b/i.test(sql)
+    ) {
+      return "\nHint: player_week has no passer_/rusher_/receiver_ columns. Players there are player_id and player_display_name, with stats like completions, attempts, passing_yards, carries, rushing_yards, targets, receptions.";
+    }
+    return "";
+  },
+  emptyHint:
+    "It ran but returned 0 rows. Names contain punctuation (e.g. 'C.J. Stroud'), so match players on last name only (ILIKE '%stroud%'). Also check team codes, season_type and season filters.",
+};

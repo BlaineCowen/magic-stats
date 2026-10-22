@@ -7,6 +7,7 @@ import {
   labelsAreTeams,
   shortLabel,
   teamCode,
+  teamLogo,
   type ChartRow,
 } from "@/lib/nfl/chart-spec";
 import {
@@ -133,7 +134,7 @@ export function ScatterPlot({
                     return (
                       <image
                         key={i}
-                        href={`/api/charts/logo/${String(r[spec.label])}`}
+                        href={teamLogo(String(r[spec.label]), teamColors)}
                         x={sx(xv(r)) - LOGO / 2}
                         y={sy(yv(r)) - LOGO / 2}
                         width={LOGO}
