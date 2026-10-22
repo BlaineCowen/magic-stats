@@ -6,14 +6,16 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Projection } from "@/lib/nfl/fantasy";
 import { cn } from "@/lib/utils";
 import { RangeBar } from "./range-bar";
+import { SortableTable, type Column } from "./sortable-table";
 import { fmtPct, matchup, signals } from "./signals";
 
-type Tab = "breakouts" | "projections" | "usage";
+type Tab = "breakouts" | "projections" | "ros" | "usage";
 type Pos = "all" | "QB" | "RB" | "WR" | "TE";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "breakouts", label: "Breakout watch" },
-  { key: "projections", label: "Projections" },
+  { key: "projections", label: "This week" },
+  { key: "ros", label: "Rest of season" },
   { key: "usage", label: "Usage trends" },
 ];
 const POSITIONS: Pos[] = ["all", "RB", "WR", "TE", "QB"];
@@ -26,6 +28,8 @@ export type BacktestMeta = {
   breakout_auc?: number;
   breakout_base?: number;
   breakout_top10?: number;
+  ros_mae?: number;
+  ros_mae_base?: number;
   generated?: string;
 };
 
@@ -66,7 +70,7 @@ function Breakouts({ rows, meta }: { rows: Projection[]; meta: BacktestMeta }) {
   // leaves them out; the QB filter still shows them.
   const allPositions = new Set(rows.map((p) => p.position)).size > 1;
   const list = rows
-    .filter((p) => p.breakout_prob != null)
+    .filter((p) => p.breakout_prob != null && !p.out_next)
     .filter((p) => !allPositions || p.position !== "QB")
     .sort((a, b) => b.breakout_prob! - a.breakout_prob!)
     .slice(0, 30);
@@ -150,183 +154,298 @@ function Breakouts({ rows, meta }: { rows: Projection[]; meta: BacktestMeta }) {
   );
 }
 
-type SortKey = "proj" | "ceiling" | "floor";
+const nameCol: Column<Projection> = {
+  key: "name",
+  label: "Player",
+  align: "left",
+  value: (p) => p.name,
+  ascFirst: true,
+  render: (p) => <PlayerCell p={p} />,
+};
+const n1 = (v: number | null) => (v == null ? "–" : v.toFixed(1));
+const signed1 = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
 
 function Projections({ rows }: { rows: Projection[] }) {
-  const [sort, setSort] = useState<SortKey>("proj");
-  const list = [...rows].sort((a, b) => b[sort] - a[sort]).slice(0, 150);
+  const list = rows.filter((p) => !p.out_next);
   const max = Math.max(30, ...list.map((p) => p.ceiling));
-  const th =
-    "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-medium text-slate-600";
-  const sortBtn = (k: SortKey, label: string) => (
-    <button
-      type="button"
-      onClick={() => setSort(k)}
-      aria-pressed={sort === k}
-      className={cn(
-        "font-medium underline-offset-2 hover:underline",
-        sort === k ? "text-slate-900 underline" : "text-slate-600",
-        focusCls,
-      )}
-    >
-      {label}
-    </button>
-  );
+  const columns: Column<Projection>[] = [
+    nameCol,
+    {
+      key: "proj",
+      label: "Proj",
+      value: (p) => p.proj,
+      render: (p) => <span className="font-semibold">{p.proj.toFixed(1)}</span>,
+    },
+    {
+      key: "floor",
+      label: "Floor",
+      value: (p) => p.floor,
+      render: (p) => n1(p.floor),
+    },
+    {
+      key: "ceiling",
+      label: "Ceiling",
+      value: (p) => p.ceiling,
+      render: (p) => n1(p.ceiling),
+    },
+    {
+      key: "range",
+      label: "Range",
+      align: "left",
+      className: "w-1/4 min-w-32",
+      render: (p) => (
+        <RangeBar
+          floor={p.floor}
+          proj={p.proj}
+          ceiling={p.ceiling}
+          max={max}
+          color={p.team_color ?? undefined}
+        />
+      ),
+    },
+    {
+      key: "xfp_l3",
+      label: "Exp pts, last 3",
+      value: (p) => p.xfp_l3,
+      render: (p) => n1(p.xfp_l3),
+    },
+    {
+      key: "implied",
+      label: "Team total",
+      value: (p) => p.implied_total,
+      render: (p) => n1(p.implied_total),
+    },
+    {
+      key: "opp",
+      label: "Opp allows",
+      value: (p) => p.opp_pos_allowed,
+      render: (p) => n1(p.opp_pos_allowed),
+    },
+  ];
   return (
     <>
       <p className="mb-4 max-w-3xl text-sm text-slate-600">
         PPR points for each player&apos;s next game. Floor and ceiling are the
         10th and 90th percentile outcomes: one game in ten should land below the
-        floor and one in ten above the ceiling. Sort by ceiling to find upside
-        plays.
+        floor and one in ten above the ceiling. &ldquo;Opp allows&rdquo; is the
+        PPR the opponent gives up to the position per game. Click a column to
+        sort.
       </p>
       {list.length === 0 ? (
         <Empty />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr>
-                <th className={th}>Player</th>
-                <th className={cn(th, "text-right")}>
-                  {sortBtn("proj", "Proj")}
-                </th>
-                <th className={cn(th, "text-right")}>
-                  {sortBtn("floor", "Floor")}
-                </th>
-                <th className={cn(th, "text-right")}>
-                  {sortBtn("ceiling", "Ceiling")}
-                </th>
-                <th className={cn(th, "w-1/3")}>Range</th>
-                <th className={cn(th, "text-right")}>Team total</th>
-              </tr>
-            </thead>
-            <tbody className="[&>tr>td]:border-b [&>tr>td]:border-slate-100">
-              {list.map((p) => (
-                <tr key={p.player_id}>
-                  <td className="px-3 py-2">
-                    <PlayerCell p={p} />
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                    {p.proj.toFixed(1)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
-                    {p.floor.toFixed(1)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
-                    {p.ceiling.toFixed(1)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <RangeBar
-                      floor={p.floor}
-                      proj={p.proj}
-                      ceiling={p.ceiling}
-                      max={max}
-                      color={p.team_color ?? undefined}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
-                    {p.implied_total?.toFixed(1) ?? "–"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SortableTable
+          rows={list}
+          columns={columns}
+          rowKey={(p) => p.player_id}
+          defaultSort={{ key: "proj", desc: true }}
+          minWidth={820}
+        />
+      )}
+    </>
+  );
+}
+
+function RestOfSeason({
+  rows,
+  meta,
+}: {
+  rows: Projection[];
+  meta: BacktestMeta;
+}) {
+  // Deep backups (under 3 a game) only clutter a season-long view.
+  const list = rows.filter((p) => p.ros_proj != null && (p.ros_ppg ?? 0) >= 3);
+  const weeks = [...new Set(list.flatMap((p) => p.upcoming.map(([w]) => w)))]
+    .sort((a, b) => a - b)
+    .slice(0, 5);
+  const columns: Column<Projection>[] = [
+    nameCol,
+    {
+      key: "ros",
+      label: "ROS pts",
+      value: (p) => p.ros_proj,
+      render: (p) => <span className="font-semibold">{n1(p.ros_proj)}</span>,
+    },
+    {
+      key: "ppg",
+      label: "Per game",
+      value: (p) => p.ros_ppg,
+      render: (p) => n1(p.ros_ppg),
+    },
+    {
+      key: "games",
+      label: "Games",
+      value: (p) => p.ros_games,
+      render: (p) => p.ros_games ?? "–",
+    },
+    {
+      key: "sos",
+      label: "Schedule",
+      value: (p) => p.ros_sos,
+      render: (p) =>
+        p.ros_sos == null ? (
+          "–"
+        ) : (
+          <span
+            className={cn(
+              p.ros_sos >= 1
+                ? "text-turf-800"
+                : p.ros_sos <= -1
+                  ? "text-red-700"
+                  : "text-slate-600",
+            )}
+            title="Remaining opponents' PPR allowed to the position vs the league average"
+          >
+            {p.ros_sos >= 1 ? "Easy" : p.ros_sos <= -1 ? "Hard" : "Avg"} (
+            {signed1(p.ros_sos)})
+          </span>
+        ),
+    },
+    ...weeks.map(
+      (w): Column<Projection> => ({
+        key: `w${w}`,
+        label: `Wk ${w}`,
+        value: (p) => p.upcoming.find(([x]) => x === w)?.[2] ?? null,
+        render: (p) => {
+          const g = p.upcoming.find(([x]) => x === w);
+          return g ? (
+            <span>
+              {g[2].toFixed(1)}
+              <span className="block text-[11px] text-slate-400">{g[1]}</span>
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400">
+              {p.out_next && w === p.week ? "Out" : "Bye"}
+            </span>
+          );
+        },
+      }),
+    ),
+  ];
+  return (
+    <>
+      <p className="mb-4 max-w-3xl text-sm text-slate-600">
+        Projected PPR for every remaining regular-season game, added up. Each
+        game uses the player&apos;s numbers as of now with that game&apos;s
+        opponent, venue and rest; betting lines and weather only count once
+        they&apos;re out (about two weeks ahead). It assumes he plays every
+        game, so injuries will cut into these.
+        {meta.ros_mae != null &&
+          ` Backtested from weeks 4, 8 and 12 of 2021 to 2025, the per-game miss is ${meta.ros_mae.toFixed(2)} points against ${meta.ros_mae_base?.toFixed(2)} for season-to-date averages.`}
+      </p>
+      {list.length === 0 ? (
+        <Empty />
+      ) : (
+        <SortableTable
+          rows={list}
+          columns={columns}
+          rowKey={(p) => p.player_id}
+          defaultSort={{ key: "ros", desc: true }}
+          minWidth={900}
+        />
       )}
     </>
   );
 }
 
 function Usage({ rows }: { rows: Projection[] }) {
-  const withTrend = rows.filter(
+  const list = rows.filter(
     (p) => p.xfp_l3 != null && p.xfp_pg != null && p.games >= 4,
   );
   const delta = (p: Projection) => p.xfp_l3! - p.xfp_pg!;
-  const risers = [...withTrend]
-    .sort((a, b) => delta(b) - delta(a))
-    .slice(0, 15);
-  const fallers = [...withTrend]
-    .sort((a, b) => delta(a) - delta(b))
-    .slice(0, 15);
-  const change = (now: number | null, then: number | null) =>
-    now == null || then == null
-      ? "–"
-      : `${fmtPct(now)} (${now - then >= 0 ? "+" : ""}${Math.round((now - then) * 100)})`;
-  const table = (title: string, list: Projection[]) => (
-    <section>
-      <h3 className="font-display mb-2 text-xl font-semibold text-slate-900">
-        {title}
-      </h3>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs text-slate-600">
-              <th className="px-3 py-2 font-medium">Player</th>
-              <th className="px-3 py-2 text-right font-medium">
-                Expected pts, last 3
-              </th>
-              <th className="px-3 py-2 text-right font-medium">
-                Snaps, last 3
-              </th>
-              <th className="px-3 py-2 text-right font-medium">
-                Target share (carries for RBs), last 3
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((p) => {
-              const rb = p.position === "RB";
-              return (
-                <tr
-                  key={p.player_id}
-                  className="border-b border-slate-100 last:border-0"
-                >
-                  <td className="px-3 py-2">
-                    <PlayerCell p={p} />
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    <span className="font-semibold">
-                      {p.xfp_l3!.toFixed(1)}
-                    </span>{" "}
-                    <span
-                      className={cn(
-                        "text-xs",
-                        delta(p) >= 0 ? "text-turf-800" : "text-red-700",
-                      )}
-                    >
-                      {delta(p) >= 0 ? "+" : ""}
-                      {delta(p).toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
-                    {change(p.snap_l3, p.snap_pct)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
-                    {rb
-                      ? change(p.car_share_l3, p.car_share)
-                      : change(p.tgt_share_l3, p.tgt_share)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
+  const share = (p: Projection) =>
+    p.position === "RB"
+      ? [p.car_share_l3, p.car_share]
+      : [p.tgt_share_l3, p.tgt_share];
+  const diffPct = (
+    now: number | null | undefined,
+    then: number | null | undefined,
+  ) => (now == null || then == null ? null : now - then);
+  const pctCell = (
+    now: number | null | undefined,
+    then: number | null | undefined,
+  ) => {
+    const d = diffPct(now, then);
+    return now == null ? (
+      "–"
+    ) : (
+      <span>
+        {fmtPct(now)}{" "}
+        {d != null && (
+          <span
+            className={cn("text-xs", d >= 0 ? "text-turf-800" : "text-red-700")}
+          >
+            {d >= 0 ? "+" : ""}
+            {Math.round(d * 100)}
+          </span>
+        )}
+      </span>
+    );
+  };
+  const columns: Column<Projection>[] = [
+    nameCol,
+    {
+      key: "delta",
+      label: "Exp pts change",
+      value: delta,
+      render: (p) => (
+        <span
+          className={cn(
+            "font-semibold",
+            delta(p) >= 0 ? "text-turf-800" : "text-red-700",
+          )}
+        >
+          {signed1(delta(p))}
+        </span>
+      ),
+    },
+    {
+      key: "l3",
+      label: "Exp pts, last 3",
+      value: (p) => p.xfp_l3,
+      render: (p) => n1(p.xfp_l3),
+    },
+    {
+      key: "season",
+      label: "Season",
+      value: (p) => p.xfp_pg,
+      render: (p) => n1(p.xfp_pg),
+    },
+    {
+      key: "snaps",
+      label: "Snaps, last 3",
+      value: (p) => diffPct(p.snap_l3, p.snap_pct),
+      render: (p) => pctCell(p.snap_l3, p.snap_pct),
+    },
+    {
+      key: "share",
+      label: "Target share (RB: carries)",
+      value: (p) => diffPct(...(share(p) as [number | null, number | null])),
+      render: (p) => pctCell(...(share(p) as [number | null, number | null])),
+    },
+    {
+      key: "luck",
+      label: "Pts vs expected",
+      value: (p) => p.luck_pg,
+      render: (p) => (p.luck_pg == null ? "–" : signed1(p.luck_pg)),
+    },
+  ];
   return (
     <>
       <p className="mb-4 max-w-3xl text-sm text-slate-600">
-        Change in expected PPR points per game over each player&apos;s last 3
-        games compared with his season average, with snap share and target or
-        carry share for the same games (change in points in brackets). Expected
-        points measure usage, so these move before the box scores do.
+        Expected PPR points per game over each player&apos;s last 3 games
+        compared with his season, with snap and target or carry share for the
+        same games (change in percentage points). Expected points measure usage,
+        so they move before the box scores do. Sort the change column either way
+        for risers or fallers.
       </p>
-      <div className="grid gap-6 lg:grid-cols-2">
-        {table("Rising", risers)}
-        {table("Fading", fallers)}
-      </div>
+      <SortableTable
+        rows={list}
+        columns={columns}
+        rowKey={(p) => p.player_id}
+        defaultSort={{ key: "delta", desc: true }}
+        minWidth={820}
+      />
     </>
   );
 }
@@ -434,6 +553,7 @@ export function FantasyView({
       )}
       {tab === "breakouts" && <Breakouts rows={rows} meta={meta} />}
       {tab === "projections" && <Projections rows={rows} />}
+      {tab === "ros" && <RestOfSeason rows={rows} meta={meta} />}
       {tab === "usage" && <Usage rows={rows} />}
     </div>
   );

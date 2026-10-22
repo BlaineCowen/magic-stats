@@ -201,6 +201,41 @@ export default async function PlayerPageView(props: Props) {
         </section>
       )}
 
+      {p.remaining.length > 0 && (
+        <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-xl font-semibold text-slate-900">
+              Rest of season
+            </h2>
+            <span className="text-sm text-slate-500">
+              {p.remaining.reduce((a, g) => a + g.proj, 0).toFixed(1)} PPR over{" "}
+              {p.remaining.length} games
+              {proj?.ros_sos != null &&
+                ` · ${proj.ros_sos >= 1 ? "easy" : proj.ros_sos <= -1 ? "hard" : "average"} schedule`}
+            </span>
+          </div>
+          <ol className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-9">
+            {p.remaining.map((g) => (
+              <li
+                key={g.week}
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-center"
+                title={`Floor ${g.floor.toFixed(1)}, ceiling ${g.ceiling.toFixed(1)}`}
+              >
+                <div className="text-xs text-slate-500">
+                  Wk {g.week} {g.home ? "vs" : "@"} {g.opp}
+                </div>
+                <div className="font-display text-lg font-bold text-slate-900 tabular-nums">
+                  {g.proj.toFixed(1)}
+                </div>
+                <div className="text-[11px] text-slate-400 tabular-nums">
+                  {g.floor.toFixed(0)}–{g.ceiling.toFixed(0)}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-2xl font-bold text-slate-900">
           {p.season} season

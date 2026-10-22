@@ -9,8 +9,15 @@ Breakout: chance a player who isn't a weekly starter yet averages starter-level
 PPR over his next 4 games (RB/WR 15+, TE 11+, QB 20+, while scoring at least
 3 a game below that so far). Trained on weeks 4-14 of past seasons.
 
-predict writes data/nfl/projections.parquet for the site, with the three
-biggest reasons (SHAP contributions) behind each projection.
+Rest of season: every remaining game gets a projection from each player's
+numbers as of now. Betting lines and weather forecasts only exist about two
+weeks out, so those games use a "far" model trained without them. The ROS
+backtest freezes each player's numbers at weeks 4, 8 and 12 and compares the
+projected rest-of-season PPR per game with what happened.
+
+predict writes data/nfl/projections.parquet (next game, ROS totals, the three
+biggest reasons behind each projection) and projections_weekly.parquet (every
+remaining game) for the site.
 """
 
 import json
@@ -26,8 +33,15 @@ from sklearn.metrics import roc_auc_score
 HERE = Path(__file__).resolve().parent
 WORK = HERE / "work"
 OUT = HERE.parents[1] / "data" / "nfl" / "projections.parquet"
+WEEKLY_OUT = OUT.with_name("projections_weekly.parquet")
 
-ID_COLS = ["player_id", "name", "season", "game_id", "team", "opp", "position", "upcoming", "ppr", "xfp_game"]
+ID_COLS = ["player_id", "name", "season", "game_id", "team", "opp", "position", "upcoming", "ppr", "xfp_game",
+           "horizon", "out_next"]
+# Unknown more than about two weeks ahead.
+FAR_DROP = ["spread", "implied_total", "total_line", "temp_f", "wind_mph", "precip_mm"]
+# Columns that change from game to game when a player's numbers are frozen.
+CONTEXT = ["week", "home", "rest", "div_game", "primetime", "indoor", "opp_def_epa",
+           "opp_pos_allowed", "opp_games", "opp_pos_allowed_prev"]
 STARTER = {"QB": 20.0, "RB": 15.0, "WR": 15.0, "TE": 11.0}
 MARGIN = 3.0
 HORIZON = 4
@@ -149,10 +163,26 @@ def baseline(df: pd.DataFrame, col: str, prev: str) -> pd.Series:
     return df[col].fillna(df[prev]).fillna(pos_mean)
 
 
+def ros_snapshot(test: pd.DataFrame, week: int, far_feats: list[str]) -> pd.DataFrame:
+    """Rows after `week` with each player's own numbers frozen at his first game
+    after it (whose to-date features run through `week`)."""
+    t = test[test.week > week].sort_values("week")
+    first = t.groupby("player_id").head(1).set_index("player_id")
+    t = t.copy()
+    for c in far_feats:
+        if c not in CONTEXT:
+            t[c] = t.player_id.map(first[c])
+    t["vacated_tgt"] = 0.0
+    t["vacated_car"] = 0.0
+    t["snap_week"] = week
+    return t
+
+
 def backtest(df: pd.DataFrame, feats: list[str]) -> None:
     played = df[~df.upcoming].copy()
     played = with_breakout_label(played)
-    rows, bo_rows = [], []
+    far_feats = [f for f in feats if f not in FAR_DROP]
+    rows, bo_rows, ros_rows = [], [], []
     for season in range(2021, 2026):
         train = played[played.season < season]
         test = played[played.season == season].copy()
@@ -163,6 +193,15 @@ def backtest(df: pd.DataFrame, feats: list[str]) -> None:
         test["base_ppr"] = baseline(test, "ppr_pg", "ppr_prev")
         test["base_xfp"] = baseline(test, "xfp_pg", "xfp_prev")
         rows.append(test)
+
+        far_mean = xgb.XGBRegressor(
+            objective="reg:squarederror", n_estimators=600, learning_rate=0.03, max_depth=5, subsample=0.8,
+            colsample_bytree=0.8, min_child_weight=20, tree_method="hist", n_jobs=4,
+        ).fit(train[far_feats], train.ppr)
+        for week in (4, 8, 12):
+            snap = ros_snapshot(test, week, far_feats)
+            snap["pred"] = far_mean.predict(snap[far_feats])
+            ros_rows.append(snap)
 
         bt = train[train.bo_eligible & train.week.between(4, 14) & (train.future_n >= 3)]
         be = test[test.bo_eligible & test.week.between(4, 14) & (test.future_n >= 3)].copy()
@@ -188,6 +227,24 @@ def backtest(df: pd.DataFrame, feats: list[str]) -> None:
     big = r[r.ppr >= 25]
     print(f"  25+ point games: {len(big)}; ceiling caught {np.mean(big.ceiling >= 20):.1%} with a 20+ ceiling")
 
+    # Rest of season: per player per snapshot, projected vs actual PPR per game
+    # over the games he went on to play (availability is a separate question).
+    rr = pd.concat(ros_rows)
+    g = rr.groupby(["season", "snap_week", "player_id"]).agg(
+        position=("position", "first"), games=("ppr", "size"), actual=("ppr", "mean"), pred=("pred", "mean"),
+        to_date=("ppr_pg", "first"), prev=("ppr_prev", "first"), have=("games_to_date", "first"),
+    ).reset_index()
+    g = g[(g.games >= 4) & (g.have >= 2)]
+    g["base"] = g.to_date.fillna(g.prev)
+    ros_mae, ros_base = (g.pred - g.actual).abs().mean(), (g.base - g.actual).abs().mean()
+    ros_corr = g.groupby(["season", "snap_week", "position"]).apply(
+        lambda x: x.pred.corr(x.actual, method="spearman"), include_groups=False).mean()
+    base_corr = g.groupby(["season", "snap_week", "position"]).apply(
+        lambda x: x.base.corr(x.actual, method="spearman"), include_groups=False).mean()
+    print("\nRest of season (numbers frozen at weeks 4, 8, 12), PPR per game")
+    print(f"  model MAE {ros_mae:.2f} | season-to-date PPR/game {ros_base:.2f} | players {len(g)}")
+    print(f"  rank correlation within position: model {ros_corr:.3f} | to-date {base_corr:.3f}")
+
     b = pd.concat(bo_rows)
     print("\nBreakout (next 4 games at starter level), 2021-2025")
     print(f"  rows {len(b)}, base rate {b.breakout.mean():.1%}, AUC {roc_auc_score(b.breakout, b.p):.3f}")
@@ -205,6 +262,8 @@ def backtest(df: pd.DataFrame, feats: list[str]) -> None:
         "below_floor": round(float(np.mean(r.ppr < r.floor)), 3), "above_ceiling": round(float(np.mean(r.ppr > r.ceiling)), 3),
         "breakout_auc": round(roc_auc_score(b.breakout, b.p), 3), "breakout_base": round(b.breakout.mean(), 4),
         "breakout_top10": round(top.breakout.mean(), 3),
+        "ros_mae": round(float(ros_mae), 3), "ros_mae_base": round(float(ros_base), 3),
+        "ros_rank_corr": round(float(ros_corr), 3), "ros_rank_corr_base": round(float(base_corr), 3),
     }
     (WORK / "backtest.json").write_text(json.dumps(report, indent=2))
 
@@ -221,42 +280,70 @@ def reasons(model: xgb.XGBRegressor, X: pd.DataFrame, feats: list[str]) -> list[
 
 def predict(df: pd.DataFrame, feats: list[str]) -> None:
     played = with_breakout_label(df[~df.upcoming])
-    up = df[df.upcoming].copy()
+    far_feats = [f for f in feats if f not in FAR_DROP]
     mean, quant = fit_points(played[feats], played.ppr)
-    up["proj"] = mean.predict(up[feats])
-    q = quant.predict(up[feats])
-    up["floor"], up["median"], up["ceiling"] = q[:, 0], q[:, 1], q[:, 2]
+    far_mean, far_quant = fit_points(played[far_feats], played.ppr)
+
+    up = df[df.horizon > 0].copy()
+    # The full model needs the betting lines, and weather unless it's indoors.
+    near = up.implied_total.notna() & ((up.indoor == 1) | up.temp_f.notna())
+    up["model"] = np.where(near, "near", "far")
+    for m, mq, cols, mask in ((mean, quant, feats, near), (far_mean, far_quant, far_feats, ~near)):
+        if not mask.any():
+            continue
+        up.loc[mask, "proj"] = m.predict(up.loc[mask, cols])
+        q = mq.predict(up.loc[mask, cols])
+        up.loc[mask, ["floor", "median", "ceiling"]] = q
     # Quantile crossings are rare but possible; keep floor <= median <= ceiling.
     up[["floor", "median", "ceiling"]] = np.sort(up[["floor", "median", "ceiling"]].values, axis=1)
-    up["why"] = reasons(mean, up[feats], feats)
+    for c in ["proj", "floor", "median", "ceiling"]:
+        up[c] = up[c].astype("float64").round(1)
+
+    # Every remaining game, minus next week for players already ruled out.
+    weekly = up[~((up.horizon == 1) & up.out_next)]
+    weekly[["player_id", "name", "team", "position", "season", "week", "game_id", "opp", "home", "horizon",
+            "proj", "floor", "median", "ceiling", "implied_total", "model"]].sort_values(
+        ["player_id", "week"]).to_parquet(WEEKLY_OUT, index=False)
+    ros = weekly.groupby("player_id").agg(
+        ros_proj=("proj", "sum"), ros_games=("proj", "size"), ros_ppg=("proj", "mean"),
+        ros_opp_allowed=("opp_pos_allowed", "mean"),
+    )
+
+    nxt = up[up.horizon == 1].copy()
+    nxt["why"] = ""
+    for m, cols, mask in ((mean, feats, nxt.model == "near"), (far_mean, far_feats, nxt.model == "far")):
+        if mask.any():
+            nxt.loc[mask, "why"] = reasons(m, nxt.loc[mask, cols], cols)
 
     bt = played[played.bo_eligible & played.week.between(4, 14) & (played.future_n >= 3)]
     prob = calibrated_breakout(bt, feats)
-    bar = up.position.map(STARTER)
-    eligible = (up.games_to_date >= 3) & (up.ppr_pg.fillna(0) < bar - MARGIN)
-    up["breakout_prob"] = np.where(eligible, prob(up[feats]), np.nan)
+    bar = nxt.position.map(STARTER)
+    eligible = (nxt.games_to_date >= 3) & (nxt.ppr_pg.fillna(0) < bar - MARGIN)
+    nxt["breakout_prob"] = np.where(eligible, prob(nxt[feats]), np.nan)
 
-    keep = ["player_id", "name", "season", "week", "game_id", "team", "opp", "position",
+    keep = ["player_id", "name", "season", "week", "game_id", "team", "opp", "position", "out_next",
             "proj", "floor", "median", "ceiling", "breakout_prob", "why",
             "games_to_date", "ppr_pg", "xfp_pg", "ppr_l3", "xfp_l3", "luck_pg",
             "tgt_share", "tgt_share_l3", "car_share", "car_share_l3", "snap_pct", "snap_l3",
             "separation", "yac_oe", "ryoe_att", "vacated_tgt", "vacated_car",
             "implied_total", "spread", "home", "indoor", "temp_f", "wind_mph", "precip_mm",
             "opp_pos_allowed", "age", "years_exp"]
-    res = up[keep].sort_values("proj", ascending=False)
-    # float32 model output prints as 18.100000381 in SQL answers; store tidy float64.
-    for c in ["proj", "floor", "median", "ceiling"]:
-        res[c] = res[c].astype("float64").round(1)
+    res = nxt[keep].merge(ros, left_on="player_id", right_index=True, how="left")
+    # Schedule strength: remaining opponents' PPR allowed to the position vs the league.
+    league = res.groupby("position").ros_opp_allowed.transform("mean")
+    res["ros_sos"] = (res.ros_opp_allowed - league).round(2)
+    res["ros_proj"] = res.ros_proj.round(1)
+    res["ros_ppg"] = res.ros_ppg.round(2)
     res["breakout_prob"] = res.breakout_prob.astype("float64").round(3)
+    res = res.drop(columns="ros_opp_allowed").sort_values("proj", ascending=False)
     res.to_parquet(OUT, index=False)
     # Backtest scores travel with the projections so the site can show them.
     meta = json.loads((WORK / "backtest.json").read_text()) if (WORK / "backtest.json").exists() else {}
     meta["generated"] = pd.Timestamp.now(tz="UTC").isoformat()
     OUT.with_name("projections-meta.json").write_text(json.dumps(meta))
-    print(f"wrote {len(res)} projections for {res.season.iat[0]} week {int(res.week.min())}-{int(res.week.max())} to {OUT}")
-    print(res.head(10)[["name", "position", "opp", "proj", "floor", "ceiling"]].round(1).to_string(index=False))
-    b = res[res.breakout_prob.notna()].sort_values("breakout_prob", ascending=False)
-    print(b.head(10)[["name", "position", "ppr_pg", "xfp_l3", "breakout_prob", "ceiling"]].round(2).to_string(index=False))
+    print(f"wrote {len(res)} players ({int(res.out_next.sum())} out next game) and {len(weekly)} game projections")
+    print(res.head(8)[["name", "position", "opp", "proj", "floor", "ceiling", "ros_proj", "ros_games"]].to_string(index=False))
+    print(res.sort_values("ros_proj", ascending=False).head(8)[["name", "position", "ros_proj", "ros_games", "ros_ppg", "ros_sos"]].to_string(index=False))
 
 
 if __name__ == "__main__":

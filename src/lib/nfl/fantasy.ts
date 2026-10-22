@@ -19,6 +19,8 @@ export type Projection = {
   opp: string;
   home: boolean;
   week: number;
+  /** Listed Out or Doubtful for this game: no next-game projection. */
+  out_next: boolean;
   proj: number;
   floor: number;
   median: number;
@@ -52,6 +54,14 @@ export type Projection = {
   years_exp: number | null;
   headshot: string | null;
   team_color: string | null;
+  /** Rest of season, this week included unless he's out. */
+  ros_proj: number | null;
+  ros_games: number | null;
+  ros_ppg: number | null;
+  /** Remaining opponents' PPR allowed to the position minus the league average. */
+  ros_sos: number | null;
+  /** Next few games: [week, opponent ("@KC" when away), projection]. */
+  upcoming: [number, string, number][];
 };
 
 function toProjection(r: Row): Projection {
@@ -69,6 +79,7 @@ function toProjection(r: Row): Projection {
     opp: String(r.opp),
     home: Number(r.home) === 1,
     week: Number(r.week),
+    out_next: r.out_next === true,
     proj: Number(r.proj),
     floor: Number(r.floor),
     median: Number(r.median),
@@ -102,12 +113,29 @@ function toProjection(r: Row): Projection {
     years_exp: num(r.years_exp),
     headshot: str(r.headshot),
     team_color: str(r.team_color),
+    ros_proj: num(r.ros_proj),
+    ros_games: num(r.ros_games),
+    ros_ppg: num(r.ros_ppg),
+    ros_sos: num(r.ros_sos),
+    upcoming: String(r.upcoming ?? "")
+      .split("|")
+      .filter(Boolean)
+      .map((x) => {
+        const [w, o, v] = x.split(":");
+        return [Number(w), o!, Number(v)] as [number, string, number];
+      }),
   };
 }
 
 const PROJ_SQL = `
-  SELECT p.*, pl.headshot, t.team_color
+  WITH nxt AS (
+    SELECT player_id,
+      string_agg(week || ':' || CASE WHEN home = 1 THEN '' ELSE '@' END || opp || ':' || proj, '|' ORDER BY week) AS upcoming
+    FROM projections_weekly WHERE horizon <= 5 GROUP BY player_id
+  )
+  SELECT p.*, pl.headshot, t.team_color, nxt.upcoming
   FROM projections p
+  LEFT JOIN nxt USING (player_id)
   LEFT JOIN (SELECT gsis_id, any_value(headshot) AS headshot FROM players GROUP BY gsis_id) pl
     ON pl.gsis_id = p.player_id
   LEFT JOIN teams t ON t.team_abbr = p.team`;
@@ -144,6 +172,16 @@ export type PlayerWeek = {
   ryoe_att: number | null;
 };
 
+export type WeekProjection = {
+  week: number;
+  opp: string;
+  home: boolean;
+  proj: number;
+  floor: number;
+  ceiling: number;
+  implied_total: number | null;
+};
+
 export type PlayerPage = {
   id: string;
   name: string;
@@ -161,6 +199,7 @@ export type PlayerPage = {
   rank: { ppr: number | null; xfp: number | null; of: number } | null;
   cap_hit: number | null;
   projection: Projection | null;
+  remaining: WeekProjection[];
 };
 
 const ID_RE = /^[0-9]{2}-[0-9]{7}$/;
@@ -261,6 +300,22 @@ export async function getPlayerPage(
     }))
   ).rows[0];
 
+  const remaining = (
+    await runSafeSelect(`
+      SELECT week, opp, home, proj, floor, ceiling, implied_total
+      FROM projections_weekly WHERE player_id = ${lit} ORDER BY week`).catch(
+      () => ({ rows: [] as Row[] }),
+    )
+  ).rows.map((r) => ({
+    week: Number(r.week),
+    opp: String(r.opp),
+    home: Number(r.home) === 1,
+    proj: Number(r.proj),
+    floor: Number(r.floor),
+    ceiling: Number(r.ceiling),
+    implied_total: num(r.implied_total),
+  }));
+
   const age = bio.birth_date
     ? (Date.now() - new Date(String(bio.birth_date)).getTime()) /
       (365.25 * 86400e3)
@@ -290,6 +345,7 @@ export async function getPlayerPage(
       : null,
     cap_hit: cap ? num(cap.cap_number) : null,
     projection: proj ? toProjection(proj) : null,
+    remaining,
   };
 }
 

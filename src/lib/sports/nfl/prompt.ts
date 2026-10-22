@@ -320,9 +320,25 @@ const PROJ_COLS: Col[] = [
   ],
   ["vacated_tgt, vacated_car", "team share freed up by teammates who are out"],
   ["implied_total, spread, temp_f, wind_mph, indoor", "game context"],
+  [
+    "ros_proj, ros_games, ros_ppg",
+    "rest-of-season projected PPR total, games left, per game",
+  ],
+  [
+    "ros_sos",
+    "remaining schedule: opponents' PPR allowed to the position minus league average (positive = easy)",
+  ],
+  ["out_next", "true if ruled out of his next game"],
+];
+const PROJ_WEEKLY_COLS: Col[] = [
+  [
+    "player_id, name, team, position, season, week, opp, home, horizon",
+    "horizon 1 = next game",
+  ],
+  ["proj, floor, median, ceiling", "projected PPR for that game"],
 ];
 
-const FUZZY = `- projections, "who should I start", ceiling, upside, sleepers, breakouts this week: the projections table (this week only). Highest ceiling = ORDER BY ceiling DESC; breakout candidates = ORDER BY breakout_prob DESC.
+const FUZZY = `- projections, "who should I start", ceiling, upside, sleepers, breakouts this week: the projections table (this week only). Highest ceiling = ORDER BY ceiling DESC; breakout candidates = ORDER BY breakout_prob DESC. Rest of season = ros_proj (projections); a specific future week = projections_weekly.
 - expected fantasy points / "due for regression" / lucky or unlucky in fantasy: xfp. SUM(fantasy_points_diff) per player; most negative = unlucky (due to bounce back), most positive = lucky (due to fall off). Show games, opportunities (targets + carries), actual and expected points.
 - separation, cushion, YAC over expected, time to throw, aggressiveness, rush yards over expected (RYOE), stacked boxes: the ngs_* tables (week 0 for season numbers).
 - play action, motion, RPOs, screens, blitzes, contested or catchable targets, drops, created receptions, interception-worthy throws: pbp JOIN ftn USING (game_id, play_id), 2022 on.
@@ -484,6 +500,11 @@ export const nflPrompt: SportPrompt = {
       title: () =>
         "model projections for each skill player's next game (refreshed daily)",
       cols: PROJ_COLS,
+    },
+    {
+      view: "projections_weekly",
+      title: () => "projection for every remaining game of the season",
+      cols: PROJ_WEEKLY_COLS,
     },
     {
       view: "xfp",

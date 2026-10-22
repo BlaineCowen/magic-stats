@@ -328,7 +328,12 @@ def main() -> None:
         otf.team_def_epa AS opp_def_epa,
         dp.opp_pos_allowed, dp.opp_games, dpp.opp_pos_allowed_prev,
         q.qb_epa, q.qb_dropbacks,
-        coalesce(v.vacated_tgt, 0) AS vacated_tgt, coalesce(v.vacated_car, 0) AS vacated_car
+        coalesce(v.vacated_tgt, 0) AS vacated_tgt, coalesce(v.vacated_car, 0) AS vacated_car,
+        -- Listed Out or Doubtful for the next game: no next-game projection,
+        -- but the rest of his season still counts.
+        r.upcoming AND EXISTS (
+          SELECT 1 FROM out_now o WHERE o.player_id = r.player_id AND o.season = r.season AND o.week = r.week
+        ) AS out_next
       FROM rows r
       JOIN team_games tg ON tg.game_id = r.game_id AND tg.team = r.team
       LEFT JOIN players pl ON pl.gsis_id = r.player_id
@@ -340,14 +345,49 @@ def main() -> None:
       LEFT JOIN def_pos dp ON dp.defense = tg.opp AND dp.position = r.position AND dp.season = r.season AND dp.week = r.week
       LEFT JOIN def_pos_prev dpp ON dpp.defense = tg.opp AND dpp.position = r.position AND dpp.season = r.season
       LEFT JOIN qb_form q ON q.team = r.team AND q.game_id = r.game_id
-      LEFT JOIN vacated v ON v.team = r.team AND v.game_id = r.game_id
-      WHERE NOT (r.upcoming AND EXISTS (
-        SELECT 1 FROM out_now o WHERE o.player_id = r.player_id AND o.season = r.season AND o.week = r.week))""")
+      LEFT JOIN vacated v ON v.team = r.team AND v.game_id = r.game_id""")
+
+    # Later games for the rest-of-season view: each player's numbers as of now
+    # (copied from his next-game row) with that game's own opponent, venue,
+    # rest, betting lines and weather. Lines and forecasts only exist about two
+    # weeks out, so most of these have NULLs there (train.py uses a model
+    # without those inputs for them). Teammates' injuries are unknown that far
+    # ahead, so vacated share is 0.
+    con.execute("""
+      CREATE TABLE future_games AS
+      SELECT *, row_number() OVER (PARTITION BY team ORDER BY gameday, week) AS horizon
+      FROM team_games
+      WHERE NOT played AND season = (SELECT max(season) FROM team_games)""")
+    con.execute("""
+      CREATE TABLE features_future AS
+      SELECT f.* REPLACE (
+          fg.game_id AS game_id, fg.week AS week, fg.opp AS opp, fg.home AS home,
+          fg.spread AS spread, fg.implied_total AS implied_total, fg.total_line AS total_line,
+          fg.rest AS rest, fg.div_game AS div_game, fg.primetime AS primetime,
+          fg.indoor AS indoor, fg.temp_f AS temp_f, fg.wind_mph AS wind_mph, fg.precip_mm AS precip_mm,
+          otf.team_def_epa AS opp_def_epa, dp.opp_pos_allowed AS opp_pos_allowed, dp.opp_games AS opp_games,
+          dpp.opp_pos_allowed_prev AS opp_pos_allowed_prev,
+          0.0 AS vacated_tgt, 0.0 AS vacated_car, false AS out_next
+        ),
+        fg.horizon
+      FROM features f
+      JOIN future_games fg ON fg.team = f.team AND fg.horizon > 1
+      LEFT JOIN team_form otf ON otf.team = fg.opp AND otf.game_id = fg.game_id
+      LEFT JOIN def_pos dp ON dp.defense = fg.opp AND dp.position = f.position
+        AND dp.season = fg.season AND dp.week = fg.week
+      LEFT JOIN def_pos_prev dpp ON dpp.defense = fg.opp AND dpp.position = f.position
+        AND dpp.season = fg.season
+      WHERE f.upcoming""")
+    con.execute("""
+      CREATE TABLE all_rows AS
+      SELECT *, CASE WHEN upcoming THEN 1 ELSE 0 END AS horizon FROM features
+      UNION ALL BY NAME
+      SELECT * FROM features_future""")
 
     WORK.mkdir(parents=True, exist_ok=True)
     out = WORK / "player_games.parquet"
-    con.execute(f"COPY features TO '{out}' (FORMAT parquet)")
-    print(con.sql("SELECT upcoming, count(*) n, count(DISTINCT season) seasons FROM features GROUP BY 1").df())
+    con.execute(f"COPY all_rows TO '{out}' (FORMAT parquet)")
+    print(con.sql("SELECT horizon > 0 AS upcoming, count(*) n, max(horizon) max_horizon FROM all_rows GROUP BY 1").df())
 
 
 if __name__ == "__main__":
