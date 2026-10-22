@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseScoreboard } from "../../lib/pickem/scoreboard";
+import { parseScoreboard } from "./scoreboard";
 import { pickStatus, tally } from "./tally";
 
 test("tally splits points by where each pick stands", () => {

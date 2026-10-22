@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Entry, Side } from "@/lib/pickem/optimizer";
 import type { PickemGame } from "@/lib/pickem/scoreboard";
+import type { Pool } from "@/lib/pickem/store";
 
 /**
- * Browser storage for the pool settings and each week's entry. The keys match
- * the original /nfl/pickem page on the same domain, so picks made there show
- * up here.
+ * Pool settings and each week's entry. Signed in, the entry lives on the
+ * server (so phone and laptop agree, and pools can see it); signed out, in
+ * this browser under the same keys the original /nfl/pickem page used. The
+ * first time a signed-in user opens a week the server has nothing for, the
+ * browser's copy is uploaded.
  */
 
 export type Scoring = "rank1-highest" | "points-equal-rank";
@@ -32,7 +35,12 @@ const DEFAULT_SETTINGS: Settings = {
   scoring: "rank1-highest",
   hedgeMode: true,
 };
-const EMPTY_WEEK: WeekState = { office: {}, picks: {}, points: {}, pinned: [] };
+export const EMPTY_WEEK: WeekState = {
+  office: {},
+  picks: {},
+  points: {},
+  pinned: [],
+};
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -51,15 +59,102 @@ function save(key: string, value: unknown) {
   }
 }
 
-export function usePickemState(season: number | null, week: number | null) {
+export type Me = { user: string | null; pools: Pool[] };
+
+/** Who's signed in (null while loading). */
+export function useMe() {
+  const [me, setMe] = useState<Me | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      const r = await fetch("/api/pickem/me");
+      setMe(r.ok ? ((await r.json()) as Me) : { user: null, pools: [] });
+    } catch {
+      setMe({ user: null, pools: [] });
+    }
+  }, []);
+  useEffect(() => void refresh(), [refresh]);
+  return { me, refresh };
+}
+
+const hasPicks = (s: WeekState) =>
+  Object.keys(s.picks).length > 0 || Object.keys(s.points).length > 0;
+
+export function usePickemState(
+  season: number | null,
+  week: number | null,
+  user: string | null | undefined,
+) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [state, setState] = useState<WeekState>(EMPTY_WEEK);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => setSettings(load(SETTINGS_KEY, DEFAULT_SETTINGS)), []);
+
   useEffect(() => {
-    if (season !== null && week !== null)
-      setState(load(weekKey(season, week), EMPTY_WEEK));
-  }, [season, week]);
+    if (season === null || week === null || user === undefined) return;
+    const local = load(weekKey(season, week), EMPTY_WEEK);
+    if (!user) {
+      setState(local);
+      return;
+    }
+    let stop = false;
+    void (async () => {
+      try {
+        const r = await fetch(
+          `/api/pickem/entry?season=${season}&week=${week}`,
+        );
+        const body = (await r.json()) as { entry: WeekState | null };
+        if (stop) return;
+        if (body.entry) setState({ ...EMPTY_WEEK, ...body.entry });
+        else {
+          setState(local);
+          if (hasPicks(local)) void push(season, week, local);
+        }
+      } catch {
+        if (!stop) setState(local);
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+    // push is stable for the week; listing it would refetch on every save
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, week, user]);
+
+  const push = useCallback(async (s: number, w: number, value: WeekState) => {
+    setSaving(true);
+    try {
+      const r = await fetch("/api/pickem/entry", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ season: s, week: w, ...value }),
+      });
+      const body = (await r.json()) as { entry?: WeekState; error?: string };
+      if (!r.ok) {
+        setSaveError(body.error ?? "Couldn't save your picks.");
+        if (body.entry) setState({ ...EMPTY_WEEK, ...body.entry });
+      } else {
+        setSaveError("");
+        // The server keeps games that have kicked off as they were.
+        if (body.entry) {
+          const server = body.entry;
+          setState((cur) => ({
+            ...cur,
+            picks: server.picks,
+            points: server.points,
+          }));
+        }
+      }
+    } catch {
+      setSaveError(
+        "Couldn't reach the server; your picks are saved in this browser.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, []);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setSettings((s) => {
@@ -73,14 +168,23 @@ export function usePickemState(season: number | null, week: number | null) {
     (fn: (s: WeekState) => WeekState) => {
       setState((s) => {
         const next = fn(s);
-        if (season !== null && week !== null) save(weekKey(season, week), next);
+        if (season !== null && week !== null) {
+          save(weekKey(season, week), next);
+          if (user) {
+            clearTimeout(pending.current);
+            pending.current = setTimeout(
+              () => void push(season, week, next),
+              600,
+            );
+          }
+        }
         return next;
       });
     },
-    [season, week],
+    [season, week, user, push],
   );
 
-  return { settings, updateSettings, state, update };
+  return { settings, updateSettings, state, update, saveError, saving };
 }
 
 /**

@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Minus, Pin, Plus } from "lucide-react";
 import type { GameResult, Side } from "@/lib/pickem/optimizer";
 import type { PickemGame, TeamSide } from "@/lib/pickem/scoreboard";
 import { cn } from "@/lib/utils";
-import { pickChance, pickStatus, type PickStatus } from "./tally";
+import { pickChance, pickStatus, type PickStatus } from "@/lib/pickem/tally";
 
 const focusCls =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-turf-700";
@@ -35,6 +35,7 @@ function TeamButton({
   chance,
   state,
   hasBall,
+  locked,
   onPick,
 }: {
   t: TeamSide;
@@ -43,6 +44,7 @@ function TeamButton({
   chance: number;
   state: PickemGame["state"];
   hasBall: boolean;
+  locked: boolean;
   onPick: (s: Side) => void;
 }) {
   const color = t.color ?? "#1e5a3a";
@@ -50,6 +52,7 @@ function TeamButton({
     <button
       type="button"
       aria-pressed={chosen}
+      disabled={locked}
       onClick={() => onPick(side)}
       className={cn(
         "relative flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border-2 px-2.5 py-2 text-left transition-colors sm:px-3",
@@ -109,8 +112,10 @@ export function GameCard({
   points,
   n,
   office,
+  officeFromPool = false,
   result,
   pinned,
+  locked,
   onPick,
   onMove,
   onOffice,
@@ -123,8 +128,12 @@ export function GameCard({
   points: number;
   n: number;
   office: { home: number; away: number };
+  /** Counts come from the pool's real picks: shown, not edited. */
+  officeFromPool?: boolean;
   result: GameResult | undefined;
   pinned: boolean;
+  /** Kicked off: pick and points can't change. */
+  locked: boolean;
   onPick: (s: Side) => void;
   onMove: (dir: 1 | -1) => void;
   onOffice: (o: { home: number; away: number }) => void;
@@ -197,6 +206,7 @@ export function GameCard({
           chance={1 - g.pHome}
           state={g.state}
           hasBall={live && g.possession === "away"}
+          locked={locked}
           onPick={onPick}
         />
         <TeamButton
@@ -206,6 +216,7 @@ export function GameCard({
           chance={g.pHome}
           state={g.state}
           hasBall={live && g.possession === "home"}
+          locked={locked}
           onPick={onPick}
         />
       </div>
@@ -287,7 +298,7 @@ export function GameCard({
           <button
             type="button"
             onClick={() => onMove(1)}
-            disabled={points >= n}
+            disabled={locked || points >= n}
             aria-label="More confident"
             className={cn(
               "rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-30",
@@ -299,7 +310,7 @@ export function GameCard({
           <button
             type="button"
             onClick={() => onMove(-1)}
-            disabled={points <= 1}
+            disabled={locked || points <= 1}
             aria-label="Less confident"
             className={cn(
               "rounded-md border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50 disabled:opacity-30",
@@ -318,10 +329,12 @@ export function GameCard({
             focusCls,
           )}
         >
-          Office picks
+          {officeFromPool ? "Your pool" : "Office picks"}
           {officeTotal > 0
             ? `: ${g.away.abbr} ${office.away}, ${g.home.abbr} ${office.home}`
-            : " (tap to enter)"}
+            : officeFromPool
+              ? ": nobody else has picked yet"
+              : " (tap to enter)"}
           {result && officeTotal > 0 && (
             <span
               className={cn(
@@ -339,56 +352,61 @@ export function GameCard({
             </span>
           )}
         </summary>
-        <div className="mt-2 flex flex-wrap items-center gap-4">
-          {(["away", "home"] as const).map((side) => (
-            <div key={side} className="flex items-center gap-1.5">
-              <span className="w-9 font-semibold text-slate-700">
-                {g[side].abbr}
-              </span>
-              <button
-                type="button"
-                aria-label={`One fewer picking ${g[side].abbr}`}
-                onClick={() =>
-                  onOffice({ ...office, [side]: Math.max(0, office[side] - 1) })
-                }
-                className={cn(
-                  "rounded-md border border-slate-200 p-1 hover:bg-slate-50",
-                  focusCls,
-                )}
-              >
-                <Minus className="size-3.5" aria-hidden />
-              </button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={office[side] || ""}
-                placeholder="0"
-                onChange={(e) =>
-                  onOffice({
-                    ...office,
-                    [side]: Math.max(0, Number(e.target.value) || 0),
-                  })
-                }
-                aria-label={`People picking ${g[side].abbr}`}
-                className="w-12 rounded-md border border-slate-300 px-1.5 py-1 text-center tabular-nums"
-              />
-              <button
-                type="button"
-                aria-label={`One more picking ${g[side].abbr}`}
-                onClick={() =>
-                  onOffice({ ...office, [side]: office[side] + 1 })
-                }
-                className={cn(
-                  "rounded-md border border-slate-200 p-1 hover:bg-slate-50",
-                  focusCls,
-                )}
-              >
-                <Plus className="size-3.5" aria-hidden />
-              </button>
-            </div>
-          ))}
-        </div>
+        {!officeFromPool && (
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            {(["away", "home"] as const).map((side) => (
+              <div key={side} className="flex items-center gap-1.5">
+                <span className="w-9 font-semibold text-slate-700">
+                  {g[side].abbr}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`One fewer picking ${g[side].abbr}`}
+                  onClick={() =>
+                    onOffice({
+                      ...office,
+                      [side]: Math.max(0, office[side] - 1),
+                    })
+                  }
+                  className={cn(
+                    "rounded-md border border-slate-200 p-1 hover:bg-slate-50",
+                    focusCls,
+                  )}
+                >
+                  <Minus className="size-3.5" aria-hidden />
+                </button>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  value={office[side] || ""}
+                  placeholder="0"
+                  onChange={(e) =>
+                    onOffice({
+                      ...office,
+                      [side]: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                  aria-label={`People picking ${g[side].abbr}`}
+                  className="w-12 rounded-md border border-slate-300 px-1.5 py-1 text-center tabular-nums"
+                />
+                <button
+                  type="button"
+                  aria-label={`One more picking ${g[side].abbr}`}
+                  onClick={() =>
+                    onOffice({ ...office, [side]: office[side] + 1 })
+                  }
+                  className={cn(
+                    "rounded-md border border-slate-200 p-1 hover:bg-slate-50",
+                    focusCls,
+                  )}
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </details>
     </li>
   );

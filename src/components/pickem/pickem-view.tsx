@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Toaster } from "react-hot-toast";
 import {
   ChevronLeft,
   ChevronRight,
+  CloudCheck,
   RotateCcw,
   Settings2,
   Sparkles,
+  Users,
 } from "lucide-react";
 import {
   optimize,
@@ -19,8 +22,9 @@ import {
 import { isActive, type PickemWeek } from "@/lib/pickem/scoreboard";
 import { cn } from "@/lib/utils";
 import { GameCard } from "./game-card";
-import { currentEntry, usePickemState, type Scoring } from "./state";
-import { tally } from "./tally";
+import { Leaderboard, PoolForms, type PoolBoard } from "./pool-panel";
+import { currentEntry, useMe, usePickemState, type Scoring } from "./state";
+import { tally } from "@/lib/pickem/tally";
 
 const focusCls =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-turf-700";
@@ -63,10 +67,37 @@ export function PickemView() {
   const [result, setResult] = useState<OptimizeResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const { settings, updateSettings, state, update } = usePickemState(
-    target?.season ?? null,
-    target?.week ?? null,
-  );
+  const { me, refresh: refreshMe } = useMe();
+  const user = me === null ? undefined : me.user;
+  const { settings, updateSettings, state, update, saveError, saving } =
+    usePickemState(target?.season ?? null, target?.week ?? null, user);
+  const [poolId, setPoolId] = useState<string | null>(null);
+  const [board, setBoard] = useState<PoolBoard | null>(null);
+  const [showPoolForms, setShowPoolForms] = useState(false);
+
+  // Remember the pool you last looked at.
+  useEffect(() => {
+    if (!me?.pools.length) return;
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem("nfl-pickem:pool");
+    } catch {
+      // ignore
+    }
+    setPoolId((cur) =>
+      cur && me.pools.some((p) => p.id === cur)
+        ? cur
+        : (me.pools.find((p) => p.id === saved)?.id ?? me.pools[0]!.id),
+    );
+  }, [me]);
+  const choosePool = (id: string | null) => {
+    setPoolId(id);
+    try {
+      if (id) window.localStorage.setItem("nfl-pickem:pool", id);
+    } catch {
+      // ignore
+    }
+  };
 
   // Load the week, and keep scores fresh: every 30 seconds while games are on.
   useEffect(() => {
@@ -115,6 +146,26 @@ export function PickemView() {
 
   useEffect(() => setResult(null), [target?.season, target?.week]);
 
+  // The pool's board refreshes whenever the scores do.
+  useEffect(() => {
+    if (!user || !poolId || !target) {
+      setBoard(null);
+      return;
+    }
+    let stop = false;
+    void fetch(
+      `/api/pickem/pools/${poolId}?season=${target.season}&week=${target.week}`,
+    )
+      .then(async (r) => (r.ok ? ((await r.json()) as PoolBoard) : null))
+      .then((b) => {
+        if (!stop) setBoard(b);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [user, poolId, target, data?.fetched, saving]);
+
   const games = useMemo(
     () => (data && target && data.week === target.week ? data.games : []),
     [data, target],
@@ -137,10 +188,16 @@ export function PickemView() {
   const shownRank = (pts: number) =>
     settings.scoring === "rank1-highest" ? n + 1 - pts : pts;
 
+  // In a pool, the other members' actual picks are the office.
+  const poolCounts =
+    board && board.pool.members.length > 1 ? board.counts : null;
+  const poolSize = poolCounts
+    ? Math.max(2, board!.pool.members.length)
+    : settings.poolSize;
   const optGames: OptGame[] = useMemo(
     () =>
       games.map((g) => {
-        const o = state.office[g.id];
+        const o = poolCounts?.[g.id] ?? state.office[g.id];
         const total = (o?.home ?? 0) + (o?.away ?? 0);
         return {
           id: g.id,
@@ -148,7 +205,7 @@ export function PickemView() {
           officeHomeShare: total > 0 ? o!.home / total : g.pHome,
         };
       }),
-    [games, state.office],
+    [games, state.office, poolCounts],
   );
 
   const runOptimizer = useCallback(() => {
@@ -165,7 +222,7 @@ export function PickemView() {
           update((s) => ({ ...s, picks: e.picks, points: e.points }));
           return;
         }
-        const r = optimize(optGames, settings.poolSize, {
+        const r = optimize(optGames, poolSize, {
           pinned: new Set(state.pinned),
           current: entry,
         });
@@ -175,9 +232,29 @@ export function PickemView() {
         setBusy(false);
       }
     }, 30);
-  }, [optGames, settings, state.pinned, state.picks, entry, update]);
+  }, [optGames, settings, poolSize, state.pinned, state.picks, entry, update]);
+
+  // Games that have kicked off can't be changed (the server holds them too).
+  const now = Date.now();
+  const locked = useMemo(
+    () =>
+      new Set(
+        games
+          .filter((g) => g.state !== "pre" || Date.parse(g.kickoff) <= now)
+          .map((g) => g.id),
+      ),
+    // re-evaluated with each scoreboard refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [games],
+  );
+  const unsaved =
+    !!user &&
+    games.some(
+      (g) => !locked.has(g.id) && !(state.picks[g.id] && state.points[g.id]),
+    );
 
   const setPick = (id: string, side: Side) =>
+    !locked.has(id) &&
     update((s) => ({
       ...s,
       picks: { ...entry.picks, ...s.picks, [id]: side },
@@ -190,7 +267,7 @@ export function PickemView() {
     const mine = entry.points[id];
     if (mine === undefined) return;
     const other = games.find((g) => entry.points[g.id] === mine + dir);
-    if (!other) return;
+    if (!other || locked.has(id) || locked.has(other.id)) return;
     update((s) => ({
       ...s,
       picks: { ...entry.picks, ...s.picks },
@@ -277,7 +354,9 @@ export function PickemView() {
           )}
         >
           <Settings2 className="size-4" aria-hidden />
-          Pool: {settings.poolSize} people
+          {poolCounts
+            ? `${board!.pool.name}: ${poolSize} people`
+            : `Pool: ${settings.poolSize} people`}
         </button>
         <button
           type="button"
@@ -348,6 +427,119 @@ export function PickemView() {
               </span>
             </span>
           </label>
+        </div>
+      )}
+
+      {me && !me.user && (
+        <p className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          Your picks are saved in this browser only.{" "}
+          <a
+            href="/outpost.goauthentik.io/start?rd=/magic-stats/pickem"
+            className="text-turf-800 font-semibold underline underline-offset-2"
+          >
+            Sign in
+          </a>{" "}
+          to keep them on every device and play in a pool with friends.
+        </p>
+      )}
+
+      {me?.user && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1 text-slate-500">
+            <CloudCheck className="size-4" aria-hidden />
+            {saving ? "Saving…" : `Saved to ${me.user}`}
+          </span>
+          {me.pools.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={poolId === p.id}
+              onClick={() => choosePool(p.id)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-medium",
+                focusCls,
+                poolId === p.id
+                  ? "border-turf-950 bg-turf-950 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400",
+              )}
+            >
+              <Users className="size-3.5" aria-hidden />
+              {p.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setShowPoolForms((v) => !v)}
+            aria-expanded={showPoolForms}
+            className={cn(
+              "text-turf-800 font-medium hover:underline",
+              focusCls,
+            )}
+          >
+            {me.pools.length ? "New or join a pool" : "Start or join a pool"}
+          </button>
+        </div>
+      )}
+      {showPoolForms && me?.user && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+          <PoolForms
+            onDone={(p) => {
+              setShowPoolForms(false);
+              choosePool(p.id);
+              void refreshMe();
+            }}
+          />
+        </div>
+      )}
+
+      {unsaved && n > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>
+            Some of these picks are only suggestions and aren&apos;t saved to
+            your account yet.
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              update((s) => ({
+                ...s,
+                picks: entry.picks,
+                points: entry.points,
+              }))
+            }
+            className={cn(
+              "rounded-md bg-amber-900 px-3 py-1.5 font-semibold text-white hover:bg-amber-950",
+              focusCls,
+            )}
+          >
+            Save these picks
+          </button>
+        </div>
+      )}
+      {saveError && (
+        <p
+          role="alert"
+          className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {saveError}
+        </p>
+      )}
+
+      {board && me?.user && (
+        <div className="mt-4">
+          <Leaderboard
+            board={board}
+            me={me.user}
+            games={games}
+            onLeave={() => {
+              void fetch(`/api/pickem/pools/${board.pool.id}`, {
+                method: "DELETE",
+              }).then(() => {
+                setPoolId(null);
+                void refreshMe();
+              });
+            }}
+          />
         </div>
       )}
 
@@ -435,9 +627,14 @@ export function PickemView() {
                 points={pts}
                 shownRank={shownRank(pts)}
                 n={n}
-                office={state.office[g.id] ?? { home: 0, away: 0 }}
+                office={
+                  poolCounts?.[g.id] ??
+                  state.office[g.id] ?? { home: 0, away: 0 }
+                }
+                officeFromPool={!!poolCounts}
                 result={perGame[g.id]}
                 pinned={state.pinned.includes(g.id)}
+                locked={locked.has(g.id)}
                 onPick={(side) => setPick(g.id, side)}
                 onMove={(dir) => move(g.id, dir)}
                 onOffice={(o) =>
@@ -454,6 +651,7 @@ export function PickemView() {
           })}
         </ol>
       )}
+      <Toaster position="bottom-center" />
     </div>
   );
 }
