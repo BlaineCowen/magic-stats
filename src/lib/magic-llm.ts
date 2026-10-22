@@ -23,6 +23,19 @@ export function llmUrl(path: string): string {
   return `${getLlmRootUrl()}${path}`;
 }
 
+/** OpenRouter (https://openrouter.ai/api/v1) rather than LM Studio on the Mac mini. */
+export function usesOpenRouter(): boolean {
+  return /openrouter\.ai/.test(getOpenAIBaseUrl());
+}
+
+/** The OpenAI-compatible chat endpoint, whether or not the base URL already ends in /v1. */
+export function chatCompletionsUrl(): string {
+  const base = getOpenAIBaseUrl();
+  return /\/v1$/.test(base)
+    ? `${base}/chat/completions`
+    : `${base}/v1/chat/completions`;
+}
+
 export function getAIProvider(): "gemini" | "openai-compatible" {
   const p = process.env.MAGIC_STATS_AI_PROVIDER?.toLowerCase();
   if (p === "gemini") return "gemini";
@@ -54,6 +67,13 @@ function authHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${process.env.LLM_API_KEY ?? "lm-studio"}`,
+    // OpenRouter attributes requests to the app with these; LM Studio ignores them
+    ...(usesOpenRouter()
+      ? {
+          "HTTP-Referer": "https://projects.blainecowen.com/magic-stats",
+          "X-Title": "magic-stats",
+        }
+      : {}),
   };
 }
 
@@ -125,7 +145,7 @@ export async function openaiCompatibleChat(
   for (let attempt = 0; attempt < OPENAI_RETRIES; attempt++) {
     let res: Response;
     try {
-      res = await fetch(llmUrl("/v1/chat/completions"), {
+      res = await fetch(chatCompletionsUrl(), {
         method: "POST",
         headers: authHeaders(),
         body: JSON.stringify({
@@ -196,6 +216,7 @@ export async function nativeChat(opts: {
   temperature?: number;
   timeoutMs?: number;
 }): Promise<{ content: string; reasoning: string; stats: NativeChatStats }> {
+  if (usesOpenRouter()) return openRouterReasoningChat(opts);
   let res: Response;
   try {
     res = await fetch(llmUrl("/api/v1/chat"), {
@@ -238,4 +259,71 @@ export async function nativeChat(opts: {
     .join("\n");
   if (!content) throw new Error("LLM returned empty content");
   return { content, reasoning, stats: data.stats ?? {} };
+}
+
+/**
+ * OpenRouter has no /api/v1/chat, so "think harder" there is a normal chat completion with the
+ * model's reasoning turned on and returned alongside the answer.
+ */
+async function openRouterReasoningChat(opts: {
+  systemPrompt: string;
+  input: string;
+  model?: string;
+  temperature?: number;
+  timeoutMs?: number;
+}): Promise<{ content: string; reasoning: string; stats: NativeChatStats }> {
+  const started = Date.now();
+  let res: Response;
+  try {
+    res = await fetch(chatCompletionsUrl(), {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        model: opts.model ?? getLlmModelName(),
+        messages: [
+          { role: "system", content: opts.systemPrompt },
+          { role: "user", content: opts.input },
+        ],
+        temperature: opts.temperature ?? 0,
+        max_tokens: 12_000,
+        reasoning: { effort: "medium" },
+      }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 300_000),
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "TimeoutError") {
+      throw new Error("LLM request timed out");
+    }
+    throw new Error(
+      `LLM unreachable at ${getLlmRootUrl()}: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`LLM HTTP ${res.status}: ${t.slice(0, 800)}`);
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: unknown; reasoning?: string } }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
+    };
+  };
+  const msg = data.choices?.[0]?.message;
+  const content = joinContent(msg?.content);
+  if (!content) throw new Error("LLM returned empty content");
+  const seconds = (Date.now() - started) / 1000;
+  const out = data.usage?.completion_tokens;
+  return {
+    content,
+    reasoning: msg?.reasoning ?? "",
+    stats: {
+      input_tokens: data.usage?.prompt_tokens,
+      total_output_tokens: out,
+      reasoning_output_tokens:
+        data.usage?.completion_tokens_details?.reasoning_tokens,
+      tokens_per_second: out ? out / seconds : undefined,
+    },
+  };
 }

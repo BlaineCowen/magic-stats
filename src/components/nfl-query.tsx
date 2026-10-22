@@ -131,7 +131,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
       .catch(() => setAiStatus({ online: false, model: "", loaded: false }));
   }, []);
 
-  // Deep mode takes minutes; show a running clock so it doesn't look stuck.
+  // Deep mode is slow; show a running clock so it doesn't look stuck.
   useEffect(() => {
     if (!isLoading) return;
     const started = Date.now();
@@ -228,9 +228,9 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
     <button
       onClick={() => void runQuery(lastQuery, "deep")}
       className="rounded border border-purple-300 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-800 hover:bg-purple-100"
-      title="Re-ask with the model's full reasoning (LM Studio /api/v1/chat)"
+      title="Re-ask and let the model reason it through first"
     >
-      Think harder (~2–3 min)
+      Think harder (slower)
     </button>
   );
 
@@ -367,7 +367,7 @@ export function NflQuery({ debug = false }: { debug?: boolean }) {
             {isLoading && (
               <p className="mt-2 text-sm text-gray-500">
                 {loadingMode === "deep"
-                  ? `Thinking it through… ${seconds(elapsed)} (usually 2–3 minutes)`
+                  ? `Thinking it through… ${seconds(elapsed)} (can take a minute or more)`
                   : `Writing a query… ${seconds(elapsed)}`}
               </p>
             )}
