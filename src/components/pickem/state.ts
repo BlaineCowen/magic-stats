@@ -32,7 +32,7 @@ const weekKey = (season: number, week: number) =>
   `nfl-pickem:${season}:${week}`;
 const DEFAULT_SETTINGS: Settings = {
   poolSize: 12,
-  scoring: "rank1-highest",
+  scoring: "points-equal-rank",
   hedgeMode: true,
 };
 export const EMPTY_WEEK: WeekState = {

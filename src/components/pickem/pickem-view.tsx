@@ -404,10 +404,10 @@ export function PickemView() {
               }
               className="rounded-md border border-slate-300 px-2 py-1.5"
             >
-              <option value="rank1-highest">1 = most confident</option>
               <option value="points-equal-rank">
                 Highest number = most confident
               </option>
+              <option value="rank1-highest">1 = most confident</option>
             </select>
           </label>
           <label className="flex items-start gap-2">
