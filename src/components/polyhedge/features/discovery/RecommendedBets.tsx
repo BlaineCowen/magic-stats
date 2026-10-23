@@ -321,7 +321,7 @@ function Card({ r, onPlace, onReview, canPlace }: {
           <span className="ph-muted-2">Not in the Discovery queue yet, so it can&apos;t be placed here.</span>
         )}
       </div>
-      <div className="ph-muted" style={{ fontSize: 10, wordBreak: "break-all" }}>
+      <div className="ph-muted" style={{ fontSize: 12, wordBreak: "break-all" }}>
         {r.k} · {r.p_slug}
       </div>
     </div>

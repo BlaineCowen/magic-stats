@@ -53,12 +53,12 @@ export function ScanForm({ onScanned }: Props) {
         </Button>
       </div>
       {scan.isError && (
-        <div className="ph-neg" style={{ fontSize: 11 }}>
+        <div className="ph-neg" style={{ fontSize: 12 }}>
           Scan failed: {(scan.error as Error).message}
         </div>
       )}
       {scan.isSuccess && scan.data && (
-        <div className="ph-pos" style={{ fontSize: 11 }}>
+        <div className="ph-pos" style={{ fontSize: 12 }}>
           Found {scan.data.kalshi_markets.length} Kalshi ·{" "}
           {scan.data.poly_markets.length} Poly markets — click an outcome,
           then YES or NO to pair.

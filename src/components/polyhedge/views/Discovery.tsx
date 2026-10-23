@@ -81,7 +81,7 @@ export function DiscoveryView() {
         right={<SummaryStrip s={summary.data} />}
         collapsible={false}
       >
-        <p className="ph-muted-2" style={{ padding: "0 12px", fontSize: 11 }}>
+        <p className="ph-muted-2" style={{ padding: "0 12px", fontSize: 12 }}>
           The scanner only proposes. Approving creates two{" "}
           <strong>disarmed</strong> pairs that collect paper bets; arming for
           real money stays a separate step in Manual Arbs. Blocked candidates

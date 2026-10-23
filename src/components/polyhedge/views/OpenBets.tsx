@@ -177,7 +177,7 @@ export function OpenBetsView() {
                   <Td className={clsForSign(s.unrealized_pnl_pct)}>
                     {signedPct(s.unrealized_pnl_pct ?? null, 2)}
                   </Td>
-                  <Td className="ph-muted" style={{ fontSize: 10 }}>
+                  <Td className="ph-muted" style={{ fontSize: 12 }}>
                     {s.mtm_known_count != null && s.open_count
                       ? `${s.mtm_known_count} / ${s.open_count}`
                       : "—"}

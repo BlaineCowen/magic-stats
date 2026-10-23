@@ -128,7 +128,7 @@ export function RtMiddlesView() {
       </SummaryGrid>
 
       {(sum.settled ?? 0) > 0 && (
-        <div className="ph-text-2" style={{ fontSize: 11, padding: "0 4px" }}>
+        <div className="ph-text-2" style={{ fontSize: 12, padding: "0 4px" }}>
           <span className="ph-pos">Both won: {out.both_won ?? 0}</span>
           <span className="ph-muted"> | </span>
           <span className="ph-pos">K only: {out.k_only_won ?? 0}</span>
@@ -233,15 +233,15 @@ export function RtMiddlesView() {
                   <Td>
                     <strong>{m.title}</strong>
                   </Td>
-                  <Td className="ph-muted" style={{ fontSize: 10 }}>
+                  <Td className="ph-muted" style={{ fontSize: 12 }}>
                     {m.kalshi_event_ticker}
                   </Td>
-                  <Td className="ph-muted" style={{ fontSize: 10 }}>
+                  <Td className="ph-muted" style={{ fontSize: 12 }}>
                     {m.poly_event_slug}
                   </Td>
                   <Td style={{ textAlign: "center" }}>{m.k_buckets}</Td>
                   <Td style={{ textAlign: "center" }}>{m.p_buckets}</Td>
-                  <Td className="ph-muted" style={{ fontSize: 10 }}>
+                  <Td className="ph-muted" style={{ fontSize: 12 }}>
                     {(m.discovered_at ?? "").slice(0, 10)}
                   </Td>
                 </Tr>
@@ -268,11 +268,11 @@ function LiveRow({ o }: { o: RtOpportunity }) {
       <Td>
         <strong>{o.title}</strong>
       </Td>
-      <Td style={{ fontSize: 10 }}>
+      <Td style={{ fontSize: 12 }}>
         {o.k_ticker} <SideBadge side={o.k_side} /> &gt;{o.k_boundary}
       </Td>
       <Td>{o.k_price.toFixed(3)}</Td>
-      <Td style={{ fontSize: 10 }}>
+      <Td style={{ fontSize: 12 }}>
         <SideBadge side={o.p_side} /> {o.p_boundary}+
       </Td>
       <Td>{o.p_price.toFixed(3)}</Td>
@@ -362,10 +362,10 @@ function BetRow({ b }: { b: RtBet }) {
   return (
     <Tr style={isVoided ? { opacity: 0.5 } : undefined}>
       <Td>{b.title || ""}</Td>
-      <Td style={{ fontSize: 10 }}>
+      <Td style={{ fontSize: 12 }}>
         {b.k_ticker} {b.k_side}&gt;{b.k_boundary}
       </Td>
-      <Td style={{ fontSize: 10 }}>
+      <Td style={{ fontSize: 12 }}>
         {b.p_side} {b.p_boundary}+
       </Td>
       <Td>{(b.combined_cost ?? 0).toFixed(3)}</Td>
@@ -379,7 +379,7 @@ function BetRow({ b }: { b: RtBet }) {
       <Td>
         <Badge>{b.status}</Badge>
       </Td>
-      <Td className="ph-muted" style={{ fontSize: 10 }}>
+      <Td className="ph-muted" style={{ fontSize: 12 }}>
         {(b.detected_at ?? "").slice(0, 16)}
       </Td>
     </Tr>

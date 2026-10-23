@@ -172,12 +172,12 @@ function ScanPanel() {
         </Button>
       </div>
       {errMsg && (
-        <div className="ph-neg" style={{ fontSize: 11 }}>
+        <div className="ph-neg" style={{ fontSize: 12 }}>
           {errMsg}
         </div>
       )}
       {savedMsg && (
-        <div className="ph-pos" style={{ fontSize: 11 }}>
+        <div className="ph-pos" style={{ fontSize: 12 }}>
           {savedMsg}
         </div>
       )}
@@ -191,7 +191,7 @@ function ScanPanel() {
             gap: 8,
           }}
         >
-          <div style={{ fontSize: 11 }}>
+          <div style={{ fontSize: 12 }}>
             <span style={{ fontWeight: 600 }}>{scanResult.city_name}</span>{" "}
             <span className="ph-muted-2">on {scanResult.event_date}</span>{" "}
             <span className="ph-muted">
@@ -267,8 +267,8 @@ function BucketColumn({
       <h4
         className="ph-muted-2"
         style={{
-          fontSize: 10,
-          textTransform: "uppercase",
+          fontSize: 12,
+          textTransform: "none",
           letterSpacing: "0.06em",
           fontWeight: 600,
           padding: "6px 0",
@@ -279,7 +279,7 @@ function BucketColumn({
       </h4>
       <div style={{ maxHeight: 280, overflowY: "auto", paddingRight: 4 }}>
         {markets.length === 0 && (
-          <div className="ph-muted" style={{ fontSize: 11, padding: 8 }}>
+          <div className="ph-muted" style={{ fontSize: 12, padding: 8 }}>
             No buckets parsed
           </div>
         )}
@@ -369,8 +369,8 @@ function ActiveTempArbs() {
         className="ph-muted-2"
         style={{
           padding: "6px 12px",
-          fontSize: 10,
-          textTransform: "uppercase",
+          fontSize: 12,
+          textTransform: "none",
           letterSpacing: "0.06em",
         }}
       >

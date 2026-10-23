@@ -50,7 +50,7 @@ export function ApproveButton({
         {approve.isPending ? "…" : approve.isSuccess ? "✓" : compact ? "Approve" : "Approve (disarmed)"}
       </Button>
       {error && (
-        <span className="ph-neg" title={error} style={{ fontSize: 11 }}>
+        <span className="ph-neg" title={error} style={{ fontSize: 12 }}>
           {compact ? "refused" : error}
         </span>
       )}

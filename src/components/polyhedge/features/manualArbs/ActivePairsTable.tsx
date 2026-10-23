@@ -93,8 +93,8 @@ export function ActivePairsTable() {
         className="ph-muted-2"
         style={{
           padding: "6px 12px",
-          fontSize: 10,
-          textTransform: "uppercase",
+          fontSize: 12,
+          textTransform: "none",
           letterSpacing: "0.06em",
         }}
       >
@@ -229,7 +229,7 @@ function PairRow({
         <div
           className="ph-muted-2"
           style={{
-            fontSize: 10,
+            fontSize: 12,
             marginTop: 2,
             display: "flex",
             alignItems: "center",
@@ -374,9 +374,9 @@ function EventChip(props: {
         key
       }
       style={{
-        fontSize: 9,
+        fontSize: 11,
         fontWeight: 700,
-        textTransform: "uppercase",
+        textTransform: "none",
         letterSpacing: "0.04em",
         padding: "1px 5px",
         border: "1px solid #4a5568",
@@ -413,7 +413,7 @@ function AskCell({
       {stale && (
         <span
           className="ph-muted"
-          style={{ marginLeft: 4, fontSize: 9, fontStyle: "italic" }}
+          style={{ marginLeft: 4, fontSize: 11, fontStyle: "italic" }}
         >
           {ageStr(ageS!)}
         </span>

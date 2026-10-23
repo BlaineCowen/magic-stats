@@ -161,7 +161,7 @@ export function OutcomePicker({ scan, urls }: Props) {
       }}
     >
       {errMsg && (
-        <div className="ph-neg" style={{ fontSize: 11 }}>
+        <div className="ph-neg" style={{ fontSize: 12 }}>
           {errMsg}
         </div>
       )}
@@ -234,7 +234,7 @@ function ConfirmCard({ info }: { info: ConfirmInfo }) {
       style={{
         borderTop: "1px solid #2d3748",
         paddingTop: 10,
-        fontSize: 11,
+        fontSize: 12,
       }}
     >
       <div style={{ display: "flex", gap: 12, marginBottom: 4 }}>
@@ -332,8 +332,8 @@ function Column({
         <h4
           className="ph-muted-2"
           style={{
-            fontSize: 10,
-            textTransform: "uppercase",
+            fontSize: 12,
+            textTransform: "none",
             letterSpacing: "0.06em",
             fontWeight: 600,
             margin: 0,
@@ -360,7 +360,7 @@ function Column({
       </div>
       <div style={{ maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
         {markets.length === 0 && (
-          <div className="ph-muted" style={{ fontSize: 11, padding: 8 }}>
+          <div className="ph-muted" style={{ fontSize: 12, padding: 8 }}>
             No markets
           </div>
         )}
@@ -383,7 +383,7 @@ function Column({
                   <span
                     className="ph-neg"
                     style={{
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: 700,
                       marginLeft: 6,
                       padding: "1px 5px",
@@ -397,7 +397,7 @@ function Column({
                 {isSel && !blocked && (
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: 11,
                       color: "#9f7aea",
                       fontWeight: 700,
                       marginLeft: 6,
@@ -440,7 +440,7 @@ function Column({
                 {isSel && !selectedSide && !blocked && (
                   <span
                     className="ph-warn-strong"
-                    style={{ fontSize: 10, fontWeight: 700 }}
+                    style={{ fontSize: 12, fontWeight: 700 }}
                   >
                     ← pick YES or NO
                   </span>

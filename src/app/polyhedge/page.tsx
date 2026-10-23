@@ -21,6 +21,11 @@ export default function PolyhedgePage() {
   // useEffect after mount; the brief flash is fine for an internal dashboard.
   const [tab, setTab] = useState<Tab>("overview");
   useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (validTab(hash)) {
+      setTab(hash as Tab);
+      return;
+    }
     try {
       const saved = window.localStorage.getItem("ph-tab2");
       if (saved && validTab(saved)) setTab(saved as Tab);
@@ -31,6 +36,7 @@ export default function PolyhedgePage() {
 
   function changeTab(t: Tab) {
     setTab(t);
+    window.history.replaceState(null, "", `#${t}`);
     try {
       window.localStorage.setItem("ph-tab2", t);
     } catch {

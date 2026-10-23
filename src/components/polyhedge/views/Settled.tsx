@@ -210,7 +210,7 @@ function SettledRow({ b }: { b: SettledBet }) {
         <Td>
           <PnLBadge value={b.roi_pct ?? null} format="percent" />
         </Td>
-        <Td className="ph-muted" style={{ fontSize: 10 }}>
+        <Td className="ph-muted" style={{ fontSize: 12 }}>
           {(b.settled_at ?? "").slice(0, 16)}
         </Td>
       </Tr>

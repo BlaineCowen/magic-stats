@@ -99,7 +99,7 @@ export function MarketMatcher({ scan, urls }: Props) {
       }}
     >
       {saveError && !modalOpen && (
-        <div className="ph-neg" style={{ fontSize: 11 }}>{saveError}</div>
+        <div className="ph-neg" style={{ fontSize: 12 }}>{saveError}</div>
       )}
 
       <div
@@ -200,8 +200,8 @@ function Column({ title, markets, selectedId, onPick }: ColumnProps) {
       <h4
         className="ph-muted-2"
         style={{
-          fontSize: 10,
-          textTransform: "uppercase",
+          fontSize: 12,
+          textTransform: "none",
           letterSpacing: "0.06em",
           fontWeight: 600,
           padding: "6px 0",
@@ -212,7 +212,7 @@ function Column({ title, markets, selectedId, onPick }: ColumnProps) {
       </h4>
       <div style={{ maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
         {markets.length === 0 && (
-          <div className="ph-muted" style={{ fontSize: 11, padding: 8 }}>
+          <div className="ph-muted" style={{ fontSize: 12, padding: 8 }}>
             No markets
           </div>
         )}
@@ -237,7 +237,7 @@ function Column({ title, markets, selectedId, onPick }: ColumnProps) {
                   <span
                     className="ph-neg"
                     style={{
-                      fontSize: 9,
+                      fontSize: 11,
                       fontWeight: 700,
                       marginLeft: 6,
                       padding: "1px 5px",
@@ -251,7 +251,7 @@ function Column({ title, markets, selectedId, onPick }: ColumnProps) {
                 {isSel && !blocked && (
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: 11,
                       color: "#9f7aea",
                       fontWeight: 700,
                       marginLeft: 6,

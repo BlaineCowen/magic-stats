@@ -81,7 +81,7 @@ export function CandidateReviewPanel({
             Reopen for review
           </Button>
         )}
-        <span className="ph-muted-2" style={{ fontSize: 11 }}>
+        <span className="ph-muted-2" style={{ fontSize: 12 }}>
           Approving jumps to the next ready outcome.
         </span>
       </div>
@@ -113,7 +113,7 @@ export function CandidateReviewPanel({
           <HighlightedRules text={pText} spans={serverTexts ? d.highlights.poly : []} />
         </div>
       </div>
-      <p className="ph-muted-2" style={{ fontSize: 11 }}>
+      <p className="ph-muted-2" style={{ fontSize: 12 }}>
         Legend: <mark className="ph-hl-risk">risk term</mark>{" "}
         <mark className="ph-hl-risk ph-hl-onesided">only on one venue</mark>{" "}
         <mark className="ph-hl-date">date</mark> <mark className="ph-hl-num">time zone</mark>

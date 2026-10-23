@@ -5,10 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Line,
   ReferenceLine,
@@ -55,7 +52,7 @@ const C = {
 };
 const AXIS = {
   stroke: C.axis,
-  fontSize: 10,
+  fontSize: 12,
   tickLine: false,
   axisLine: false,
 } as const;
@@ -136,25 +133,17 @@ export function MakerView() {
         }}
       />
       {q.isError && (
-        <div className="ph-neg" style={{ fontSize: 12 }}>
+        <div className="ph-neg" style={{ fontSize: 13 }}>
           Could not load maker data: {String(q.error)}
         </div>
       )}
-      <Account d={d} />
       <Kpis d={d} traded={traded} />
-      <Upcoming />
-      {traded.length > 0 && (
-        <Trends traded={traded} picked={picked} onPick={setPicked} />
-      )}
-
+      {sel && <GameDetail g={sel} mode={mode} />}
       <div className="mk-panel">
         <div className="mk-panel-title">
-          <span>Games</span>
-          <span
-            className="mk-sub"
-            style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
-          >
-            pick one to see it in detail
+          <span>Games · {traded.length}</span>
+          <span className="mk-sub" style={{ fontWeight: 400 }}>
+            click a row to open it above
           </span>
         </div>
         {traded.length === 0 ? (
@@ -164,21 +153,12 @@ export function MakerView() {
               : `No ${mode === "live" ? "real-money" : "paper"} games yet.`}
           </div>
         ) : (
-          <div className="mk-strip">
-            {traded.map((g) => (
-              <GameChip
-                key={g.key}
-                g={g}
-                active={g.key === picked}
-                onClick={() => setPicked(g.key)}
-              />
-            ))}
-          </div>
+          <GameTable games={traded} picked={picked} onPick={setPicked} />
         )}
       </div>
-
-      {sel && <GameDetail g={sel} mode={mode} />}
-
+      {traded.length > 0 && <Trends traded={traded} />}
+      <Upcoming />
+      <Account d={d} />
       <Section
         title={`Errors & restarts · last 36 h · ${d?.problems.length ?? 0}`}
         defaultCollapsed
@@ -205,7 +185,7 @@ export function MakerView() {
                 <Td className={p.ev.endsWith("error") ? "ph-warn" : undefined}>
                   {p.ev}
                 </Td>
-                <Td className="ph-muted-2" style={{ fontSize: 10 }}>
+                <Td className="ph-muted-2" style={{ fontSize: 12 }}>
                   {p.detail}
                 </Td>
               </Tr>
@@ -304,21 +284,14 @@ function Kpis({ d, traded }: { d?: MakerSummary; traded: MakerGame[] }) {
   const edge = edgeShares
     ? edgeW.reduce((s, g) => s + (g.avg_edge_c ?? 0) * g.shares, 0) / edgeShares
     : null;
-  const best = done.reduce<MakerGame | null>(
-    (b, g) => (!b || (g.pnl ?? 0) > (b.pnl ?? 0) ? g : b),
-    null,
-  );
-  const worst = done.reduce<MakerGame | null>(
-    (b, g) => (!b || (g.pnl ?? 0) < (b.pnl ?? 0) ? g : b),
-    null,
-  );
+  const m60 = done.reduce((s, g) => s + (g.pnl_60s ?? 0), 0);
   return (
     <div className="mk-kpis">
       <Kpi
         label="Total P&L"
         value={fmt(total)}
         color={pnlColor(total)}
-        sub={`${done.length} games traded`}
+        sub={`${done.length} games · ${wins} up, ${done.length - wins} down`}
       />
       <Kpi
         label="Last 36 hours"
@@ -327,16 +300,10 @@ function Kpis({ d, traded }: { d?: MakerSummary; traded: MakerGame[] }) {
         sub={`${d?.totals.recent_fills ?? 0} fills`}
       />
       <Kpi
-        label="Games up / down"
-        value={`${wins} – ${done.length - wins}`}
-        sub={
-          done.length ? `avg ${fmt(total / done.length)} per game` : undefined
-        }
-      />
-      <Kpi
-        label="Fills"
-        value={fills.toLocaleString()}
-        sub={`${Math.round(shares).toLocaleString()} shares traded`}
+        label="Fill quality"
+        value={fmt(m60)}
+        color={pnlColor(m60)}
+        sub="what the fills were worth 60 s later; the rest of P&L is holding luck"
       />
       <Kpi
         label="Avg edge vs Kalshi"
@@ -347,34 +314,81 @@ function Kpis({ d, traded }: { d?: MakerSummary; traded: MakerGame[] }) {
         sub="per share, at the moment of the fill"
       />
       <Kpi
-        label="Best / worst game"
-        value={
-          <span style={{ fontSize: 16 }}>
-            <span style={{ color: pnlColor(best?.pnl) }}>
-              {fmt(best?.pnl ?? null)}
-            </span>
-            <span className="ph-muted"> / </span>
-            <span style={{ color: pnlColor(worst?.pnl) }}>
-              {fmt(worst?.pnl ?? null)}
-            </span>
-          </span>
-        }
-        sub={best && worst ? `${matchup(best)} · ${matchup(worst)}` : undefined}
+        label="Fills"
+        value={fills.toLocaleString()}
+        sub={`${Math.round(shares).toLocaleString()} shares traded`}
       />
     </div>
   );
 }
 
-// ─── long-term trends ────────────────────────────────────────────────────
-function Trends({
-  traded,
+// ─── every game, one row each ────────────────────────────────────────────
+function GameTable({
+  games,
   picked,
   onPick,
 }: {
-  traded: MakerGame[];
+  games: MakerGame[];
   picked: string | null;
   onPick: (k: string) => void;
 }) {
+  return (
+    <div style={{ overflowX: "auto", maxHeight: 360, overflowY: "auto" }}>
+      <Table className="mk-table">
+        <THead>
+          <Tr>
+            <Th>Date</Th>
+            <Th>Game</Th>
+            <Th style={{ textAlign: "right" }}>P&L</Th>
+            <Th style={{ textAlign: "right" }}>Fill quality</Th>
+            <Th>Result</Th>
+            <Th style={{ textAlign: "right" }}>Fills</Th>
+            <Th style={{ textAlign: "right" }}>Avg edge</Th>
+          </Tr>
+        </THead>
+        <TBody>
+          {games.map((g) => (
+            <Tr
+              key={g.key}
+              onClick={() => onPick(g.key)}
+              className={g.key === picked ? "mk-row-picked" : undefined}
+              style={{ cursor: "pointer" }}
+            >
+              <Td className="ph-muted-2">{day(g.game_t)}</Td>
+              <Td>
+                {g.team_a} <span className="ph-muted-2">vs</span> {g.team_b}
+              </Td>
+              <Td style={{ textAlign: "right", color: pnlColor(g.pnl), fontWeight: 700 }}>
+                {fmt(g.pnl)}
+              </Td>
+              <Td style={{ textAlign: "right", color: pnlColor(g.pnl_60s) }}>
+                {fmt(g.pnl_60s)}
+              </Td>
+              <Td>
+                {g.running ? (
+                  <span className="ph-pos">● live</span>
+                ) : g.stopped ? (
+                  <span className="ph-neg">stopped</span>
+                ) : g.winner ? (
+                  <span className="ph-muted-2">{short(g.winner)} won</span>
+                ) : (
+                  <span className="ph-muted-2">ended</span>
+                )}
+              </Td>
+              <Td style={{ textAlign: "right" }}>{g.fills}</Td>
+              <Td style={{ textAlign: "right", color: pnlColor(g.avg_edge_c) }}>
+                {g.avg_edge_c == null ? "—" : `${g.avg_edge_c.toFixed(1)}¢`}
+              </Td>
+            </Tr>
+          ))}
+        </TBody>
+      </Table>
+    </div>
+  );
+}
+
+// ─── long-term trends ────────────────────────────────────────────────────
+function Trends({ traded }: { traded: MakerGame[] }) {
   const rows = useMemo(() => {
     let cum = 0;
     return traded
@@ -425,10 +439,10 @@ function Trends({
   const lastCum = rows[rows.length - 1]!.cum;
 
   return (
-    <div className="mk-grid-2">
+    <div>
       <div className="mk-panel">
         <div className="mk-panel-title">
-          <span>Running total</span>
+          <span>Running total, game by game</span>
           <span style={{ color: pnlColor(lastCum) }}>{fmt(lastCum)}</span>
         </div>
         <div style={{ height: 210 }}>
@@ -453,7 +467,7 @@ function Trends({
               <XAxis
                 dataKey="i"
                 {...AXIS}
-                tickFormatter={(i) => rows[i]?.tick ?? ""}
+                tickFormatter={(i: number) => rows[i]?.tick ?? ""}
                 minTickGap={24}
               />
               <YAxis {...AXIS} tickFormatter={(v) => `$${v}`} width={52} />
@@ -473,94 +487,7 @@ function Trends({
           </ResponsiveContainer>
         </div>
       </div>
-      <div className="mk-panel">
-        <div className="mk-panel-title">
-          <span>P&L by game</span>
-          <span
-            className="mk-sub"
-            style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
-          >
-            click a bar
-          </span>
-        </div>
-        <div style={{ height: 210 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={rows}
-              margin={{ top: 6, right: 6, bottom: 0, left: -14 }}
-            >
-              <CartesianGrid stroke={C.grid} vertical={false} />
-              <XAxis
-                dataKey="i"
-                {...AXIS}
-                tickFormatter={(i) => rows[i]?.tick ?? ""}
-                minTickGap={24}
-              />
-              <YAxis {...AXIS} tickFormatter={(v) => `$${v}`} width={52} />
-              <ReferenceLine y={0} stroke="#4a5568" />
-              <Tooltip
-                content={tip}
-                cursor={{ fill: "rgba(144,205,244,0.06)" }}
-              />
-              <Bar
-                dataKey="pnl"
-                radius={[3, 3, 0, 0]}
-                isAnimationActive={false}
-                style={{ cursor: "pointer" }}
-              >
-                {rows.map((r) => (
-                  <Cell
-                    key={r.key}
-                    fill={r.pnl >= 0 ? C.pos : C.neg}
-                    fillOpacity={picked === r.key ? 1 : 0.55}
-                    stroke={picked === r.key ? "#e2e8f0" : "none"}
-                    onClick={() => onPick(r.key)}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
     </div>
-  );
-}
-
-// ─── game picker chip ────────────────────────────────────────────────────
-function GameChip({
-  g,
-  active,
-  onClick,
-}: {
-  g: MakerGame;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="mk-game"
-      data-active={active}
-      onClick={onClick}
-    >
-      <div className="mk-game-teams">
-        {g.running && (
-          <span
-            className="mk-dot mk-dot-pulse"
-            style={{ color: C.pos, marginRight: 6 }}
-          />
-        )}
-        {matchup(g)}
-      </div>
-      <div className="mk-game-meta">
-        <span>
-          {day(g.game_t)} · {g.league.toUpperCase()}
-        </span>
-        <span style={{ color: pnlColor(g.pnl), fontWeight: 700 }}>
-          {fmt(g.pnl)}
-        </span>
-      </div>
-    </button>
   );
 }
 
@@ -584,7 +511,8 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
       t,
       pnl,
       price: k == null ? null : Math.round(k * 1000) / 10,
-      net: a == null || b == null ? null : Math.round((a - b) * 10) / 10,
+      a,
+      b,
     }));
     const fx = (x: MakerFill) => ({
       t: x.t,
@@ -615,7 +543,7 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
       type="number"
       domain={[t0, t1]}
       {...AXIS}
-      tickFormatter={(t) => clock(t)}
+      tickFormatter={(t: number) => clock(t)}
       minTickGap={40}
       allowDataOverflow
     />
@@ -681,7 +609,10 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
         <Stat label={`Holding ${short(g.team_a)}`} value={sh(g.inv_a)} />
         <Stat label={`Holding ${short(g.team_b)}`} value={sh(g.inv_b)} />
         <Stat label={`Last price ${short(g.team_a)}`} value={cents(g.ref)} />
-        <Stat label="Last update" value={clockS(g.last_t)} />
+        <Stat
+          label="Fill quality (60 s)"
+          value={<span style={{ color: pnlColor(g.pnl_60s) }}>{fmt(g.pnl_60s)}</span>}
+        />
       </div>
 
       {points.length > 1 ? (
@@ -711,13 +642,15 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
                 {xAxis}
                 <YAxis
                   {...AXIS}
-                  domain={[0, 100]}
-                  ticks={[0, 25, 50, 75, 100]}
+                  domain={[
+                    (lo: number) => Math.max(0, Math.floor((lo - 4) / 5) * 5),
+                    (hi: number) => Math.min(100, Math.ceil((hi + 4) / 5) * 5),
+                  ]}
                   tickFormatter={(v) => `${v}¢`}
                   width={52}
                 />
                 <Tooltip
-                  content={<FillTip teamA={g.team_a} />}
+                  content={<GameTip teamA={g.team_a} teamB={g.team_b} />}
                   cursor={{ stroke: "#4a5568" }}
                 />
                 <Line
@@ -749,7 +682,7 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
           <div className="mk-chart-label">
             <span className="mk-key">
               <span className="mk-swatch" style={{ background: C.pos }} />
-              P&L (marked to Kalshi)
+              P&L, marked to the Kalshi price (hover either chart for price, holdings and P&L)
             </span>
           </div>
           <div style={{ height: 150 }}>
@@ -778,7 +711,7 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
                 <YAxis {...AXIS} tickFormatter={(v) => `$${v}`} width={52} />
                 <ReferenceLine y={0} stroke="#4a5568" />
                 <Tooltip
-                  content={<SimpleTip fmtV={(v) => `P&L ${fmt(v)}`} />}
+                  content={<GameTip teamA={g.team_a} teamB={g.team_b} />}
                   cursor={{ stroke: "#4a5568" }}
                 />
                 <Area
@@ -793,42 +726,6 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
             </ResponsiveContainer>
           </div>
 
-          <div className="mk-chart-label">
-            <span className="mk-key">
-              <span className="mk-swatch" style={{ background: C.pos2 }} />
-              Net position: shares of {short(g.team_a)} minus {short(g.team_b)}
-            </span>
-          </div>
-          <div style={{ height: 120 }}>
-            <ResponsiveContainer>
-              <AreaChart
-                data={points}
-                syncId="mk-game"
-                margin={{ top: 6, right: 6, bottom: 0, left: -14 }}
-              >
-                <CartesianGrid stroke={C.grid} vertical={false} />
-                {xAxis}
-                <YAxis {...AXIS} width={52} />
-                <ReferenceLine y={0} stroke="#4a5568" />
-                <Tooltip
-                  content={
-                    <SimpleTip fmtV={(v) => `Net ${v > 0 ? "+" : ""}${v} sh`} />
-                  }
-                  cursor={{ stroke: "#4a5568" }}
-                />
-                <Area
-                  type="stepAfter"
-                  dataKey="net"
-                  stroke={C.pos2}
-                  strokeWidth={1.5}
-                  fill={C.pos2}
-                  fillOpacity={0.12}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
         </>
       ) : (
         <div className="mk-sub">
@@ -857,10 +754,10 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
               <Tr>
                 <Th>Time</Th>
                 <Th>Trade</Th>
-                <Th>Shares</Th>
                 <Th>Price</Th>
-                <Th>Kalshi fair</Th>
                 <Th>Edge</Th>
+                <Th>Kalshi fair</Th>
+                <Th>Shares</Th>
               </Tr>
             </THead>
             <TBody>
@@ -878,14 +775,14 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
                     </span>{" "}
                     {f.team}
                   </Td>
-                  <Td>{sh(f.qty)}</Td>
                   <Td>{cents(f.price)}</Td>
-                  <Td className="ph-muted-2">{cents(f.fair)}</Td>
                   <Td style={{ color: pnlColor(f.edge_c) }}>
                     {f.edge_c == null
                       ? "—"
                       : `${f.edge_c >= 0 ? "+" : ""}${f.edge_c.toFixed(1)}¢`}
                   </Td>
+                  <Td className="ph-muted-2">{cents(f.fair)}</Td>
+                  <Td>{sh(f.qty)}</Td>
                 </Tr>
               ))}
             </TBody>
@@ -942,31 +839,36 @@ interface TipProps {
   }[];
 }
 
-function FillTip({
+interface PointRow {
+  t: number;
+  price: number | null;
+  pnl: number | null;
+  a: number | null;
+  b: number | null;
+}
+
+// One hover box for both game charts: the moment's Kalshi price, what the bot held, its P&L, and the fill if the
+// cursor is on one.
+function GameTip({
   active,
   payload,
   label,
   teamA,
-}: TipProps & { teamA: string }) {
+  teamB,
+}: TipProps & { teamA: string; teamB: string }) {
   if (!active || !payload?.length) return null;
   const fill = payload.find((p) => p.dataKey === "fill")?.payload as
-    | {
-        t: number;
-        team: string;
-        side: string;
-        price: number;
-        qty: number;
-        edge: number | null;
-      }
+    | { t: number; team: string; side: string; price: number; qty: number; edge: number | null }
     | undefined;
-  const price = payload.find((p) => p.dataKey === "price")?.value;
+  const pt = payload.find((p) => p.dataKey === "price" || p.dataKey === "pnl")?.payload as
+    | PointRow
+    | undefined;
   return (
     <div className="mk-tip">
-      <div className="mk-tip-muted">{clockS(fill?.t ?? label)}</div>
-      {fill ? (
-        <div>
-          {fill.side === "BUY" ? "Bought" : "Sold"} {sh(fill.qty)} {fill.team}{" "}
-          at {cents(fill.price)}
+      <div className="mk-tip-muted">{clockS(fill?.t ?? pt?.t ?? label)}</div>
+      {fill && (
+        <div style={{ fontWeight: 600 }}>
+          {fill.side === "BUY" ? "Bought" : "Sold"} {sh(fill.qty)} {fill.team} at {cents(fill.price)}
           {fill.edge != null && (
             <span style={{ color: pnlColor(fill.edge) }}>
               {" "}
@@ -975,29 +877,24 @@ function FillTip({
             </span>
           )}
         </div>
-      ) : (
-        price != null && (
-          <div>
-            Kalshi {short(teamA)}: {price}¢
-          </div>
-        )
       )}
-    </div>
-  );
-}
-
-function SimpleTip({
-  active,
-  payload,
-  label,
-  fmtV,
-}: TipProps & { fmtV: (v: number) => string }) {
-  const v = payload?.[0]?.value;
-  if (!active || v == null) return null;
-  return (
-    <div className="mk-tip">
-      <div className="mk-tip-muted">{clockS(label)}</div>
-      <div>{fmtV(v)}</div>
+      {pt && (
+        <>
+          {pt.price != null && (
+            <div>
+              Kalshi {short(teamA)} <b>{pt.price.toFixed(1)}¢</b>
+            </div>
+          )}
+          <div>
+            Holding {sh(pt.a ?? 0)} {short(teamA)} · {sh(pt.b ?? 0)} {short(teamB)}
+          </div>
+          {pt.pnl != null && (
+            <div>
+              P&L <b style={{ color: pnlColor(pt.pnl) }}>{fmt(pt.pnl)}</b>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

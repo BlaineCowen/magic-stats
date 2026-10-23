@@ -38,7 +38,7 @@ export function TopBar() {
       <span
         className="ph-muted-2"
         style={{
-          fontSize: 11,
+          fontSize: 12,
           flex: 1,
           minWidth: 0,
           overflow: "hidden",
@@ -50,7 +50,7 @@ export function TopBar() {
       </span>
       <span
         className="ph-muted"
-        style={{ fontSize: 11, whiteSpace: "nowrap" }}
+        style={{ fontSize: 12, whiteSpace: "nowrap" }}
       >
         {q.dataUpdatedAt
           ? new Date(q.dataUpdatedAt).toLocaleTimeString()
