@@ -223,6 +223,23 @@
 }
 .ph-tab:hover { color: #e2e8f0; }
 .ph-tab.ph-active { color: #90cdf4; border-bottom-color: #90cdf4; }
+.ph-tab-old { color: #4a5568; font-size: 11px; }
+.ph-tab-divider { width: 1px; margin: 8px 6px; background: #2d3748; flex: none; }
+
+/* Overview tab */
+.ph-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.ph-ov-sys { background: #1a1f2e; border: 1px solid #2d3748; border-left-width: 3px; border-radius: 6px; padding: 10px 12px; }
+.ph-ov-sys.ok { border-left-color: #48bb78; }
+.ph-ov-sys.warn { border-left-color: #f6ad55; }
+.ph-ov-sys.off { border-left-color: #4a5568; opacity: .75; }
+.ph-ov-sys-head { display: flex; align-items: baseline; gap: 8px; }
+.ph-ov-sys-name { font-weight: 700; font-size: 13px; }
+.ph-ov-sys-state { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-left: auto; white-space: nowrap; }
+.ph-ov-sys-what { color: #718096; font-size: 11px; margin-top: 2px; }
+.ph-ov-sys-detail { color: #e2e8f0; font-size: 12px; margin-top: 6px; line-height: 1.35; }
+.ph-ov-link { background: none; border: none; color: #90cdf4; cursor: pointer; font: inherit; font-size: 11px; padding: 0; }
+.ph-ov-note { color: #718096; font-size: 11px; padding: 8px 12px; }
+.ph-ov-pad { padding: 10px 12px; }
 
 /* Outcome picker cards */
 .ph-pick-card {

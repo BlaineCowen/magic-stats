@@ -3,37 +3,31 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/polyhedge/api";
 import { qk } from "@/lib/polyhedge/queryKeys";
-import type { StatusResponse } from "@/lib/polyhedge/types";
-import { ago } from "@/lib/polyhedge/format";
 import { cn } from "@/components/polyhedge/cn";
 
+// Status line from /api/overview: how many live systems are healthy. (The old /api/status line tracked lead-lag
+// and RT middles, both retired.)
+interface OverviewLite {
+  systems: { name: string; state: "ok" | "warn" | "off" }[];
+}
+
 export function TopBar() {
-  const q = useQuery<StatusResponse>({
-    queryKey: qk.status,
-    queryFn: () => api.get<StatusResponse>("/api/status"),
-    refetchInterval: 5_000,
+  const q = useQuery<OverviewLite>({
+    queryKey: qk.overview,
+    queryFn: () => api.get<OverviewLite>("/api/overview"),
+    refetchInterval: 30_000,
   });
-  const data = q.data;
-  const alive = data?.alive === true;
-  const ll = data?.systems?.lead_lag ?? {};
-  const rt = data?.systems?.rt_middles ?? {};
-  const llStr = ll.alive
-    ? "lead-lag ✓"
-    : ll.last_ago_s != null
-      ? `lead-lag idle ${ago(ll.last_ago_s)}`
-      : "lead-lag —";
-  const rtStr = rt.alive
-    ? "RT ✓"
-    : rt.last_ago_s != null
-      ? `RT idle ${ago(rt.last_ago_s)}`
-      : "RT —";
+  const sys = q.data?.systems ?? [];
+  const on = sys.filter((s) => s.state !== "off");
+  const bad = on.filter((s) => s.state === "warn");
+  const alive = !q.isError && q.data != null && bad.length === 0;
   const detail = q.isError
-    ? `API unreachable — ${q.error instanceof ApiError ? q.error.message : (q.error as Error).message}`
-    : alive
-      ? `Live · ${llStr} · ${rtStr} · ${data?.outcomes_count ?? 0} markets · ${data?.db_size_mb ?? 0}MB`
-      : data
-        ? `DEAD · ${llStr} · ${rtStr}`
-        : "connecting…";
+    ? `API unreachable — ${q.error instanceof ApiError ? q.error.message : (q.error).message}`
+    : q.data
+      ? bad.length
+        ? `${bad.length} of ${on.length} systems need a look: ${bad.map((s) => s.name).join(", ")}`
+        : `All ${on.length} systems running`
+      : "connecting…";
   return (
     <header className="ph-header">
       <div

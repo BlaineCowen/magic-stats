@@ -1,11 +1,19 @@
 // Browser-side fetch wrapper for the poly-hedge FastAPI.
-// CORS on api_server.py is wide open, so this hits the host directly.
-// Override at deploy time via NEXT_PUBLIC_POLYHEDGE_API_BASE if you ever
-// proxy through a different hostname.
+// Behind the nfl-router nginx (projects.blainecowen.com and :3001) the API is
+// proxied same-origin at /polyhedge-api, behind the owner sign-in, so it works
+// from the phone over https. The dev preview on :3002 has no proxy and talks
+// to the API on the LAN directly. NEXT_PUBLIC_POLYHEDGE_API_BASE overrides both.
 
-const API_BASE = (
-  process.env.NEXT_PUBLIC_POLYHEDGE_API_BASE ?? "http://server:8587"
-).replace(/\/$/, "");
+function apiBase(): string {
+  const env = process.env.NEXT_PUBLIC_POLYHEDGE_API_BASE;
+  if (env) return env.replace(/\/$/, "");
+  if (typeof window !== "undefined" && window.location.port === "3002") {
+    return "http://server:8587";
+  }
+  return "/polyhedge-api";
+}
+
+const API_BASE = apiBase();
 
 class ApiError extends Error {
   constructor(

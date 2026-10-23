@@ -1,5 +1,6 @@
 export const qk = {
   status: ["ph", "status"] as const,
+  overview: ["ph", "overview"] as const,
   games: ["ph", "games"] as const,
   bets: ["ph", "bets"] as const,
   betsRecent: (limit: number) => ["ph", "bets", "recent", limit] as const,
