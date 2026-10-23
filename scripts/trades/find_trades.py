@@ -8,7 +8,7 @@ built by refresh_trade_values.py from ETR's rest-of-season values, re-based on
 this league's starters) and the league's current rosters from Sleeper.
 Writes data/nfl/trades.json for /magic-stats/trades.
 
-Two sets of ideas, each with up to three per team:
+Two sets of ideas, each with up to five per team:
   etr     Blaine's view: lineups and fairness judged by ETR's values.
   market  What everyone else sees: lineups and fairness judged by the
           FantasyCalc trade market, ranked to favor the most even trades.
@@ -41,15 +41,15 @@ BENCH_DEPTH = 3
 # Players below this value are roster filler and never worth a trade slot.
 MIN_PLAYER = 25
 # Each side has to gain at least this much lineup value.
-MIN_GAIN = 15
+MIN_GAIN = 10
 # Per list: the allowed gap between what each side gives, as a share of the
 # bigger side, and how hard a value gap counts against an idea (per point,
 # against lineup points gained).
 VIEWS = {
     "etr": {"max_gap": 0.2, "unfair": 0.1},
-    "market": {"max_gap": 0.1, "unfair": 1.0},
+    "market": {"max_gap": 0.2, "unfair": 1.0},
 }
-PER_TEAM = 3
+PER_TEAM = 5
 
 
 def fetch_json(url):
@@ -187,23 +187,32 @@ def main():
         ideas.sort(key=lambda x: -x["score"])
         print(f"{view}: {len(ideas)} trades help both sides")
 
-        # Up to PER_TEAM ideas per team, each with a different partner and no
-        # player offered twice in that team's list.
+        # Up to PER_TEAM ideas per team. First pass: each with a different
+        # partner and no player offered twice. Teams with few tradeable players
+        # run out of those, so a second pass lets a partner or a player come up
+        # twice.
         picked, chosen = {k: [] for k in teams}, []
-        for idea in ideas:
-            for me, other, mine in (("a", "b", "aGives"), ("b", "a", "bGives")):
-                k = idea[me]
-                lst = picked[k]
-                if len(lst) >= PER_TEAM:
-                    continue
-                if any(chosen[j][other if chosen[j][me] == k else me] == idea[other] for j in lst):
-                    continue
-                offered = {i for j in lst for i in (chosen[j]["aGives"] if chosen[j]["a"] == k else chosen[j]["bGives"])}
-                if offered & set(idea[mine]):
-                    continue
-                if idea not in chosen:
-                    chosen.append(idea)
-                lst.append(chosen.index(idea))
+        for limit in (1, 2):
+            for idea in ideas:
+                for me, other, mine in (("a", "b", "aGives"), ("b", "a", "bGives")):
+                    k = idea[me]
+                    lst = picked[k]
+                    if len(lst) >= PER_TEAM or (idea in chosen and chosen.index(idea) in lst):
+                        continue
+                    partners = [chosen[j][other if chosen[j][me] == k else me] for j in lst]
+                    if partners.count(idea[other]) >= limit:
+                        continue
+                    offered = [i for j in lst for i in (chosen[j]["aGives"] if chosen[j]["a"] == k else chosen[j]["bGives"])]
+                    if any(offered.count(i) >= limit for i in idea[mine]):
+                        continue
+                    # A near copy (same partner, one of the same players coming
+                    # back) isn't a new idea.
+                    theirs = "bGives" if mine == "aGives" else "aGives"
+                    if any(set(chosen[j]["aGives"] + chosen[j]["bGives"]) & set(idea[theirs]) for j in lst):
+                        continue
+                    if idea not in chosen:
+                        chosen.append(idea)
+                    lst.append(chosen.index(idea))
 
         base = len(trades)
         for idea in chosen:
