@@ -263,6 +263,8 @@ export type TempArbsListResponse = { pairs: TempArbPair[] };
 // Open bets
 
 export type OpenBet = {
+  // true = the engine placed both legs with real money; false = paper only
+  real?: boolean;
   source: string;
   label: string;
   instrument?: string;

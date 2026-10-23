@@ -73,6 +73,12 @@ function EventApproveButton({ rows }: { rows: ArbCandidateRow[] }) {
   );
 }
 
+function BestEdge({ list }: { list: ArbCandidateRow[] }) {
+  const e = Math.max(-Infinity, ...list.map((r) => r.edge_roi_pct ?? -Infinity));
+  if (!Number.isFinite(e)) return <span className="ph-muted-2"> · no live edge</span>;
+  return <span className={e > 0 ? "ph-pos" : "ph-muted-2"}> · best edge {fmtPct(e)}</span>;
+}
+
 /** Candidates grouped by Kalshi event (one F1 event ≈ 20 driver candidates). */
 export function CandidateQueueTable({
   rows,
@@ -102,7 +108,10 @@ export function CandidateQueueTable({
       if (list) list.push(r);
       else m.set(r.kalshi_event_ticker, [r]);
     }
-    return [...m.entries()];
+    // Events with the biggest live edge first; events with no measurable edge sink to the bottom.
+    const best = (list: ArbCandidateRow[]) =>
+      Math.max(-Infinity, ...list.map((r) => r.edge_roi_pct ?? -Infinity));
+    return [...m.entries()].sort((a, b) => best(b[1]) - best(a[1]));
   }, [sort.rows]);
 
   return (
@@ -142,6 +151,7 @@ export function CandidateQueueTable({
                     {list.filter((r) => r.status === "pending" && !r.block_count).length} ready
                     of {list.length}
                   </span>
+                  <BestEdge list={list} />
                   <EventApproveButton rows={list} />
                 </td>
               </tr>

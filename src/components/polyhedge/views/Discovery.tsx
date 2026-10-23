@@ -44,7 +44,13 @@ export function DiscoveryView() {
   const [notice, setNotice] = useState<string | null>(null);
   const summary = useArbSummary();
   const list = useArbCandidates(filters);
-  const rows = useMemo(() => list.data?.candidates ?? [], [list.data]);
+  // Most proposals have no gap at today's prices; by default show only the ones that do.
+  const [edgeOnly, setEdgeOnly] = useState(true);
+  const allRows = useMemo(() => list.data?.candidates ?? [], [list.data]);
+  const rows = useMemo(
+    () => (edgeOnly ? allRows.filter((r) => (r.edge_roi_pct ?? 0) > 0) : allRows),
+    [allRows, edgeOnly],
+  );
   // After approving in the panel, jump to the next ready outcome in the list.
   function advance(message: string) {
     setNotice(message);
@@ -97,6 +103,11 @@ export function DiscoveryView() {
           onChange={setFilters}
           seriesOptions={seriesOptions}
         />
+        <label className="ph-muted-2" style={{ padding: "0 12px", fontSize: 13, display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <input type="checkbox" checked={edgeOnly} onChange={(e) => setEdgeOnly(e.target.checked)} />
+          only candidates with a positive edge right now ({allRows.filter((r) => (r.edge_roi_pct ?? 0) > 0).length} of{" "}
+          {allRows.length})
+        </label>
         {list.error && <p className="ph-neg">{arbErrorMessage(list.error)}</p>}
         <CandidateQueueTable
           rows={rows}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/polyhedge/api";
 import { qk } from "@/lib/polyhedge/queryKeys";
@@ -58,8 +58,15 @@ export function OpenBetsView() {
     queryFn: () => api.get<OpenBetsResponse>("/api/open-bets"),
     refetchInterval: 60_000,
   });
-  const allBets = q.data?.bets ?? [];
-  const stats = q.data?.stats ?? {};
+  // Real money and paper bets never mix: paper bets are far bigger and drown out what is actually at stake.
+  const [money, setMoney] = useState<"real" | "paper">("real");
+  const everything = useMemo(() => q.data?.bets ?? [], [q.data]);
+  const allBets = useMemo(
+    () => everything.filter((b) => Boolean(b.real) === (money === "real")),
+    [everything, money],
+  );
+  const nReal = everything.filter((b) => b.real).length;
+  const stats = useMemo(() => pipelineStats(allBets), [allBets]);
 
   // Portfolio totals computed from the unfiltered set so the summary is stable.
   const portfolio = useMemo(() => computePortfolio(allBets), [allBets]);
@@ -114,6 +121,25 @@ export function OpenBetsView() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div className="ph-segmented">
+          {(
+            [
+              ["real", `Real money · ${nReal}`],
+              ["paper", `Paper · ${everything.length - nReal}`],
+            ] as const
+          ).map(([m, label]) => (
+            <button key={m} type="button" data-active={money === m} onClick={() => setMoney(m)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="ph-muted-2" style={{ fontSize: 12 }}>
+          {money === "real"
+            ? "Bets the engines actually placed on Kalshi and Polymarket."
+            : "Simulated bets the engines logged without placing them. No money involved."}
+        </span>
+      </div>
       <SummaryGrid>
         <SummaryCard
           label="Total invested"
@@ -158,7 +184,7 @@ export function OpenBetsView() {
           </THead>
           <TBody>
             {PIPELINE_ORDER.map((key) => {
-              const s = (stats[key] ?? {}) as PipelineStats;
+              const s = stats[key] ?? ({} as PipelineStats);
               const isAll = key === "all";
               return (
                 <Tr key={key} className={isAll ? "ph-row-all" : ""}>
@@ -336,6 +362,25 @@ export function OpenBetsView() {
   );
 }
 
+function pipelineStats(bets: OpenBet[]): Record<string, PipelineStats> {
+  const out: Record<string, PipelineStats> = {};
+  for (const key of PIPELINE_ORDER) {
+    const rows = key === "all" ? bets : bets.filter((b) => b.source === key);
+    const known = rows.filter((b) => b.current_mtm_dollars != null);
+    const cost = rows.reduce((s, b) => s + (b.entry_cost_dollars ?? 0), 0);
+    const mtm = known.reduce((s, b) => s + (b.current_mtm_dollars ?? 0), 0);
+    const knownCost = known.reduce((s, b) => s + (b.entry_cost_dollars ?? 0), 0);
+    out[key] = {
+      open_count: rows.length,
+      cost_basis: Math.round(cost * 100) / 100,
+      current_mtm: known.length ? Math.round(mtm * 100) / 100 : null,
+      unrealized_pnl_pct: known.length && knownCost > 0 ? (mtm / knownCost) * 100 : null,
+      mtm_known_count: known.length,
+    } as PipelineStats;
+  }
+  return out;
+}
+
 function computePortfolio(bets: OpenBetsResponse["bets"]) {
   let totalInvested = 0;
   let totalSettleValue = 0;
@@ -344,8 +389,7 @@ function computePortfolio(bets: OpenBetsResponse["bets"]) {
   for (const b of bets) {
     const inv = b.entry_cost_dollars ?? 0;
     totalInvested += inv;
-    totalSettleValue +=
-      b.expected_payout_dollars != null ? b.expected_payout_dollars : inv;
+    totalSettleValue += b.expected_payout_dollars ?? inv;
     if (b.current_mtm_dollars != null) {
       totalSellNow += inv + b.current_mtm_dollars;
       mtmCount += 1;

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
 import {
   Table,
   TBody,
@@ -26,6 +28,26 @@ import {
   useManualArbsList,
 } from "./hooks";
 import { cn } from "@/components/polyhedge/cn";
+
+type PairView = "attention" | "armed" | "holding" | "gap" | "all";
+
+function inView(r: Row, v: PairView): boolean {
+  const armed = Boolean(r.auto_execute);
+  const holding = (r.open_bet_count ?? 0) > 0;
+  const gap = r._profit$ != null && r._profit$ > 0;
+  switch (v) {
+    case "armed":
+      return armed;
+    case "holding":
+      return holding;
+    case "gap":
+      return gap;
+    case "attention":
+      return armed || holding || gap;
+    default:
+      return true;
+  }
+}
 
 // Pre-compute derived fields used both for sorting and rendering.
 type Row = ManualArbPair & {
@@ -64,7 +86,27 @@ export function ActivePairsTable() {
   const { data, isLoading, isError } = useManualArbsList();
   const del = useManualArbDelete();
   const toggle = useManualArbAutoExecute();
-  const enriched: Row[] = (data?.pairs ?? []).map(enrich);
+  const all: Row[] = useMemo(() => (data?.pairs ?? []).map(enrich), [data]);
+  // Most pairs sit idle (disarmed, no gap, nothing held). Default to the ones that need attention.
+  const [view, setView] = useState<PairView>("attention");
+  const [search, setSearch] = useState("");
+  const counts = useMemo(() => {
+    const c: Record<PairView, number> = { attention: 0, armed: 0, holding: 0, gap: 0, all: all.length };
+    for (const r of all) for (const v of ["attention", "armed", "holding", "gap"] as const) if (inView(r, v)) c[v]++;
+    return c;
+  }, [all]);
+  const needle = search.trim().toLowerCase();
+  const enriched = useMemo(
+    () =>
+      all.filter(
+        (r) =>
+          inView(r, view) &&
+          (!needle ||
+            r.label.toLowerCase().includes(needle) ||
+            (r.kalshi_market_ticker ?? "").toLowerCase().includes(needle)),
+      ),
+    [all, view, needle],
+  );
 
   const sort = useTableSort<Row>(
     enriched,
@@ -89,16 +131,40 @@ export function ActivePairsTable() {
 
   return (
     <div>
-      <div
-        className="ph-muted-2"
-        style={{
-          padding: "6px 12px",
-          fontSize: 12,
-          textTransform: "none",
-          letterSpacing: "0.06em",
-        }}
-      >
-        {enriched.length} active pair{enriched.length === 1 ? "" : "s"}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 12px" }}>
+        {(
+          [
+            ["attention", "Needs attention"],
+            ["armed", "Armed"],
+            ["holding", "Holding a bet"],
+            ["gap", "Gap open"],
+            ["all", "All"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            className="ph-chip"
+            data-active={view === v}
+            onClick={() => setView(v)}
+          >
+            {label} · {counts[v]}
+          </button>
+        ))}
+        <input
+          className="ph-input"
+          style={{ maxWidth: 260 }}
+          placeholder="Search name or ticker"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <span className="ph-muted-2" style={{ fontSize: 12 }}>
+          {view === "attention"
+            ? "armed, holding a bet, or showing a gap right now"
+            : view === "gap"
+              ? "both asks add up to less than $1 with size available"
+              : ""}
+        </span>
       </div>
       <Table>
         <THead>
@@ -339,14 +405,14 @@ function deriveEventKey(args: {
   const ku = args.kalshiEventUrl ?? undefined;
   if (ku) {
     // Kalshi: https://kalshi.com/markets/<series>/<title>/<ticker>
-    const m = ku.match(/\/markets\/([^/?#]+)/i);
-    if (m && m[1]) return m[1].toUpperCase().slice(0, 24);
+    const m = /\/markets\/([^/?#]+)/i.exec(ku);
+    if (m?.[1]) return m[1].toUpperCase().slice(0, 24);
   }
   const pu = args.polyEventUrl ?? undefined;
   if (pu) {
     // Polymarket: https://polymarket.com/event/<slug>
-    const m = pu.match(/\/event\/([^/?#]+)/i);
-    if (m && m[1]) return m[1].replace(/-/g, " ").slice(0, 28);
+    const m = /\/event\/([^/?#]+)/i.exec(pu);
+    if (m?.[1]) return m[1].replace(/-/g, " ").slice(0, 28);
   }
   const t = args.kalshiTicker ?? "";
   if (!t) return null;
@@ -408,14 +474,14 @@ function AskCell({
     observedAt != null ? Date.now() / 1000 - observedAt : null;
   const stale = ageS != null && ageS > 30;
   return (
-    <span title={stale ? `last observed ${ageStr(ageS!)} ago` : "live"}>
+    <span title={stale ? `last observed ${ageStr(ageS)} ago` : "live"}>
       {price.toFixed(3)}
       {stale && (
         <span
           className="ph-muted"
           style={{ marginLeft: 4, fontSize: 11, fontStyle: "italic" }}
         >
-          {ageStr(ageS!)}
+          {ageStr(ageS)}
         </span>
       )}
     </span>
