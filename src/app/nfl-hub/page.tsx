@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import {
   Activity,
+  ArrowLeftRight,
   BarChart3,
   Calculator,
   ChevronRight,
@@ -91,6 +92,12 @@ const SEASON: Item[] = [
     title: "Pick'em assistant",
     blurb: "Confidence pool picks with live scores.",
     icon: ClipboardList,
+  },
+  {
+    href: "/magic-stats/trades",
+    title: "Trade ideas",
+    blurb: "Fair trades for every team in H-Town Ballers.",
+    icon: ArrowLeftRight,
   },
 ];
 
@@ -183,7 +190,7 @@ export default function NflHub() {
           <h2 id="season" className="font-display mb-4 text-2xl font-bold">
             NFL this season
           </h2>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {SEASON.map((it) => (
               <a
                 key={it.href}
