@@ -122,8 +122,8 @@ const PRIVATE: Item[] = [
   },
   {
     href: "/nfl/nba/",
-    title: "Crabsketball draft board",
-    blurb: "NBA draft values and grades.",
+    title: "Crabsketball",
+    blurb: "Daily lock-in plan for your NBA team, plus the draft board.",
     icon: Volleyball,
   },
 ];
