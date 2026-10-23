@@ -348,7 +348,11 @@ type Climate = {
 export function typicalWeather(homeTeam?: string, date?: string): Weather {
   const c = loadJson<Climate>("climate.json");
   const month = date ? String(Number(date.slice(5, 7))) : "";
-  return (homeTeam && c.team[homeTeam]?.[month]) || c.month[month] || c.all;
+  return (
+    (homeTeam ? c.team[homeTeam]?.[month] : undefined) ??
+    c.month[month] ??
+    c.all
+  );
 }
 
 export function fgMakeProb(
