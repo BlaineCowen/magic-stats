@@ -208,9 +208,15 @@ def main():
         return
     wk_games = [g for g in sched if g["week"] == week]
     week_dates = sorted({g["date"] for g in wk_games})
+    tips = espn_tips([d for d in week_dates if d >= today])
+    now = now_iso()
     remaining = defaultdict(list)       # team -> [(date, opp)] still to play
     for g in sorted(wk_games, key=lambda g: g["date"]):
         if g["status"] != "pre_game" or g["date"] < today:
+            continue
+        # Sleeper's status can lag the tip; a game that has started can't be swapped into.
+        tip = tips.get((g["date"], g["home"]["team"]))
+        if tip and datetime.fromisoformat(tip.replace("Z", "+00:00")) <= datetime.now(timezone.utc):
             continue
         h, a = g["home"]["team"], g["away"]["team"]
         remaining[h].append((g["date"], "v " + a))
@@ -222,7 +228,6 @@ def main():
     matchups = fetch_json(f"https://api.sleeper.app/v1/league/{LEAGUE_ID}/matchups/{week}")
     values = {p["id"]: p for p in json.load(open(VALUES))["players"]}
     shape = load_shapes(scoring)
-    tips = espn_tips([d for d in week_dates if d >= today])
 
     info, proj = {}, defaultdict(dict)
     for r in proj_rows:
@@ -353,7 +358,8 @@ def main():
             gain, i, pid, new = best
             old = team["slots"][i]
             moves.append({"slot": old.slot, "out": old.player, "out_score": old.current,
-                          "in": new.player, "gain_pts": round(gain, 1)})
+                          "in": new.player, "gain_pts": round(gain, 1),
+                          "in_next": game_out(new.games[0]) if new.games else None})
             team["slots"][i] = new
             used.add(pid)
             if old.player:
