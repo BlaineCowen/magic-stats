@@ -10,7 +10,7 @@ import {
   Line,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
+  ReferenceDot,
   Tooltip,
   XAxis,
   YAxis,
@@ -507,12 +507,13 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
     // keep the stretch where the game was priced (feeds go quiet for hours after a market closes)
     let last = s.length - 1;
     while (last > 0 && s[last]![1] == null && s[last]![2] == null) last--;
-    const pts = s.slice(0, last + 1).map(([t, pnl, k, a, b]) => ({
+    const pts: PointRow[] = s.slice(0, last + 1).map(([t, pnl, k, a, b]) => ({
       t,
       pnl,
       price: k == null ? null : Math.round(k * 1000) / 10,
       a,
       b,
+      fills: [],
     }));
     const fx = (x: MakerFill) => ({
       t: x.t,
@@ -526,6 +527,12 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
     const firstFill = f.length ? Math.min(...f.map((x) => x.t)) : null;
     const from = firstFill == null ? -Infinity : firstFill - 600;
     const shown = pts.filter((p) => p.t >= from);
+    // Each fill rides on the nearest point of the price line, so hovering the line there shows it.
+    for (const x of f) {
+      let best: PointRow | undefined;
+      for (const p of shown) if (!best || Math.abs(p.t - x.t) < Math.abs(best.t - x.t)) best = p;
+      best?.fills.push(fx(x));
+    }
     const ts = [...shown.map((p) => p.t), ...f.map((x) => x.t)];
     return {
       points: shown,
@@ -661,20 +668,25 @@ function GameDetail({ g, mode }: { g: MakerGame; mode: MakerMode }) {
                   connectNulls
                   isAnimationActive={false}
                 />
-                <Scatter
-                  data={buys}
-                  dataKey="fill"
-                  fill={C.buy}
-                  shape={<Tri up color={C.buy} />}
-                  isAnimationActive={false}
-                />
-                <Scatter
-                  data={sells}
-                  dataKey="fill"
-                  fill={C.sell}
-                  shape={<Tri color={C.sell} />}
-                  isAnimationActive={false}
-                />
+                {/* fills as plain markers: a second data series would pin the hover box to one point */}
+                {buys.map((x, i) => (
+                  <ReferenceDot
+                    key={`b${i}`}
+                    x={x.t}
+                    y={x.fill}
+                    ifOverflow="extendDomain"
+                    shape={(p: { cx?: number; cy?: number }) => <Tri cx={p.cx} cy={p.cy} up color={C.buy} />}
+                  />
+                ))}
+                {sells.map((x, i) => (
+                  <ReferenceDot
+                    key={`s${i}`}
+                    x={x.t}
+                    y={x.fill}
+                    ifOverflow="extendDomain"
+                    shape={(p: { cx?: number; cy?: number }) => <Tri cx={p.cx} cy={p.cy} color={C.sell} />}
+                  />
+                ))}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -839,12 +851,22 @@ interface TipProps {
   }[];
 }
 
+interface FillMark {
+  t: number;
+  fill: number;
+  qty: number;
+  edge: number | null;
+  team: string;
+  side: string;
+  price: number;
+}
 interface PointRow {
   t: number;
   price: number | null;
   pnl: number | null;
   a: number | null;
   b: number | null;
+  fills: FillMark[];
 }
 
 // One hover box for both game charts: the moment's Kalshi price, what the bot held, its P&L, and the fill if the
@@ -857,17 +879,14 @@ function GameTip({
   teamB,
 }: TipProps & { teamA: string; teamB: string }) {
   if (!active || !payload?.length) return null;
-  const fill = payload.find((p) => p.dataKey === "fill")?.payload as
-    | { t: number; team: string; side: string; price: number; qty: number; edge: number | null }
-    | undefined;
   const pt = payload.find((p) => p.dataKey === "price" || p.dataKey === "pnl")?.payload as
     | PointRow
     | undefined;
   return (
     <div className="mk-tip">
-      <div className="mk-tip-muted">{clockS(fill?.t ?? pt?.t ?? label)}</div>
-      {fill && (
-        <div style={{ fontWeight: 600 }}>
+      <div className="mk-tip-muted">{clockS(pt?.t ?? label)}</div>
+      {pt?.fills.map((fill, i) => (
+        <div key={i} style={{ fontWeight: 600 }}>
           {fill.side === "BUY" ? "Bought" : "Sold"} {sh(fill.qty)} {fill.team} at {cents(fill.price)}
           {fill.edge != null && (
             <span style={{ color: pnlColor(fill.edge) }}>
@@ -877,7 +896,7 @@ function GameTip({
             </span>
           )}
         </div>
-      )}
+      ))}
       {pt && (
         <>
           {pt.price != null && (
