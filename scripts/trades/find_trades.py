@@ -8,10 +8,13 @@ built by refresh_trade_values.py from ETR's rest-of-season values, re-based on
 this league's starters) and the league's current rosters from Sleeper.
 Writes data/nfl/trades.json for /magic-stats/trades.
 
-A trade makes the list when both teams' best lineups get better, and when it
-looks fair two ways: by our values and by the FantasyCalc market, so the other
-side has a reason to say yes. Ideas are ranked by the smaller of the two
-teams' gains, so the best ones help both sides about the same.
+Two sets of ideas, each with up to three per team:
+  etr     Blaine's view: lineups and fairness judged by ETR's values.
+  market  What everyone else sees: lineups and fairness judged by the
+          FantasyCalc trade market, ranked to favor the most even trades.
+A trade makes a list when both teams' best lineups get better by that list's
+values and the two sides are close in value. Ideas are ranked by the smaller
+of the two teams' gains, minus a penalty for any value gap.
 
 Team strength is the value of the best lineup (QB, 2 RB, 2 WR, TE, FLEX,
 SUPER_FLEX) plus a little for the next three bench players, who cover byes
@@ -39,10 +42,13 @@ BENCH_DEPTH = 3
 MIN_PLAYER = 25
 # Each side has to gain at least this much lineup value.
 MIN_GAIN = 15
-# Allowed gap between what each side gives, as a share of the bigger side,
-# by our values and by the market's.
-MAX_GAP_OURS = 0.25
-MAX_GAP_MARKET = 0.2
+# Per list: the allowed gap between what each side gives, as a share of the
+# bigger side, and how hard a value gap counts against an idea (per point,
+# against lineup points gained).
+VIEWS = {
+    "etr": {"max_gap": 0.2, "unfair": 0.1},
+    "market": {"max_gap": 0.1, "unfair": 1.0},
+}
 PER_TEAM = 3
 
 
@@ -80,6 +86,26 @@ def gap(a, b):
     return abs(a - b) / big if big else 0.0
 
 
+def needs_and_surplus(teams, val, pos):
+    """Needs: the team's two weakest positions, if its starters there are in
+    the league's bottom three. Surplus: a bench player at a position who'd be
+    among the league's three best backups, unless that's also a need."""
+    weak_rank, deep = {}, {}
+    for p in POSITIONS:
+        start = {k: sum(val.get(i, 0) for i in t["starters"].values() if pos[i] == p) for k, t in teams.items()}
+        bench = {k: max([val.get(i, 0) for i in t["ids"] if pos[i] == p and i not in t["starters"].values()] or [0])
+                 for k, t in teams.items()}
+        for n, k in enumerate(sorted(start, key=start.get)):
+            weak_rank[k, p] = n
+        deep[p] = {k for k in sorted(bench, key=bench.get, reverse=True)[:3] if bench[k] >= MIN_PLAYER * 2}
+    out = {}
+    for k in teams:
+        worst = sorted(POSITIONS, key=lambda p: weak_rank[k, p])[:2]
+        need = [p for p in worst if weak_rank[k, p] < 3]
+        out[k] = {"need": need, "surplus": [p for p in POSITIONS if k in deep[p] and p not in need]}
+    return out
+
+
 def main():
     data = json.loads(VALUES.read_text())
     players = {p["sid"]: p for p in data["players"]}
@@ -111,78 +137,10 @@ def main():
             "record": f"{r['settings'].get('wins', 0)}-{r['settings'].get('losses', 0)}",
             "ids": ids,
         }
-    for t in teams.values():
-        t["starters"], t["strength"] = lineup(t["ids"], val, pos)
-
-    # Needs: the team's two weakest positions, if its starters there are in
-    # the league's bottom three. Surplus: a bench player at a position who'd
-    # be among the league's three best backups, unless that's also a need.
-    weak_rank, deep = {}, {}
-    for p in POSITIONS:
-        start = {k: sum(val.get(i, 0) for i in t["starters"].values() if pos[i] == p) for k, t in teams.items()}
-        bench = {k: max([val.get(i, 0) for i in t["ids"] if pos[i] == p and i not in t["starters"].values()] or [0])
-                 for k, t in teams.items()}
-        for n, k in enumerate(sorted(start, key=start.get)):
-            weak_rank[k, p] = n
-        deep[p] = {k for k in sorted(bench, key=bench.get, reverse=True)[:3] if bench[k] >= MIN_PLAYER * 2}
-    for k, t in teams.items():
-        worst = sorted(POSITIONS, key=lambda p: weak_rank[k, p])[:2]
-        t["need"] = [p for p in worst if weak_rank[k, p] < 3]
-        t["surplus"] = [p for p in POSITIONS if k in deep[p] and p not in t["need"]]
-
-    def candidates(t):
-        return sorted((i for i in t["ids"] if val.get(i, 0) >= MIN_PLAYER), key=lambda i: -val[i])[:12]
-
-    ideas = []
-    for (ka, ta), (kb, tb) in itertools.combinations(teams.items(), 2):
-        ca, cb = candidates(ta), candidates(tb)
-        for na, nb in ((1, 1), (2, 1), (1, 2), (2, 2)):
-            for give in itertools.combinations(ca, na):
-                gv, gm = sum(val[i] for i in give), sum(mkt[i] for i in give)
-                for get in itertools.combinations(cb, nb):
-                    rv, rm = sum(val[i] for i in get), sum(mkt[i] for i in get)
-                    if gap(gv, rv) > MAX_GAP_OURS or gap(gm, rm) > MAX_GAP_MARKET:
-                        continue
-                    a_ids = [i for i in ta["ids"] if i not in give] + list(get)
-                    b_ids = [i for i in tb["ids"] if i not in get] + list(give)
-                    a_st, a_str = lineup(a_ids, val, pos)
-                    b_st, b_str = lineup(b_ids, val, pos)
-                    ga, gb = a_str - ta["strength"], b_str - tb["strength"]
-                    if ga < MIN_GAIN or gb < MIN_GAIN:
-                        continue
-                    ideas.append({
-                        "a": ka, "b": kb, "aGives": list(give), "bGives": list(get),
-                        "aGain": ga, "bGain": gb, "aStarters": a_st, "bStarters": b_st,
-                        "ours": [gv, rv], "market": [gm, rm],
-                        # Both sides should gain about the same; simpler trades break ties.
-                        "score": min(ga, gb) - 0.05 * abs(ga - gb) - 3 * (na + nb - 2),
-                    })
-    ideas.sort(key=lambda x: -x["score"])
-    print(f"{len(ideas)} trades help both sides")
-
-    # Up to PER_TEAM ideas per team, each with a different partner and no
-    # player offered twice in that team's list.
-    picked, chosen = {k: [] for k in teams}, []
-    for idea in ideas:
-        for me, other, mine in (("a", "b", "aGives"), ("b", "a", "bGives")):
-            k = idea[me]
-            lst = picked[k]
-            if len(lst) >= PER_TEAM:
-                continue
-            if any(chosen[j][other if chosen[j][me] == k else me] == idea[other] for j in lst):
-                continue
-            offered = {i for j in lst for i in (chosen[j]["aGives"] if chosen[j]["a"] == k else chosen[j]["bGives"])}
-            if offered & set(idea[mine]):
-                continue
-            if idea not in chosen:
-                chosen.append(idea)
-            lst.append(chosen.index(idea))
-
-    def why(t_before, after_starters, gets, gives):
+    def why(before, after, gets, gives):
         """Plain words, no numbers: where the incoming players start and
         whether the outgoing ones were starting."""
-        slot_of = {i: s for s, i in after_starters.items()}
-        before = set(t_before["starters"].values())
+        slot_of = {i: s for s, i in after.items()}
         parts = []
         for i in gets:
             s = slot_of.get(i)
@@ -194,22 +152,82 @@ def main():
         return ". ".join(parts) + "."
 
     trades = []
-    for n, idea in enumerate(chosen):
-        ta, tb = teams[idea["a"]], teams[idea["b"]]
-        trades.append({
-            "id": n,
-            "sides": [
-                {"rosterId": idea["a"], "gives": idea["aGives"], "gets": idea["bGives"],
-                 "why": why(ta, idea["aStarters"], idea["bGives"], idea["aGives"])},
-                {"rosterId": idea["b"], "gives": idea["bGives"], "gets": idea["aGives"],
-                 "why": why(tb, idea["bStarters"], idea["aGives"], idea["bGives"])},
-            ],
-            "numbers": {
-                "gain": [round(idea["aGain"], 1), round(idea["bGain"], 1)],
-                "ours": [round(v, 1) for v in idea["ours"]],
-                "market": [round(v, 1) for v in idea["market"]],
-            },
-        })
+    for view, v, cfg in (("etr", val, VIEWS["etr"]), ("market", mkt, VIEWS["market"])):
+        for t in teams.values():
+            t["starters"], t["strength"] = lineup(t["ids"], v, pos)
+        needs = needs_and_surplus(teams, v, pos)
+
+        def candidates(t, v=v):
+            return sorted((i for i in t["ids"] if v.get(i, 0) >= MIN_PLAYER), key=lambda i: -v[i])[:12]
+
+        ideas = []
+        for (ka, ta), (kb, tb) in itertools.combinations(teams.items(), 2):
+            ca, cb = candidates(ta), candidates(tb)
+            for na, nb in ((1, 1), (2, 1), (1, 2), (2, 2)):
+                for give in itertools.combinations(ca, na):
+                    gv = sum(v[i] for i in give)
+                    for get in itertools.combinations(cb, nb):
+                        rv = sum(v[i] for i in get)
+                        if gap(gv, rv) > cfg["max_gap"]:
+                            continue
+                        a_st, a_str = lineup([i for i in ta["ids"] if i not in give] + list(get), v, pos)
+                        b_st, b_str = lineup([i for i in tb["ids"] if i not in get] + list(give), v, pos)
+                        ga, gb = a_str - ta["strength"], b_str - tb["strength"]
+                        if ga < MIN_GAIN or gb < MIN_GAIN:
+                            continue
+                        ideas.append({
+                            "a": ka, "b": kb, "aGives": list(give), "bGives": list(get),
+                            "aGain": ga, "bGain": gb, "aStarters": a_st, "bStarters": b_st,
+                            # Both sides should gain about the same, the values should
+                            # match (how much depends on the view), and simpler trades
+                            # break ties.
+                            "score": min(ga, gb) - 0.05 * abs(ga - gb) - cfg["unfair"] * abs(gv - rv)
+                                     - 3 * (na + nb - 2),
+                        })
+        ideas.sort(key=lambda x: -x["score"])
+        print(f"{view}: {len(ideas)} trades help both sides")
+
+        # Up to PER_TEAM ideas per team, each with a different partner and no
+        # player offered twice in that team's list.
+        picked, chosen = {k: [] for k in teams}, []
+        for idea in ideas:
+            for me, other, mine in (("a", "b", "aGives"), ("b", "a", "bGives")):
+                k = idea[me]
+                lst = picked[k]
+                if len(lst) >= PER_TEAM:
+                    continue
+                if any(chosen[j][other if chosen[j][me] == k else me] == idea[other] for j in lst):
+                    continue
+                offered = {i for j in lst for i in (chosen[j]["aGives"] if chosen[j]["a"] == k else chosen[j]["bGives"])}
+                if offered & set(idea[mine]):
+                    continue
+                if idea not in chosen:
+                    chosen.append(idea)
+                lst.append(chosen.index(idea))
+
+        base = len(trades)
+        for idea in chosen:
+            ta, tb = teams[idea["a"]], teams[idea["b"]]
+            ours = [sum(val[i] for i in idea["aGives"]), sum(val[i] for i in idea["bGives"])]
+            market = [sum(mkt[i] for i in idea["aGives"]), sum(mkt[i] for i in idea["bGives"])]
+            trades.append({
+                "id": len(trades),
+                "view": view,
+                "sides": [
+                    {"rosterId": idea["a"], "gives": idea["aGives"], "gets": idea["bGives"],
+                     "why": why(set(ta["starters"].values()), idea["aStarters"], idea["bGives"], idea["aGives"])},
+                    {"rosterId": idea["b"], "gives": idea["bGives"], "gets": idea["aGives"],
+                     "why": why(set(tb["starters"].values()), idea["bStarters"], idea["aGives"], idea["bGives"])},
+                ],
+                "numbers": {
+                    "gain": [round(idea["aGain"], 1), round(idea["bGain"], 1)],
+                    "ours": [round(x, 1) for x in ours],
+                    "market": [round(x, 1) for x in market],
+                },
+            })
+        for k, t in teams.items():
+            t.setdefault("views", {})[view] = {**needs[k], "trades": [base + j for j in picked[k]]}
+            t.setdefault("strengths", {})[view] = round(t["strength"], 1)
 
     used = {i for t in trades for s in t["sides"] for i in s["gives"]}
     out = {
@@ -220,8 +238,7 @@ def main():
                    "tradeDeadline": league.get("settings", {}).get("trade_deadline")},
         "teams": [{
             "rosterId": k, "owner": t["owner"], "teamName": t["teamName"], "record": t["record"],
-            "need": t.get("need", []), "surplus": t.get("surplus", []), "trades": picked[k],
-            "numbers": {"strength": round(t["strength"], 1)},
+            "views": t["views"], "numbers": {"strength": t["strengths"]},
         } for k, t in sorted(teams.items())],
         "trades": trades,
         "players": {i: {
@@ -236,7 +253,7 @@ def main():
         json.dump(out, f, separators=(",", ":"))
     os.chmod(tmp, 0o644)
     os.replace(tmp, OUT)
-    print(f"{len(trades)} trades written for {sum(1 for v in picked.values() if v)} of {len(teams)} teams")
+    print(f"{len(trades)} trades written")
 
 
 SLOT_LABEL = {"QB": "QB", "RB1": "RB", "RB2": "RB", "WR1": "WR", "WR2": "WR", "TE": "TE",

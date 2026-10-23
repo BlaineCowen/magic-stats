@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, Eye } from "lucide-react";
 import {
   loadTrades,
   type Trade,
@@ -54,7 +54,7 @@ function PlayerList({
             )}
             {owner && p.numbers && (
               <span className="text-xs text-slate-500 tabular-nums">
-                {fmt(p.numbers.ours)} ours · {fmt(p.numbers.market)} market
+                {fmt(p.numbers.ours)} value · {fmt(p.numbers.market)} market
                 {p.numbers.etrRank != null && ` · ETR #${p.numbers.etrRank}`}
               </span>
             )}
@@ -112,13 +112,13 @@ function TradeCard({
       {owner && n && (
         <dl className="mt-3 grid gap-2 border-t border-slate-100 pt-3 text-xs tabular-nums sm:grid-cols-3">
           <div>
-            <dt className="text-slate-500">Lineup gain</dt>
+            <dt className="text-slate-500">Lineup gain (ETR)</dt>
             <dd className="font-semibold text-slate-900">
               {signed(n.gain[mine]!)} you · {signed(n.gain[1 - mine]!)} them
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500">Our values</dt>
+            <dt className="text-slate-500">ETR values</dt>
             <dd className="font-semibold text-slate-900">
               {fmt(n.ours[mine])} for {fmt(n.ours[1 - mine])}
             </dd>
@@ -165,10 +165,16 @@ function Tags({
   );
 }
 
-export default async function TradesPage() {
-  const viewer = viewerFrom(await headers());
-  const owner = viewer.tier === "owner";
-  const data = await loadTrades(owner);
+export default async function TradesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const isBlaine = viewerFrom(await headers()).tier === "owner";
+  // Blaine can preview the friends' page; everyone else only ever gets that one.
+  const preview = isBlaine && (await searchParams).view === "friends";
+  const owner = isBlaine && !preview;
+  const data = await loadTrades(owner ? "owner" : "friends");
 
   return (
     <main className="mx-auto max-w-4xl px-4 pt-5 pb-16 sm:pt-8">
@@ -182,6 +188,27 @@ export default async function TradesPage() {
           more than it gets.
         </p>
       </header>
+
+      {isBlaine && (
+        <div className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          <span className="flex-1">
+            {preview
+              ? "This is what your friends see: the fairest trades by market value, with no numbers."
+              : "Only you see this version: trades picked by ETR values, with the numbers behind them."}
+          </span>
+          <a
+            href={
+              preview
+                ? "/magic-stats/trades"
+                : "/magic-stats/trades?view=friends"
+            }
+            className="bg-turf-800 hover:bg-turf-900 focus-visible:outline-turf-700 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            <Eye className="size-4" aria-hidden />
+            {preview ? "Back to my view" : "See what friends see"}
+          </a>
+        </div>
+      )}
 
       {!data ? (
         <p className="rounded-lg border border-slate-200 bg-white p-4 text-slate-600">
@@ -220,8 +247,8 @@ export default async function TradesPage() {
                     {t.teamName ? `${t.owner} · ` : ""}
                     {t.record}
                     {owner &&
-                      t.numbers &&
-                      ` · lineup ${fmt(t.numbers.strength)}`}
+                      t.strength != null &&
+                      ` · lineup ${fmt(t.strength)}`}
                   </span>
                 </div>
                 <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1">
@@ -253,11 +280,9 @@ export default async function TradesPage() {
           </div>
 
           <p className="mt-10 max-w-3xl text-sm text-slate-500">
-            Player values are Establish the Run&apos;s rest-of-season trade
-            values for 2-QB half PPR, adjusted to how many players this league
-            starts at each position. A trade makes the list when it improves
-            both teams&apos; best lineups (with a little credit for bench depth)
-            and looks fair by those values and by the FantasyCalc trade market.
+            {owner
+              ? "Player values are Establish the Run's rest-of-season trade values for 2-QB half PPR, adjusted to how many players this league starts at each position. A trade makes this list when it improves both teams' best lineups by those values (with a little credit for bench depth) and the two sides are within 20% of each other."
+              : "Player values come from the FantasyCalc trade market: real trades in 12-team, 2-QB, half-PPR redraft leagues. A trade makes the list when it improves both teams' best lineups by those values (with a little credit for bench depth), and the closest to even come first."}{" "}
             Updated{" "}
             {new Date(data.generated).toLocaleDateString("en-US", {
               month: "short",
