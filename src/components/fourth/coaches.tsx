@@ -27,17 +27,17 @@ const NOTES: Record<string, React.ReactNode> = {
     <>
       <p>
         Almost all of it is caution. Of everything his 4th down calls gave away,
-        85% came from kicking or punting when going for it was better. In four
+        89% came from kicking or punting when going for it was better. In four
         seasons he has made only 3 costly calls by being too aggressive.
       </p>
       <p>
         His most expensive habit is kicking field goals on short yardage near
         the goal line: 21 times inside the 10 when going for it was better,
-        worth about 0.6 wins on their own.
+        worth about 0.7 wins on their own.
       </p>
       <p>
-        It isn&apos;t getting better. He gave away about 0.8 wins in 2023, 0.75
-        in 2024 and 1.2 in 2025, and 2026 is on a similar pace. In the playoffs
+        It isn&apos;t getting better. He gave away about 0.9 wins in 2023, 0.9
+        in 2024 and 1.4 in 2025, and 2026 is on a similar pace. In the playoffs
         (3 wins, 3 losses, all three losses in the divisional round) one example
         is a field goal on 4th &amp; 2 from the New England 7 while down 11 in
         the third quarter of the 2025 loss.
