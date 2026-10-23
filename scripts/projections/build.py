@@ -175,6 +175,18 @@ def main() -> None:
             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS typical_xfp
         FROM rows r LEFT JOIN pg p USING (player_id, game_id)
       ),
+      prev_typical AS (
+        SELECT player_id, season + 1 AS season, median(snap_pct) AS snap, median(xfp) AS xfp
+        FROM pg GROUP BY player_id, season
+      ),
+      -- Under 2 games this season, judge early exits against last season.
+      raw2 AS (
+        SELECT raw.* REPLACE (
+          CASE WHEN snap_games >= 2 THEN typical_snap ELSE pt.snap END AS typical_snap,
+          CASE WHEN snap_games >= 2 THEN typical_xfp ELSE pt.xfp END AS typical_xfp,
+          CASE WHEN snap_games >= 2 OR pt.snap IS NULL THEN snap_games ELSE 2 END AS snap_games)
+        FROM raw LEFT JOIN prev_typical pt USING (player_id, season)
+      ),
       -- A game with well under his usual snaps (75%) and usage (60%) is an
       -- early exit (injury, ejection, blowout rest): leave it out of his
       -- averages, the way fantasy sites do, so one partial game doesn't sink
@@ -191,7 +203,7 @@ def main() -> None:
         FROM (
           SELECT *, coalesce(snap_games >= 2 AND snap_pct < 0.75 * typical_snap
             AND xfp < 0.6 * typical_xfp, false) AS partial
-          FROM raw
+          FROM raw2
         )
       )
       SELECT player_id, game_id,

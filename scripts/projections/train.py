@@ -45,6 +45,8 @@ CONTEXT = ["week", "home", "rest", "div_game", "primetime", "indoor", "opp_def_e
 STARTER = {"QB": 20.0, "RB": 15.0, "WR": 15.0, "TE": 11.0}
 MARGIN = 3.0
 HORIZON = 4
+# Last season counts like this many games of this season in the blended rates.
+PRIOR_GAMES = 4
 
 # Plain-English names for the "why" column on the site.
 LABELS = {
@@ -93,6 +95,9 @@ LABELS = {
     "draft_pick": "draft capital",
     "games_to_date": "games played",
     "games_prev": "games played last season",
+    "games_missed": "games missed",
+    "ppr_blend": "points this season and last",
+    "xfp_blend": "usage this season and last",
     "snap_prev": "snap share last season",
     "tgt_share_prev": "target share last season",
     "opp_games": "opponent games played",
@@ -110,6 +115,15 @@ LABELS = {
 
 def load() -> tuple[pd.DataFrame, list[str]]:
     df = pd.read_parquet(WORK / "player_games.parquet")
+    # Games he missed so far (byes count as one), and this season's per-game
+    # numbers blended with last season's, weighted by games played: a player
+    # back from injury with three games isn't judged on those three alone.
+    # Not for QBs, where the blend made the ROS backtest slightly worse.
+    df["games_missed"] = (df.week - 1 - df.games_to_date).clip(lower=0)
+    for col, prev in (("ppr_pg", "ppr_prev"), ("xfp_pg", "xfp_prev")):
+        n, k = df.games_to_date.fillna(0), PRIOR_GAMES
+        blend = (n * df[col].fillna(0) + k * df[prev]) / (n + k)
+        df[col.replace("_pg", "_blend")] = blend.fillna(df[col]).where(df.position != "QB")
     feats = [c for c in df.columns if c not in ID_COLS]
     df[feats] = df[feats].astype(float)
     return df, feats
@@ -132,7 +146,7 @@ def with_breakout_label(df: pd.DataFrame) -> pd.DataFrame:
 # More of these never lowers a projection. Without the constraint the trees
 # did odd things at the extremes (a 32-point usage game counted against a WR).
 INCREASING = {
-    "xfp_pg", "xfp_l3", "xfp_last", "xfp_prev", "xfp_max", "ppr_pg", "ppr_l3", "ppr_prev",
+    "xfp_pg", "xfp_l3", "xfp_last", "ppr_blend", "xfp_blend", "xfp_prev", "xfp_max", "ppr_pg", "ppr_l3", "ppr_prev",
     "xtd_pg", "xtd_l3", "tgt_share", "tgt_share_l3", "tgt_share_prev", "car_share", "car_share_l3",
     "ay_share", "snap_pct", "snap_l3", "snap_prev", "implied_total", "vacated_tgt", "vacated_car",
 }
@@ -257,8 +271,14 @@ def backtest(df: pd.DataFrame, feats: list[str]) -> None:
     base_corr = g.groupby(["season", "snap_week", "position"]).apply(
         lambda x: x.base.corr(x.actual, method="spearman"), include_groups=False).mean()
     print("\nRest of season (numbers frozen at weeks 4, 8, 12), PPR per game")
-    print(f"  model MAE {ros_mae:.2f} | season-to-date PPR/game {ros_base:.2f} | players {len(g)}")
+    print(f"  model MAE {ros_mae:.3f} | season-to-date PPR/game {ros_base:.3f} | players {len(g)}")
     print(f"  rank correlation within position: model {ros_corr:.3f} | to-date {base_corr:.3f}")
+    for pos, gp in g.groupby("position"):
+        pc = gp.groupby(["season", "snap_week"]).apply(
+            lambda x: x.pred.corr(x.actual, method="spearman"), include_groups=False).mean()
+        bc = gp.groupby(["season", "snap_week"]).apply(
+            lambda x: x.base.corr(x.actual, method="spearman"), include_groups=False).mean()
+        print(f"  {pos}: MAE {(gp.pred - gp.actual).abs().mean():.3f} | rank corr {pc:.3f} (to-date {bc:.3f}) | n {len(gp)}")
 
     b = pd.concat(bo_rows)
     print("\nBreakout (next 4 games at starter level), 2021-2025")
