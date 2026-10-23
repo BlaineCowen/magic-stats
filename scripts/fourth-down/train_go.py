@@ -90,6 +90,35 @@ def fit(df: pd.DataFrame, feats: list[str], rounds: int = 1124, depth: int = 2, 
 SHIP = {"rounds": 700, "depth": 4, "w4": 3.0}
 
 
+# 4th down attempts convert more often than the yards model says, which mostly learns from 3rd downs: since
+# 2022, 4th & 4-5 converts 58% vs 49% on 3rd. More weight on 4th downs or on recent seasons didn't fix it
+# (2025-26 holdout). A log-odds boost per distance band, fit on recent 4th downs, did: conversion log loss
+# 0.6461 -> 0.6427 on 2025-26 with the model and boosts fit through 2024. 4th & 11+ gets none: those
+# attempts are mostly forced, and a boost there would teach the calculator to go on 4th & long.
+OFFSET_BANDS = [(1, 1), (2, 3), (4, 5), (6, 10)]
+OFFSET_SEASONS = (2018, 2025)
+
+
+def conversion_prob(model, d, feats):
+    p = model.predict(xgb.DMatrix(d[feats]))
+    need = (d.ydstogo.values + 10).astype(int)
+    return np.clip([row[n:].sum() for row, n in zip(p, need)], 1e-4, 1 - 1e-4)
+
+
+def fit_offsets(model, d, feats) -> list[float]:
+    """Per-band log-odds shift on top of the model's conversion probability (slope fixed at 1)."""
+    from scipy.optimize import minimize
+    z = np.log(1 / (1 / conversion_prob(model, d, feats) - 1))
+    band = np.stack([d.ydstogo.between(lo, hi).to_numpy(float) for lo, hi in OFFSET_BANDS], axis=1)
+    made = (d.yards_gained >= d.ydstogo).to_numpy(float)
+
+    def nll(c):
+        eta = z + band @ c
+        return np.sum(np.logaddexp(0, eta) - made * eta)
+
+    return [float(v) for v in minimize(nll, np.zeros(len(OFFSET_BANDS))).x]
+
+
 def score(model, test, feats, name):
     p = model.predict(xgb.DMatrix(test[feats]))
     mll = log_loss(test.label, p, labels=range(NCLASS))
@@ -120,6 +149,10 @@ if __name__ == "__main__":
         latest = df[(df.season == 2026) & (df.down == 4)]
         if len(latest):
             score(model, latest, feats, "2026 4th downs (unseen)")
+        lo, hi = OFFSET_SEASONS
+        offsets = fit_offsets(model, df[(df.down == 4) & df.season.between(lo, hi)], feats)
+        json.dump({"bands": OFFSET_BANDS, "offsets": offsets}, open(WORK / "go_offsets.json", "w"))
+        print("conversion boosts (log-odds):", dict(zip(map(str, OFFSET_BANDS), np.round(offsets, 3))))
         model.save_model(WORK / "go_model.json")
         json.dump({"features": feats}, open(WORK / "go_meta.json", "w"))
         print("saved go model", feats)

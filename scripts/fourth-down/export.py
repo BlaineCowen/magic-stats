@@ -88,6 +88,7 @@ if __name__ == "__main__":
     json.dump(compact(fg, fg_feats, kicks), open(OUT / "fg.json", "w"), separators=(",", ":"))
     fx["fg"] = fixtures(fg, fg_feats, kicks)
 
+    json.dump(json.load(open(WORK / "go_offsets.json")), open(OUT / "go_offsets.json", "w"), separators=(",", ":"))
     json.dump(json.load(open(WORK / "climate.json")), open(OUT / "climate.json", "w"), separators=(",", ":"))
     json.dump(json.load(open(WORK / "punt_table.json")), open(OUT / "punt.json", "w"), separators=(",", ":"))
     json.dump(fx, open(OUT / "fixtures.json", "w"), separators=(",", ":"))

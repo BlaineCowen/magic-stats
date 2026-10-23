@@ -16,7 +16,8 @@ import {
  * - punt outcomes come from the next snap, so penalties, muffs, blocks and return TDs are all in, and
  *   the table covers every yardline (nfl4th's has block and return-TD rates swapped and stops at the 30)
  * - the go-for-it model trains on 2006-2025 incl. playoffs (fakes excluded), with a post-2022 era term
- *   and deeper trees that can tell real 4th down attempts from 3rd downs
+ *   and deeper trees that can tell real 4th down attempts from 3rd downs, plus a boost fit on recent
+ *   4th downs, which convert more often than 3rd downs from the same distance
  * - the field goal model knows temperature and wind (typical for the stadium and month when unrecorded)
  * - the result says how sure it is and what conversion rate would make going right
  */
@@ -267,9 +268,27 @@ function situationState(x: Situation): State {
 }
 
 /** Probability of each yards-gained outcome (-10..65) if the offense goes for it. */
+type GoOffsets = { bands: [number, number][]; offsets: number[] };
+
+/**
+ * Real 4th down attempts convert more often than the yards model says (it learns mostly from 3rd downs),
+ * so shift the chance of reaching the line by a per-distance log-odds boost fit on 2018-25 4th downs
+ * (scripts/fourth-down/train_go.py), keeping the shape of the gains on each side of the line.
+ */
+function boostConversion(gains: number[], ydstogo: number): number[] {
+  const { bands, offsets } = loadJson<GoOffsets>("go_offsets.json");
+  const band = bands.findIndex(([lo, hi]) => ydstogo >= lo && ydstogo <= hi);
+  if (band < 0) return gains;
+  const need = ydstogo + 10;
+  const p = gains.slice(need).reduce((a, b) => a + b, 0);
+  if (p <= 0 || p >= 1) return gains;
+  const q = 1 / (1 + ((1 - p) / p) * Math.exp(-offsets[band]!));
+  return gains.map((g, i) => g * (i >= need ? q / p : (1 - q) / (1 - p)));
+}
+
 export function goGains(x: Situation): number[] {
   const { go } = models();
-  return predictSoftmax(
+  const gains = predictSoftmax(
     go,
     rowFor(go, {
       down: 4,
@@ -286,6 +305,7 @@ export function goGains(x: Situation): number[] {
       posteam_total: (x.total + x.spread) / 2,
     }),
   );
+  return boostConversion(gains, x.ydstogo);
 }
 
 function goOption(x: Situation, s: State): { option: Option; gains: number[] } {

@@ -23,10 +23,13 @@ test("textbook calls", () => {
     at({ qtr: 2, clock: 600, scoreDiff: 0, ydstogo: 12, yardline: 80 }).best,
     "punt",
   );
-  // 4th & 8 at the opponent's 15, first quarter: kick
+  // 4th & 12 at the opponent's 15, first quarter: kick (4th & 8 there is a coin flip, within half a point)
   assert.equal(
-    at({ qtr: 1, clock: 600, scoreDiff: 0, ydstogo: 8, yardline: 15 }).best,
+    at({ qtr: 1, clock: 600, scoreDiff: 0, ydstogo: 12, yardline: 15 }).best,
     "fg",
+  );
+  assert.ok(
+    at({ qtr: 1, clock: 600, scoreDiff: 0, ydstogo: 8, yardline: 15 }).gap < 1,
   );
   // down 3, 4th & goal at the 8, final seconds: kick and take overtime
   assert.equal(
