@@ -4,7 +4,8 @@ Each replicate resamples whole games with replacement (as xgboost weights, so no
 retrains a lighter version of each model. The site runs every decision through all replicates and reports
 how often they agree on the best call (after Brill, Yurko & Wyner, "Analytics, have some humility", 2023).
 
-    python train_boot.py [B]      # default 12; writes src/lib/fourth/models/boot/*.json.gz
+    python train_boot.py [B]            # default 12; writes src/lib/fourth/models/boot/*.json.gz
+    python train_boot.py [B] --fg-only  # retrain just the field goal replicates
 """
 
 import gzip
@@ -47,7 +48,9 @@ def save(model: xgb.Booster, feats: list[str], sample: pd.DataFrame, name: str, 
 
 
 if __name__ == "__main__":
-    B = int(sys.argv[1]) if len(sys.argv) > 1 else 12
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    B = int(args[0]) if args else 12
+    fg_only = "--fg-only" in sys.argv
     OUT.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(20261021)
 
@@ -60,13 +63,14 @@ if __name__ == "__main__":
 
     for b in range(B):
         t = time.time()
-        w = game_weights(wp_rows.game_id, rng)
-        m = xgb.train(WP_LIGHT, xgb.DMatrix(wp_rows[train_wp.FEATURES], label=wp_rows.label_win, weight=w), WP_ROUNDS)
-        save(m, train_wp.FEATURES, wp_rows, f"wp_{b}")
-
-        w = game_weights(go_rows.game_id, rng) * go_w4
-        m = xgb.train(GO_LIGHT, xgb.DMatrix(go_rows[train_go.MORE], label=go_rows.label, weight=w), GO_ROUNDS)
-        save(m, train_go.MORE, go_rows[go_rows.down == 4], f"go_{b}", train_go.NCLASS)
+        # draw every model's weights even with --fg-only, so its replicates match a full run's
+        w_wp = game_weights(wp_rows.game_id, rng)
+        w_go = game_weights(go_rows.game_id, rng) * go_w4
+        if not fg_only:
+            m = xgb.train(WP_LIGHT, xgb.DMatrix(wp_rows[train_wp.FEATURES], label=wp_rows.label_win, weight=w_wp), WP_ROUNDS)
+            save(m, train_wp.FEATURES, wp_rows, f"wp_{b}")
+            m = xgb.train(GO_LIGHT, xgb.DMatrix(go_rows[train_go.MORE], label=go_rows.label, weight=w_go), GO_ROUNDS)
+            save(m, train_go.MORE, go_rows[go_rows.down == 4], f"go_{b}", train_go.NCLASS)
 
         w = game_weights(fg_rows.game_id, rng)
         params = {"objective": "binary:logistic", "eta": 0.03, "max_depth": 3, "min_child_weight": 30, "subsample": 0.8,

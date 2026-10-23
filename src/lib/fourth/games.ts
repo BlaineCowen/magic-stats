@@ -9,6 +9,7 @@ import {
   type OptionKey,
   type Roof,
   type Situation,
+  typicalWeather,
 } from "./engine";
 
 export type FourthDownPlay = {
@@ -120,6 +121,14 @@ async function buildAnalysis(gameId: string): Promise<GameAnalysis> {
     FROM pbp WHERE season = ${Number(gameId.slice(0, 4))} AND game_id = '${gameId}' ORDER BY play_id`);
   if (!rows.length) throw new Error(`No plays for ${gameId}`);
   const first = rows[0]!;
+  // nflverse fills weather in late; open-air games get the stadium's typical weather for the month
+  const typical =
+    roofOf(first.roof as string | null) === "outdoors"
+      ? typicalWeather(
+          String(first.home_team),
+          first.game_date ? String(first.game_date) : undefined,
+        )
+      : null;
   const plays: FourthDownPlay[] = [];
   const timeline: GameTimelinePoint[] = [];
 
@@ -185,8 +194,8 @@ async function buildAnalysis(gameId: string): Promise<GameAnalysis> {
       spread: home ? spreadLine : -spreadLine,
       total: Number(r.total_line ?? 45),
       roof: roofOf(r.roof as string | null),
-      temp: num(r.temp),
-      wind: num(r.wind),
+      temp: num(r.temp) ?? typical?.temp ?? null,
+      wind: num(r.wind) ?? typical?.wind ?? null,
       // home_opening_kickoff = 1: home received the opening kick, so the away team gets the 2H kick
       receive2h: home ? hok === 0 : hok === 1,
     };

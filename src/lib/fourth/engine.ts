@@ -17,7 +17,7 @@ import {
  *   the table covers every yardline (nfl4th's has block and return-TD rates swapped and stops at the 30)
  * - the go-for-it model trains on 2006-2025 incl. playoffs (fakes excluded), with a post-2022 era term
  *   and deeper trees that can tell real 4th down attempts from 3rd downs
- * - the field goal model knows temperature and wind
+ * - the field goal model knows temperature and wind (typical for the stadium and month when unrecorded)
  * - the result says how sure it is and what conversion rate would make going right
  */
 
@@ -332,12 +332,36 @@ function goOption(x: Situation, s: State): { option: Option; gains: number[] } {
   };
 }
 
+type Weather = { temp: number; wind: number };
+type Climate = {
+  team: Record<string, Record<string, Weather>>;
+  month: Record<string, Weather>;
+  all: Weather;
+};
+
+/**
+ * Typical game-time weather for an open-air game, for when nflverse hasn't recorded it (it backfills
+ * the current season late). The field goal model was trained with the same fill; left blank, a kick
+ * would take the model's missing-weather branch, which domes taught to expect perfect conditions.
+ * Without a team or date this is the all-games median.
+ */
+export function typicalWeather(homeTeam?: string, date?: string): Weather {
+  const c = loadJson<Climate>("climate.json");
+  const month = date ? String(Number(date.slice(5, 7))) : "";
+  return (homeTeam && c.team[homeTeam]?.[month]) || c.month[month] || c.all;
+}
+
 export function fgMakeProb(
   x: Pick<Situation, "season" | "yardline" | "roof" | "temp" | "wind">,
 ): number {
   const { fg } = models();
   const distance = x.yardline + 18;
   const indoors = x.roof === "dome";
+  // retractable roofs trained with blank weather (they're usually closed), so only fill open-air games
+  const typical =
+    x.roof === "outdoors" && (x.temp == null || x.wind == null)
+      ? typicalWeather()
+      : null;
   const p = predictBinary(
     fg,
     rowFor(fg, {
@@ -345,8 +369,8 @@ export function fgMakeProb(
       season: x.season,
       outdoors: x.roof === "outdoors" ? 1 : 0,
       retractable: x.roof === "retractable" ? 1 : 0,
-      temp: indoors ? null : (x.temp ?? null),
-      wind: indoors ? null : (x.wind ?? null),
+      temp: indoors ? null : (x.temp ?? typical?.temp ?? null),
+      wind: indoors ? null : (x.wind ?? typical?.wind ?? null),
     }),
   );
   // the record is 66 yards; fade the model's tail to zero by 72

@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
+import train_fg
+
 HERE = Path(__file__).resolve().parent
 WORK = HERE / "work"
 OUT = HERE.parents[1] / "src" / "lib" / "fourth" / "models"
@@ -82,11 +84,11 @@ if __name__ == "__main__":
 
     fg_feats = json.load(open(WORK / "fg_meta.json"))["features"]
     fg = xgb.Booster(model_file=str(WORK / "fg_model.json"))
-    kicks = plays[plays.play_type == "field_goal"].copy()
-    kicks.loc[kicks.dome == 1, ["temp", "wind"]] = np.nan
+    kicks = train_fg.attempts()
     json.dump(compact(fg, fg_feats, kicks), open(OUT / "fg.json", "w"), separators=(",", ":"))
     fx["fg"] = fixtures(fg, fg_feats, kicks)
 
+    json.dump(json.load(open(WORK / "climate.json")), open(OUT / "climate.json", "w"), separators=(",", ":"))
     json.dump(json.load(open(WORK / "punt_table.json")), open(OUT / "punt.json", "w"), separators=(",", ":"))
     json.dump(fx, open(OUT / "fixtures.json", "w"), separators=(",", ":"))
     for f in sorted(OUT.glob("*.json")):

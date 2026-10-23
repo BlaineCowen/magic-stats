@@ -7,6 +7,7 @@ import {
   type OptionKey,
   type Roof,
   type Situation,
+  typicalWeather,
 } from "./engine";
 import { actualOf, outcomeOf, type Outcome } from "./outcome";
 import { fourthDownInputs } from "./overtime";
@@ -189,23 +190,29 @@ type Schedule = {
 async function scheduleFor(eventId: string): Promise<Schedule | null> {
   if (!/^\d+$/.test(eventId)) return null;
   const { rows } = await runSafeSelect(
-    `SELECT season, spread_line, total_line, roof, temp, wind FROM games WHERE espn = '${eventId}' LIMIT 1`,
+    `SELECT season, spread_line, total_line, roof, temp, wind, home_team, gameday FROM games WHERE espn = '${eventId}' LIMIT 1`,
   );
   const r = rows[0];
   if (!r) return null;
-  const roof = String(r.roof ?? "");
+  const raw = String(r.roof ?? "");
+  const roof: Roof =
+    raw === "dome" || raw === "closed"
+      ? "dome"
+      : raw === "retractable"
+        ? "retractable"
+        : "outdoors";
+  // nflverse fills weather in late; until then open-air games get the stadium's typical weather for the month
+  const typical =
+    roof === "outdoors"
+      ? typicalWeather(String(r.home_team), String(r.gameday ?? ""))
+      : null;
   return {
     season: Number(r.season),
     spread: Number(r.spread_line ?? 0),
     total: Number(r.total_line ?? 45),
-    roof:
-      roof === "dome" || roof === "closed"
-        ? "dome"
-        : roof === "retractable"
-          ? "retractable"
-          : "outdoors",
-    temp: r.temp == null ? null : Number(r.temp),
-    wind: r.wind == null ? null : Number(r.wind),
+    roof,
+    temp: r.temp == null ? (typical?.temp ?? null) : Number(r.temp),
+    wind: r.wind == null ? (typical?.wind ?? null) : Number(r.wind),
   };
 }
 
