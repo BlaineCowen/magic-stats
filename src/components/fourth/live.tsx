@@ -221,6 +221,27 @@ function did(c: LiveCall) {
       : "Punted";
 }
 
+const TONE = {
+  good: "text-emerald-700",
+  bad: "text-red-700",
+  neutral: "text-slate-900",
+} as const;
+
+/** What they ran and how it went, with ESPN's play text for the names. */
+function Result({ c }: { c: LiveCall }) {
+  if (!c.outcome) return null;
+  const { play, result, tone } = c.outcome;
+  return (
+    <div className="mt-2 rounded-md bg-slate-50 px-3 py-2">
+      <p className="text-sm">
+        {play && <span className="text-slate-700">{play}. </span>}
+        <span className={cn("font-semibold", TONE[tone])}>{result}.</span>
+      </p>
+      <p className="mt-0.5 text-xs text-slate-500">{c.desc}</p>
+    </div>
+  );
+}
+
 function CallRow({ c }: { c: LiveCall }) {
   const v = verdictOf(c);
   const Icon = v === "right" ? Check : v === "wrong" ? X : Minus;
@@ -265,11 +286,15 @@ function CallRow({ c }: { c: LiveCall }) {
               </span>
             )}
           </div>
+          <Result c={c} />
         </>
       ) : (
-        <p className="text-sm text-slate-600">
-          Overtime 4th down. {did(c)}. Overtime calls aren&apos;t graded here.
-        </p>
+        <>
+          <p className="text-sm text-slate-600">
+            Overtime 4th down. {did(c)}. Overtime calls aren&apos;t graded here.
+          </p>
+          <Result c={c} />
+        </>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ import {
   type Roof,
   type Situation,
 } from "./engine";
+import { actualOf, outcomeOf, type Outcome } from "./outcome";
 import { fourthDownInputs } from "./overtime";
 
 /**
@@ -79,6 +80,9 @@ type EspnPlay = {
   id: string;
   type?: { text?: string };
   text: string;
+  statYardage?: number;
+  scoringPlay?: boolean;
+  isTurnover?: boolean;
   awayScore: number;
   homeScore: number;
   period: { number: number };
@@ -223,18 +227,6 @@ function yardsToGo(text: string | undefined, posAbbr: string): number | null {
   return team(m[1]!) === posAbbr ? 100 - n : n;
 }
 
-function actualOf(p: EspnPlay): OptionKey | null {
-  const t = (p.type?.text ?? "").toLowerCase();
-  if (t.includes("punt")) return "punt";
-  if (t.includes("field goal")) return "fg";
-  if (
-    /rush|pass|sack|interception|fumble|touchdown/.test(t) &&
-    !/kickoff|extra point|two-point/.test(t)
-  )
-    return "go";
-  return null;
-}
-
 export type LiveCall = {
   playId: string;
   qtr: number;
@@ -243,6 +235,8 @@ export type LiveCall = {
   defteam: string;
   desc: string;
   actual: OptionKey;
+  /** What happened on the play. Missing on calls cached before it existed. */
+  outcome?: Outcome;
   cost: number;
   decision: Decision | null;
   ot?: {
@@ -425,6 +419,7 @@ export async function liveGame(eventId: string): Promise<LiveGame> {
           defteam: abbr[Object.keys(abbr).find((id) => id !== posId)!] ?? "",
           desc: p.text,
           actual,
+          outcome: outcomeOf(p, actual),
         };
         if (qtr > 4) {
           calls.push({
