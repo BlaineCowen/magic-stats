@@ -50,6 +50,7 @@ N = 40000
 GRID = np.arange(-10.0, 120.5, 0.5)
 MIN_WIN_GAIN = 0.005      # a swap has to add half a point of win chance
 MAX_SWAPS = 3
+MIN_SWAP_GAIN = 1.0      # expected points a single swap has to add
 ESPN_ABBR = {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"}
 
 
@@ -170,7 +171,9 @@ class Slot:
 # ---------- data ----------
 
 def espn_tips(dates):
-    tips = {}
+    """Tip time and state (pre/in/post) for each (date, team). Sleeper's game
+    status can lag the real game by a quarter or more, so ESPN's wins."""
+    tips, states = {}, {}
     for d in dates:
         url = ("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates="
                + d.replace("-", ""))
@@ -182,9 +185,10 @@ def espn_tips(dates):
             continue
         for e in ev:
             for c in e["competitions"][0]["competitors"]:
-                ab = c["team"]["abbreviation"]
-                tips[(d, ESPN_ABBR.get(ab, ab))] = e["date"]
-    return tips
+                ab = ESPN_ABBR.get(c["team"]["abbreviation"], c["team"]["abbreviation"])
+                tips[(d, ab)] = e["date"]
+                states[(d, ab)] = e["status"]["type"]["state"]
+    return tips, states
 
 
 def main():
@@ -208,7 +212,7 @@ def main():
         return
     wk_games = [g for g in sched if g["week"] == week]
     week_dates = sorted({g["date"] for g in wk_games})
-    tips = espn_tips([d for d in week_dates if d >= today])
+    tips, states = espn_tips([d for d in week_dates if d >= today])
     now = now_iso()
     remaining = defaultdict(list)       # team -> [(date, opp)] still to play
     for g in sorted(wk_games, key=lambda g: g["date"]):
@@ -221,7 +225,9 @@ def main():
         h, a = g["home"]["team"], g["away"]["team"]
         remaining[h].append((g["date"], "v " + a))
         remaining[a].append((g["date"], "@ " + h))
-    complete_ids = {g["game_id"] for g in wk_games if g["status"] == "complete"}
+    espn_state = {g["game_id"]: states.get((g["date"], g["home"]["team"])) for g in wk_games}
+    complete_ids = {g["game_id"] for g in wk_games
+                    if g["status"] == "complete" or espn_state[g["game_id"]] == "post"}
 
     proj_rows = api(f"/projections/nba/{SEASON}/{week}?season_type=regular&{POS_QS}")
     stat_rows = api(f"/stats/nba/{SEASON}/{week}?season_type=regular&{POS_QS}")
@@ -236,7 +242,8 @@ def main():
         proj[r["player_id"]][r["date"]] = (fp(s, scoring), (s.get("sp") or 0) > 0)
     played = defaultdict(list)          # pid -> [(date, opp, score)] games this week
     live = set()                        # players whose game is going on right now
-    started_ids = {g["game_id"] for g in wk_games if g["status"] != "pre_game"}
+    started_ids = {g["game_id"] for g in wk_games
+                   if g["status"] != "pre_game" or espn_state[g["game_id"]] in ("in", "post")}
     for r in stat_rows:
         info.setdefault(r["player_id"], r["player"] | {"team": r.get("team")})
         s = r.get("stats") or {}
@@ -328,13 +335,16 @@ def main():
     rostered = {p for r in rosters for p in (r.get("players") or [])}
 
     def fresh(pid, slot):
-        s = Slot(slot, player(pid), None, False, games_for(pid))
-        s.history = []
+        # A player moved into a slot brings his latest game this week with him:
+        # Sleeper counts that score until a newer game replaces it.
+        g = played.get(pid, [])
+        s = Slot(slot, player(pid), g[-1][2] if g else None, False, games_for(pid))
+        s.history = g
         return s
 
     def best_swaps(team, pool, allow):
         """Greedy: the bench (or pickup) move that adds the most expected
-        points, until nothing adds at least half a point. Returns moves."""
+        points, until nothing adds at least MIN_SWAP_GAIN points. Returns moves."""
         moves, used = [], set()
         for _ in range(MAX_SWAPS):
             best = None
@@ -347,17 +357,17 @@ def main():
                     p = player(pid)
                     if not set(p["pos"]) & SLOT_ELIGIBLE[s.slot]:
                         continue
-                    if not allow(pid):
+                    if pid in live or not allow(pid):
                         continue
                     new = fresh(pid, s.slot)
                     gain = new.ev - s.ev
-                    if gain > 0.5 and (best is None or gain > best[0]):
+                    if gain >= MIN_SWAP_GAIN and (best is None or gain > best[0]):
                         best = (gain, i, pid, new)
             if not best:
                 break
             gain, i, pid, new = best
             old = team["slots"][i]
-            moves.append({"slot": old.slot, "out": old.player, "out_score": old.current,
+            moves.append({"slot": old.slot, "out": old.player, "out_score": old.current, "in_score": new.current,
                           "in": new.player, "gain_pts": round(gain, 1),
                           "in_next": game_out(new.games[0]) if new.games else None})
             team["slots"][i] = new
@@ -394,7 +404,8 @@ def main():
 
     # Pickups: the best slot for each free agent with games left, against the lineup after swaps.
     fa_pool = sorted(
-        (pid for pid in proj if pid not in rostered and player(pid)["team"] and remaining.get(player(pid)["team"])),
+        (pid for pid in proj if pid not in rostered and pid not in live
+         and player(pid)["team"] and remaining.get(player(pid)["team"])),
         key=lambda pid: -sum(m for m, ok in proj[pid].values() if ok))[:120]
     pickups = []
     for pid in fa_pool:
@@ -457,7 +468,8 @@ def main():
         "league": {"name": league["name"]},
         "me": {"team": me["team"], "owner": me["owner"], "points": me["points"],
                "slots": [slot_out(s, True) for s in me["slots"]],
-               "bench": [player(b) | {"games": [game_out(g) for g in games_for(b)]} for b in me["bench"]]},
+               "bench": [player(b) | {"last": played[b][-1][2] if played.get(b) else None, "live": b in live,
+                                    "games": [game_out(g) for g in games_for(b)]} for b in me["bench"]]},
         "opp": {"team": opp["team"], "owner": opp["owner"], "points": opp["points"],
                 "slots": [slot_out(s, False) for s in opp["slots"]],
                 "expected_moves": opp_moves, "mean": float(opp_total.mean()),
