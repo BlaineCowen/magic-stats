@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import {
   Activity,
   ArrowLeftRight,
+  Scale,
   BarChart3,
   Calculator,
   ChevronRight,
@@ -98,6 +99,12 @@ const SEASON: Item[] = [
     title: "Trade ideas",
     blurb: "Fair trades for every team in H-Town Ballers.",
     icon: ArrowLeftRight,
+  },
+  {
+    href: "/magic-stats/trade-calc",
+    title: "Trade calculator",
+    blurb: "Grade any trade with values for your league's settings.",
+    icon: Scale,
   },
 ];
 
