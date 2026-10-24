@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { TradeCalc } from "@/components/trade-calc/trade-calc";
+import { viewerFrom } from "@/lib/query-limits";
 
 export const metadata: Metadata = {
   title: "Trade calculator",
@@ -7,7 +9,11 @@ export const metadata: Metadata = {
     "Grade a fantasy football trade with market values for your league's settings: redraft or dynasty, superflex, PPR and TE premium.",
 };
 
-export default function TradeCalcPage() {
+// Blaine gets an ETR option, so the page depends on who's looking.
+export const dynamic = "force-dynamic";
+
+export default async function TradeCalcPage() {
+  const owner = viewerFrom(await headers()).tier === "owner";
   return (
     <main className="mx-auto max-w-5xl px-4 pt-5 pb-16 sm:pt-8">
       <header className="mb-4 sm:mb-6">
@@ -19,7 +25,7 @@ export default function TradeCalcPage() {
           trade. Dynasty leagues can trade draft picks too.
         </p>
       </header>
-      <TradeCalc />
+      <TradeCalc owner={owner} />
       <div className="mt-8 max-w-3xl space-y-2 text-sm text-slate-500">
         <p>
           Values come from FantasyCalc, which builds them from real trades in

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CloudCheck,
+  FileImage,
   RotateCcw,
   Settings2,
   Sparkles,
@@ -22,6 +23,7 @@ import {
 import { isActive, type PickemWeek } from "@/lib/pickem/scoreboard";
 import { cn } from "@/lib/utils";
 import { GameCard } from "./game-card";
+import { PickSheetPanel } from "./pick-sheet-panel";
 import { Leaderboard, PoolForms, type PoolBoard } from "./pool-panel";
 import { currentEntry, useMe, usePickemState, type Scoring } from "./state";
 import { tally } from "@/lib/pickem/tally";
@@ -166,6 +168,7 @@ export function PickemView() {
     };
   }, [user, poolId, target, data?.fetched, saving]);
 
+  const [showSheet, setShowSheet] = useState(false);
   const games = useMemo(
     () => (data && target && data.week === target.week ? data.games : []),
     [data, target],
@@ -372,7 +375,30 @@ export function PickemView() {
           <RotateCcw className="size-4" aria-hidden />
           Reset week
         </button>
+        <button
+          type="button"
+          onClick={() => setShowSheet((v) => !v)}
+          aria-expanded={showSheet}
+          disabled={n === 0}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50",
+            focusCls,
+          )}
+        >
+          <FileImage className="size-4" aria-hidden />
+          Pick sheet
+        </button>
       </div>
+
+      {showSheet && target && n > 0 && (
+        <PickSheetPanel
+          season={target.season}
+          week={target.week}
+          games={games}
+          entry={entry}
+          rankOneHighest={settings.scoring === "rank1-highest"}
+        />
+      )}
 
       {showSettings && (
         <div className="mt-3 grid gap-4 rounded-lg border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">

@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { NFL_DATA_DIR } from "./db";
 import { withTePremium, type Settings, type ValuedPlayer } from "./trade-grade";
 
 /**
@@ -49,4 +52,22 @@ export async function marketValues(s: Settings): Promise<ValuedPlayer[]> {
     }
   }
   return withTePremium(players, s.tep);
+}
+
+/**
+ * Blaine's own values (ETR rest-of-season, half-PPR superflex, adjusted by the trade desk),
+ * copied here each morning by the trade desk cron. Owner only: never send these to anyone else.
+ * Scaled x10 so they read like market values.
+ */
+export async function etrValues(): Promise<{ players: ValuedPlayer[]; updated: string | null }> {
+  const file = JSON.parse(await fs.readFile(path.join(NFL_DATA_DIR, "etr-values.json"), "utf8")) as {
+    generated?: string;
+    etrFileDate?: string | null;
+    players: { sid: string; name: string; pos: string; team: string | null; ours: number | null }[];
+  };
+  const players = file.players
+    .filter((p) => (p.ours ?? 0) > 0)
+    .map((p) => ({ id: p.sid, name: p.name, pos: p.pos, team: p.team ?? null, age: null, value: Math.round(p.ours! * 10) }))
+    .sort((a, b) => b.value - a.value);
+  return { players, updated: file.etrFileDate ?? file.generated ?? null };
 }

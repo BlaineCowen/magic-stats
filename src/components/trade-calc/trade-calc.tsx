@@ -48,7 +48,7 @@ function Segmented<T extends string | number | boolean>({ label, value, options,
   );
 }
 
-function SettingsPanel({ s, set }: { s: Settings; set: (s: Settings) => void }) {
+function SettingsPanel({ s, set, etr }: { s: Settings; set: (s: Settings) => void; etr: boolean }) {
   const [league, setLeague] = useState("");
   const [note, setNote] = useState<string | null>(null);
 
@@ -78,7 +78,12 @@ function SettingsPanel({ s, set }: { s: Settings; set: (s: Settings) => void }) 
   return (
     <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <h2 className="text-lg font-semibold text-slate-900">Your league</h2>
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
+      {etr && (
+        <p className="mt-1 text-sm text-slate-600">
+          Using your ETR values: rest of season, half PPR, superflex. These settings don&apos;t change them.
+        </p>
+      )}
+      <div className={cn("mt-3 flex flex-wrap gap-x-6 gap-y-4", etr && "pointer-events-none opacity-40")} aria-disabled={etr}>
         <Segmented label="Format" value={s.dynasty} options={[[false, "Redraft"], [true, "Dynasty"]]} onChange={(dynasty) => set({ ...s, dynasty })} />
         <Segmented label="Quarterbacks" value={s.qbs} options={[[1, "1 QB"], [2, "Superflex"]]} onChange={(qbs) => set({ ...s, qbs })} />
         <Segmented label="Points per catch" value={s.ppr} options={[[0, "0"], [0.5, "0.5"], [1, "1"]]} onChange={(ppr) => set({ ...s, ppr })} />
@@ -202,8 +207,10 @@ function Side({ title, players, pool, taken, onAdd, onRemove, grade, total }: {
   );
 }
 
-export function TradeCalc() {
+export function TradeCalc({ owner = false }: { owner?: boolean }) {
   const [s, setS] = useState<Settings>(DEFAULT_SETTINGS);
+  // Blaine only: grade with his ETR values instead of the market. Never put in shared links.
+  const [source, setSource] = useState<"market" | "etr">("market");
   const [pool, setPool] = useState<ValuedPlayer[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [aIds, setA] = useState<string[]>([]);
@@ -231,13 +238,15 @@ export function TradeCalc() {
     if (!ready.current) return;
     let live = true;
     setError(null);
-    const q = new URLSearchParams({ dynasty: s.dynasty ? "1" : "0", teams: String(s.teams), qbs: String(s.qbs), ppr: String(s.ppr), tep: String(s.tep) });
+    const q = source === "etr"
+      ? new URLSearchParams({ values: "etr" })
+      : new URLSearchParams({ dynasty: s.dynasty ? "1" : "0", teams: String(s.teams), qbs: String(s.qbs), ppr: String(s.ppr), tep: String(s.tep) });
     fetch(`/api/trade-values?${q}`)
       .then((r) => r.json())
       .then((d) => { if (!live) return; if (d.error) setError(d.error); else setPool(d.players); })
       .catch(() => live && setError("Couldn't load player values. Check your connection and try again."));
     return () => { live = false; };
-  }, [s]);
+  }, [s, source]);
 
   // Keep the link in the address bar current, so it can be shared.
   useEffect(() => {
@@ -272,7 +281,13 @@ export function TradeCalc() {
 
   return (
     <div className="space-y-5">
-      <SettingsPanel s={s} set={set} />
+      {owner && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Segmented label="Values (only you see this)" value={source}
+            options={[["market", "Market"], ["etr", "My ETR values"]]} onChange={setSource} />
+        </div>
+      )}
+      <SettingsPanel s={s} set={set} etr={source === "etr"} />
       {error && <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-900">{error}</p>}
 
       <div className="grid gap-4 md:grid-cols-2">
