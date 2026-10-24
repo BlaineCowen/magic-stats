@@ -111,6 +111,17 @@ export function findPlayer(
 ): Candidate | null {
   let norm = normalizeName(question);
   for (const [re, name] of NICKNAMES) norm = norm.replace(re, name);
+  // "The case for Puka over JSN": the case is for whoever comes first.
+  const head = norm.split(COMPARE)[0]!;
+  return (
+    (head !== norm ? bestMatch(head, cands) : null) ?? bestMatch(norm, cands)
+  );
+}
+
+const COMPARE =
+  / \b(?:over|vs|versus|than|instead of|compared (?:to|with)|rather than)\b /;
+
+function bestMatch(norm: string, cands: Candidate[]): Candidate | null {
   const q = ` ${norm} `;
   const words = new Set(q.trim().split(" "));
   let best: { c: Candidate; score: number } | null = null;

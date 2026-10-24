@@ -291,6 +291,17 @@ function pick(all: Candidate2[], n: number): Finding[] {
     perSplit.set(f.split, (perSplit.get(f.split) ?? 0) + 1);
     out.push(f.finding);
   }
+  // The variety limits can leave a short list when the leads are all one
+  // stat; top it up with his other top-3 splits, still spread out.
+  for (const f of sorted) {
+    if (out.length >= Math.min(n, 8)) break;
+    if (out.includes(f.finding)) continue;
+    if ((perSplit.get(f.split) ?? 0) >= 2) continue;
+    if ((perMetric.get(f.metric) ?? 0) >= 3) continue;
+    perMetric.set(f.metric, (perMetric.get(f.metric) ?? 0) + 1);
+    perSplit.set(f.split, (perSplit.get(f.split) ?? 0) + 1);
+    out.push(f.finding);
+  }
   return out;
 }
 

@@ -62,6 +62,12 @@ test("findPlayer", () => {
   assert.equal(findPlayer("why are the Texans so good", CANDS)?.pid, "HOU");
   assert.equal(findPlayer("prove the niners are elite", CANDS)?.pid, "SF");
   assert.equal(findPlayer("case for the red sox", CANDS)?.pid, "BOS");
+  // Comparisons: the case is for the first name, even when the second is fuller.
+  assert.equal(
+    findPlayer("make the case for Lamar over Josh Allen", CANDS)?.pid,
+    "4",
+  );
+  assert.equal(findPlayer("why is jokic better than wemby", CANDS)?.pid, "5");
   // A player beats his team on a tie.
   assert.equal(
     findPlayer("prove stroud is the best texans qb", CANDS)?.pid,
