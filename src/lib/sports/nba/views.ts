@@ -14,10 +14,17 @@ const statsType = (t: string) =>
 // '35:56' -> 35.93
 const MINUTES = `(TRY_CAST(split_part(minutes, ':', 1) AS DOUBLE) + coalesce(TRY_CAST(split_part(minutes, ':', 2) AS DOUBLE), 0) / 60)`;
 const PLAYED_TYPES = `('2', '4', '5', '6')`;
+const TRACKING = ["catchshoot", "pullupshot", "drives", "defense", "passing", "possessions", "painttouch", "posttouch", "elbowtouch", "rebounding", "speeddistance"];
+// Synergy's play_type labels -> the names the prompt uses.
+const PLAY_TYPES = [
+  ["Isolation", "isolation"], ["PRBallHandler", "pnr_ball_handler"], ["PRRollMan", "pnr_roll_man"],
+  ["Spotup", "spot_up"], ["Transition", "transition"], ["Postup", "post_up"], ["Cut", "cut"],
+  ["OffScreen", "off_screen"], ["Handoff", "handoff"], ["OffRebound", "putback"], ["Misc", "misc"],
+];
 
 export const nbaViews: SportViews = {
   envVar: "NBA_DATA_DIR",
-  rev: 1,
+  rev: 2,
   required: ["player_box", "team_box", "schedules"],
   // DuckDB 1.5 fails filtering on the joined position ("Can't convert
   // TableFilterType (BLOOM_FILTER) from global to local indexes") unless the
@@ -139,6 +146,89 @@ export const nbaViews: SportViews = {
         LEFT JOIN imp i ON i.player_id = b.player_id AND i.season = b.season AND i.st = b.season_type
         LEFT JOIN player_positions pp ON pp.player_id = b.player_id
         WHERE b.season_type IN ('regular-season', 'playoffs')`);
+    }
+
+    // Second Spectrum tracking, 2014 on: one row per player per season and
+    // season_type (team = last team), season totals except the averages.
+    if (TRACKING.every((m) => has(`tracking_${m}`))) {
+      const t = (m: string) =>
+        `(SELECT * FROM ${src(`tracking_${m}`)} WHERE season_type IN ('Regular Season', 'Playoffs'))`;
+      const on = (a: string) =>
+        `ON ${a}.player_id = cs.player_id AND ${a}.season = cs.season AND ${a}.season_type = cs.season_type`;
+      await run(`
+        CREATE VIEW player_tracking AS
+        SELECT cs.season,
+          CASE cs.season_type WHEN 'Regular Season' THEN 'REG' ELSE 'POST' END AS season_type,
+          cs.player_id, cs.player_name, pp.position, cs.team_abbreviation AS team, cs.gp, cs.min,
+          cs.catch_shoot_fgm, cs.catch_shoot_fga, cs.catch_shoot_fg3_m AS catch_shoot_fg3m,
+          cs.catch_shoot_fg3_a AS catch_shoot_fg3a, cs.catch_shoot_pts,
+          pu.pull_up_fgm, pu.pull_up_fga, pu.pull_up_fg3_m AS pull_up_fg3m,
+          pu.pull_up_fg3_a AS pull_up_fg3a, pu.pull_up_pts,
+          dr.drives, dr.drive_fgm, dr.drive_fga, dr.drive_ftm, dr.drive_fta, dr.drive_pts,
+          dr.drive_passes, dr.drive_ast, dr.drive_tov,
+          po.touches, po.front_ct_touches, po.time_of_poss, po.avg_sec_per_touch,
+          po.avg_drib_per_touch, po.pts_per_touch,
+          pt.paint_touches, pt.paint_touch_fgm, pt.paint_touch_fga, pt.paint_touch_pts,
+          ps.post_touches, ps.post_touch_fgm, ps.post_touch_fga, ps.post_touch_pts,
+          el.elbow_touches, el.elbow_touch_fgm, el.elbow_touch_fga, el.elbow_touch_pts,
+          pa.passes_made, pa.passes_received, pa.potential_ast, pa.secondary_ast, pa.ft_ast,
+          pa.ast_pts_created,
+          de.def_rim_fgm, de.def_rim_fga,
+          rb.reb_contest, rb.reb_uncontest, rb.reb_chances, rb.oreb_contest, rb.dreb_contest,
+          rb.avg_reb_dist,
+          sd.dist_miles, sd.dist_miles_off, sd.dist_miles_def, sd.avg_speed, sd.avg_speed_off,
+          sd.avg_speed_def
+        FROM ${t("catchshoot")} cs
+        LEFT JOIN ${t("pullupshot")} pu ${on("pu")}
+        LEFT JOIN ${t("drives")} dr ${on("dr")}
+        LEFT JOIN ${t("possessions")} po ${on("po")}
+        LEFT JOIN ${t("painttouch")} pt ${on("pt")}
+        LEFT JOIN ${t("posttouch")} ps ${on("ps")}
+        LEFT JOIN ${t("elbowtouch")} el ${on("el")}
+        LEFT JOIN ${t("passing")} pa ${on("pa")}
+        LEFT JOIN ${t("defense")} de ${on("de")}
+        LEFT JOIN ${t("rebounding")} rb ${on("rb")}
+        LEFT JOIN ${t("speeddistance")} sd ${on("sd")}
+        LEFT JOIN player_positions pp ON pp.player_id = cs.player_id
+        WHERE cs.season >= 2014`);
+    }
+
+    if (has("hustle_regular-season")) {
+      await run(`
+        CREATE VIEW player_hustle AS
+        SELECT season, CASE season_type WHEN 'playoffs' THEN 'POST' ELSE 'REG' END AS season_type,
+          h.player_id, player_name, pp.position, team_abbreviation AS team, g AS gp, min,
+          contested_shots, contested_shots_2_pt AS contested_shots_2pt,
+          contested_shots_3_pt AS contested_shots_3pt, deflections, charges_drawn,
+          screen_assists, screen_ast_pts, loose_balls_recovered, off_loose_balls_recovered,
+          def_loose_balls_recovered, box_outs, off_boxouts, def_boxouts
+        FROM read_parquet(${sqlLit(`${dir}/hustle_*/*.parquet`)}, union_by_name = true) h
+        LEFT JOIN player_positions pp ON pp.player_id = h.player_id`);
+    }
+
+    // Synergy play types, 2016 on. Upstream splits traded players by team;
+    // this sums them into one row per player, season, play type and side.
+    if (has("synergy_regular-season_isolation_offensive")) {
+      await run(`
+        CREATE VIEW play_types AS
+        WITH s AS (
+          SELECT * FROM read_parquet(${sqlLit(`${dir}/synergy_*/*.parquet`)}, union_by_name = true)
+          WHERE poss > 0
+        )
+        SELECT season, CASE season_type WHEN 'playoffs' THEN 'POST' ELSE 'REG' END AS season_type,
+          s.player_id, any_value(player_name) AS player_name, any_value(pp.position) AS position,
+          STRING_AGG(DISTINCT team_abbreviation, '/' ORDER BY team_abbreviation) AS team,
+          CASE play_type ${PLAY_TYPES.map(([k, v]) => `WHEN '${k}' THEN '${v}'`).join(" ")} END AS play_type,
+          CASE type_grouping WHEN 'Defensive' THEN 'defense' ELSE 'offense' END AS side,
+          SUM(gp) AS gp, SUM(poss) AS poss, SUM(pts) AS pts, SUM(fgm) AS fgm, SUM(fga) AS fga,
+          ROUND(SUM(pts) / SUM(poss), 3) AS ppp,
+          ROUND(SUM(poss) / SUM(poss / NULLIF(poss_pct, 0)), 3) AS freq,
+          ROUND(SUM(tov_poss_pct * poss) / SUM(poss), 3) AS tov_pct,
+          ROUND(SUM(ft_poss_pct * poss) / SUM(poss), 3) AS ft_freq,
+          ROUND(SUM(score_poss_pct * poss) / SUM(poss), 3) AS score_pct,
+          arg_max(percentile, poss) AS percentile
+        FROM s LEFT JOIN player_positions pp ON pp.player_id = s.player_id
+        GROUP BY season, s.season_type, s.player_id, s.play_type, s.type_grouping`);
     }
 
     if (has("team_season")) {

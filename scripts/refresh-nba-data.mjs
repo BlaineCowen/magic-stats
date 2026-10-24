@@ -57,6 +57,10 @@ function currentSeason(now = new Date()) {
 }
 
 const rel = (tag, file) => (y) => `${RELEASES}/${tag}/${file}_${y}.parquet`;
+const SYNERGY = [
+  ...["cut", "handoff", "isolation", "misc", "offrebound", "offscreen", "postup", "prballhandler", "prrollman", "spotup", "transition"].map((p) => [p, "offensive"]),
+  ...["handoff", "isolation", "offscreen", "postup", "prballhandler", "prrollman", "spotup"].map((p) => [p, "defensive"]),
+];
 const DATASETS = [
   { name: "player_box", url: rel("nba_stats_player_boxscores", "player_boxscores"), order: ["game_id", "team_tricode"] },
   { name: "team_box", url: rel("nba_stats_team_boxscores", "team_boxscores"), order: ["game_id"] },
@@ -66,6 +70,20 @@ const DATASETS = [
   { name: "impact", url: rel("nba_player_impact", "nba_player_impact"), order: ["season_type", "player_id"] },
   { name: "standings", url: rel("nba_stats_standings", "standings"), order: ["team_id"] },
   { name: "rosters", url: rel("nba_stats_rosters", "rosters"), order: ["team_id", "player_id"] },
+  // Player tracking (Second Spectrum, 2013-14 on): one file per measure, regular season and playoffs together.
+  ...["catchshoot", "pullupshot", "drives", "defense", "passing", "possessions", "painttouch", "posttouch", "elbowtouch", "rebounding", "speeddistance"].map((m) => ({
+    name: `tracking_${m}`, url: rel("nba_stats_leaguedash", `player_tracking_${m}`), order: ["season_type", "player_id"], from: 2014,
+  })),
+  // Hustle stats (contested shots, deflections, screen assists), 2015-16 on.
+  ...["regular-season", "playoffs"].map((st) => ({
+    name: `hustle_${st}`, url: rel("nba_stats_hustle", `leaguehustlestatsplayer_${st}_totals`), order: ["player_id"], from: 2016,
+  })),
+  // Synergy play types, 2015-16 on: one file per season type, play type and side.
+  ...["regular-season", "playoffs"].flatMap((st) =>
+    SYNERGY.map(([pt, side]) => ({
+      name: `synergy_${st}_${pt}_${side}`, url: rel("nba_stats_synergy", `${st}_${pt}_${side}_totals`), order: ["player_id"], from: 2016,
+    })),
+  ),
 ];
 
 // ESPN abbreviations that differ from the NBA's own tricodes.

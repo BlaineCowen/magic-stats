@@ -86,6 +86,7 @@ RULES
 ${[
   ...p.rules,
   `"How many" or "total" for one player or team over a span is one summed row (with games played as the sample), not a game log. Return one row per game only when asked for each game, a game log or a week-by-week view.`,
+  `Totals and per game: when a row covers more than one game, show games played, and next to each main counting stat show both the total and the per-game average (e.g. pts and pts_per_game), even when the question asks for only one of them. Rates and percentages need no per-game version.`,
 ]
   .map((r, i) => `${i + 1}. ${r}`)
   .join("\n")}

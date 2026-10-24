@@ -86,6 +86,87 @@ const TEAM_SEASONS_COLS: Col[] = [
   ],
 ];
 
+const TRACKING_COLS: Col[] = [
+  ["season, season_type", "'REG' or 'POST'; 2014 on"],
+  ["player_id, player_name, position, team", "team = last team"],
+  ["gp, min", "min = TOTAL minutes"],
+  [
+    "catch_shoot_fgm, catch_shoot_fga, catch_shoot_fg3m, catch_shoot_fg3a, catch_shoot_pts",
+    "catch-and-shoot: shot within 2 seconds of the catch with no dribble",
+  ],
+  [
+    "pull_up_fgm, pull_up_fga, pull_up_fg3m, pull_up_fg3a, pull_up_pts",
+    "pull-up: shot off the dribble",
+  ],
+  [
+    "drives, drive_fgm, drive_fga, drive_ftm, drive_fta, drive_pts, drive_passes, drive_ast, drive_tov",
+    "drives = dribbles toward the rim from 20+ feet",
+  ],
+  [
+    "touches, front_ct_touches, time_of_poss",
+    "time_of_poss = total minutes holding the ball",
+  ],
+  ["avg_sec_per_touch, avg_drib_per_touch, pts_per_touch", "averages"],
+  [
+    "paint_touches, paint_touch_fgm, paint_touch_fga, paint_touch_pts, post_touches, post_touch_fgm, post_touch_fga, post_touch_pts, elbow_touches, elbow_touch_fgm, elbow_touch_fga, elbow_touch_pts",
+    "",
+  ],
+  [
+    "passes_made, passes_received, potential_ast, secondary_ast, ft_ast, ast_pts_created",
+    "potential_ast = passes that led to a shot (assist if made)",
+  ],
+  [
+    "def_rim_fgm, def_rim_fga",
+    "opponent makes/attempts at the rim with this player defending (rim protection)",
+  ],
+  [
+    "reb_contest, reb_uncontest, reb_chances, oreb_contest, dreb_contest, avg_reb_dist",
+    "contested = an opponent was within 3.5 feet",
+  ],
+  [
+    "dist_miles, dist_miles_off, dist_miles_def, avg_speed, avg_speed_off, avg_speed_def",
+    "miles run (total), mph",
+  ],
+];
+
+const HUSTLE_COLS: Col[] = [
+  ["season, season_type", "'REG' or 'POST'; 2016 on"],
+  ["player_id, player_name, position, team, gp, min", "min = TOTAL minutes"],
+  [
+    "contested_shots, contested_shots_2pt, contested_shots_3pt",
+    "shots this player contested on DEFENSE",
+  ],
+  [
+    "deflections, charges_drawn, screen_assists, screen_ast_pts",
+    "screen_ast_pts = points off his screens",
+  ],
+  [
+    "loose_balls_recovered, off_loose_balls_recovered, def_loose_balls_recovered, box_outs, off_boxouts, def_boxouts",
+    "",
+  ],
+];
+
+const PLAY_TYPE_COLS: Col[] = [
+  ["season, season_type", "'REG' or 'POST'; 2016 on"],
+  ["player_id, player_name, position, team", "team '/'-joined if traded"],
+  [
+    "play_type",
+    "'isolation','pnr_ball_handler','pnr_roll_man','spot_up','transition','post_up','cut','off_screen','handoff','putback','misc'",
+  ],
+  [
+    "side",
+    "'offense' (his own plays) or 'defense' (plays he defended; no transition, cut, putback, misc)",
+  ],
+  ["gp, poss, pts, fgm, fga", "totals"],
+  [
+    "ppp",
+    "points per possession (on defense: allowed, lower = better)",
+  ],
+  ["freq", "share of his possessions that were this play type, 0-1"],
+  ["tov_pct, ft_freq, score_pct", "shares of these possessions, 0-1"],
+  ["percentile", "ppp percentile vs the league, 0-1"],
+];
+
 const STANDINGS_COLS: Col[] = [
   ["season, team, team_name, conference, division", "conference 'East'/'West'"],
   [
@@ -114,6 +195,7 @@ const FUZZY = `- No play-by-play, so anything about moments inside a game uses w
 - "ball hog": highest usage rate (player_seasons usg_pct) or shots per game with a low assist rate.
 - "brick layer": most missed shots, SUM(fga - fgm), or worst shooting on high volume.
 - "carrying the team": share of the team's points (player points / team points_for in the same games).
+- "open" / "wide open" / "uncontested" vs "contested" shots or threes: no defender-distance data, so use player_tracking: catch-and-shoot for open, pull-ups for contested (catch_shoot_fg3m / catch_shoot_fg3a and pull_up_fg3m / pull_up_fg3a for threes), with a minimum of attempts. explain says it's the catch-and-shoot stand-in.
 - "washed": biggest drop in a key stat from the previous season (self-join on season - 1), min sample both years.`;
 
 const IDIOMS = `NBA IDIOMS (use these exact definitions)
@@ -125,12 +207,15 @@ const IDIOMS = `NBA IDIOMS (use these exact definitions)
 - Double-double / triple-double in a game: at least 2 / 3 of pts, reb, ast, stl, blk >= 10, e.g. (pts >= 10)::INT + (reb >= 10)::INT + (ast >= 10)::INT + (stl >= 10)::INT + (blk >= 10)::INT >= 3.
 - Career or season totals: SUM over player_games GROUP BY player_id, player_name. Don't GROUP BY team (traded players would split); show STRING_AGG(DISTINCT team, '/') AS team instead.
 - Recent form ("last 10 games"): ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY game_date DESC) AS rn in a CTE, then WHERE rn <= 10. "Last 2 weeks": game_date >= (SELECT MAX(game_date) FROM player_games) - INTERVAL 14 DAY.
+- Totals plus per game: tables with season totals (player_seasons, player_tracking, player_hustle, play_types) have gp; per game = ROUND(SUM(x) / SUM(gp), 1).
+- Open vs contested shooting: there is NO closest-defender data. The nearest stand-in is catch-and-shoot (usually set and more open) vs pull-up (off the dribble, usually more contested) from player_tracking; say so in explain. Catch-and-shoot 3P% = SUM(catch_shoot_fg3m) / SUM(catch_shoot_fg3a).
+- Tracking, hustle and play types: player_tracking (catch-and-shoot, pull-ups, drives, touches, passing, rim protection, contested rebounds, distance run), player_hustle (contested shots, deflections, charges, screen assists, box outs), play_types (Synergy: isolation, pick and roll, spot up, ...). Join them to player_seasons or each other on player_id, season, season_type. Rim protection = opponent FG% at the rim, SUM(def_rim_fgm) / SUM(def_rim_fga), lower is better, min 150 def_rim_fga in a season. Play-type efficiency: rank on ppp with a minimum poss (50+ for a season).
 - Fantasy questions ("fantasy points", "fantasy", "crabsketball", "our league"): use fantasy_pts.
 - Team records and home/away splits: team_games (SUM(win), SUM(loss)); final standings and seeds: standings.`;
 
 const EXAMPLES = `EXAMPLES
 Q: Highest scoring average in 2024-25, minimum 50 games
-{"plan": "player_games 2025 REG: average pts per player, min 50 games.", "sql": "SELECT player_name, STRING_AGG(DISTINCT team, '/') AS team, COUNT(*) AS games, ROUND(AVG(pts), 1) AS ppg FROM player_games WHERE season = 2025 AND season_type = 'REG' GROUP BY player_id, player_name HAVING COUNT(*) >= 50 ORDER BY AVG(pts) DESC LIMIT 25", ${NO_CHART}}
+{"plan": "player_games 2025 REG: average pts per player, min 50 games.", "sql": "SELECT player_name, STRING_AGG(DISTINCT team, '/') AS team, COUNT(*) AS games, SUM(pts) AS pts, ROUND(AVG(pts), 1) AS ppg FROM player_games WHERE season = 2025 AND season_type = 'REG' GROUP BY player_id, player_name HAVING COUNT(*) >= 50 ORDER BY AVG(pts) DESC LIMIT 25", ${NO_CHART}}
 
 Q: Best true shooting percentage in 2024 among players with at least 1000 shot attempts
 {"plan": "player_seasons 2024 REG with fga >= 1000, ordered by ts_pct.", "sql": "SELECT player_name, team, gp, fga, ROUND(100 * ts_pct, 1) AS ts_pct, ROUND(100 * usg_pct, 1) AS usg_pct FROM player_seasons WHERE season = 2024 AND season_type = 'REG' AND fga >= 1000 ORDER BY ts_pct DESC LIMIT 25", ${NO_CHART}}
@@ -153,6 +238,12 @@ Q: Most triple-doubles in a single season since 2015
 Q: Centers with the most rebounds per 36 minutes in 2025, minimum 1000 minutes
 {"plan": "player_games 2025 REG, position containing C, 36 * rebounds / minutes, min 1000 minutes.", "sql": "SELECT player_name, ARG_MAX(team, game_date) AS team, COUNT(*) AS games, ROUND(SUM(min)) AS minutes, ROUND(36 * SUM(reb) / SUM(min), 1) AS reb_per_36 FROM player_games WHERE season = 2025 AND season_type = 'REG' AND position LIKE '%C%' GROUP BY player_id, player_name HAVING SUM(min) >= 1000 ORDER BY SUM(reb) / SUM(min) DESC LIMIT 25", ${NO_CHART}}
 
+Q: Best shooters on open threes in 2026
+{"plan": "No defender distance: catch-and-shoot threes stand in for open ones. player_tracking 2026 REG, catch_shoot_fg3a >= 150, ordered by catch-and-shoot 3P%, with pull-up 3P% beside it.", "sql": "SELECT player_name, team, gp, catch_shoot_fg3m, catch_shoot_fg3a, ROUND(catch_shoot_fg3a / gp, 1) AS cs_3pa_per_game, ROUND(100.0 * catch_shoot_fg3m / catch_shoot_fg3a, 1) AS cs_3p_pct, pull_up_fg3a, ROUND(100.0 * pull_up_fg3m / NULLIF(pull_up_fg3a, 0), 1) AS pull_up_3p_pct FROM player_tracking WHERE season = 2026 AND season_type = 'REG' AND catch_shoot_fg3a >= 150 ORDER BY catch_shoot_fg3m / catch_shoot_fg3a DESC LIMIT 25", ${NO_CHART}}
+
+Q: Most efficient isolation scorers in 2026
+{"plan": "play_types 2026 REG isolation offense, min 100 possessions, ordered by points per possession.", "sql": "SELECT player_name, team, gp, poss, ROUND(poss / gp, 1) AS poss_per_game, pts, ROUND(pts / gp, 1) AS pts_per_game, ppp, ROUND(100 * freq, 1) AS freq_pct, ROUND(100 * percentile, 1) AS percentile FROM play_types WHERE season = 2026 AND season_type = 'REG' AND play_type = 'isolation' AND side = 'offense' AND poss >= 100 ORDER BY pts / poss DESC LIMIT 25", ${NO_CHART}}
+
 Q: Scatter of usage rate vs true shooting in 2025, minimum 1500 minutes
 {"plan": "player_seasons 2025 REG with min >= 1500: usg_pct and ts_pct per player.", "sql": "SELECT player_name, team, ROUND(min) AS minutes, ROUND(100 * usg_pct, 1) AS usg_pct, ROUND(100 * ts_pct, 1) AS ts_pct FROM player_seasons WHERE season = 2025 AND season_type = 'REG' AND min >= 1500 ORDER BY usg_pct DESC LIMIT 100", "chart": {"type": "scatter", "x": "usg_pct", "y": "ts_pct", "label": "player_name", "series": "", "title": "Usage vs true shooting, 2024-25"}}
 
@@ -173,7 +264,7 @@ function seasonContext(info: DataInfo): string {
   ];
   if (info.statsThrough != null && info.statsThrough < info.maxSeason) {
     lines.push(
-      `player_seasons, team_seasons and standings run through ${info.statsThrough}. For ${info.maxSeason} compute everything from player_games and team_games (usage, on-court ratings and BPM aren't available for it).`,
+      `player_seasons, team_seasons and standings run through ${info.statsThrough}. For ${info.maxSeason} compute box score stats from player_games and team_games (usage, on-court ratings and BPM aren't available for it). player_tracking and player_hustle DO have ${info.maxSeason}, updated daily.`,
     );
   }
   return lines.join("\n");
@@ -217,6 +308,24 @@ export const nbaPrompt: SportPrompt = {
       title: (i) =>
         `one row per team per season and season_type, through ${i.statsThrough ?? i.maxSeason}`,
       cols: TEAM_SEASONS_COLS,
+    },
+    {
+      view: "player_tracking",
+      title: () =>
+        "player tracking (Second Spectrum), one row per player per season and season_type, season totals; 2014 through the current season",
+      cols: TRACKING_COLS,
+    },
+    {
+      view: "player_hustle",
+      title: () =>
+        "hustle stats, one row per player per season and season_type, season totals; 2016 through the current season",
+      cols: HUSTLE_COLS,
+    },
+    {
+      view: "play_types",
+      title: () =>
+        "Synergy play types, one row per player, season, season_type, play_type and side; 2016 on (the current season appears weeks after it starts)",
+      cols: PLAY_TYPE_COLS,
     },
     {
       view: "standings",
