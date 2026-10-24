@@ -374,10 +374,11 @@ def main():
     opp = team_view(opp_rid)
     rostered = {p for r in rosters for p in (r.get("players") or [])}
 
-    def fresh(pid, slot):
-        # A player moved into a slot brings his latest game this week with him:
-        # Sleeper counts that score until a newer game replaces it.
-        g = played.get(pid, [])
+    def fresh(pid, slot, rostered=True):
+        # A player moved into a slot from the bench brings his latest game this
+        # week with him: Sleeper counts that score until a newer game replaces it.
+        # A free agent only scores from games after he's added, so he brings nothing.
+        g = played.get(pid, []) if rostered else []
         s = Slot(slot, player(pid), g[-1][2] if g else None, False, games_for(pid))
         s.history = g
         return s
@@ -453,7 +454,7 @@ def main():
         for i, s in enumerate(me["slots"]):
             if s.locked or getattr(s, "live", False) or not set(player(pid)["pos"]) & SLOT_ELIGIBLE[s.slot]:
                 continue
-            new = fresh(pid, s.slot)
+            new = fresh(pid, s.slot, rostered=False)
             gain = new.ev - s.ev
             if best is None or gain > best[0]:
                 best = (gain, i, new)
