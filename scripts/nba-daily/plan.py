@@ -525,7 +525,7 @@ def main():
              "ev": round(s.ev, 1)}
         if mine:
             o["advice"] = advice(s, today, call_by_slot.get(s.slot + s.player["id"]))
-            o["marked"] = s.player["id"] in marks
+        o["marked"] = s.player["id"] in marks
         return o
 
     out = {
