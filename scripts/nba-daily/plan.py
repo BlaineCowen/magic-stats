@@ -460,9 +460,33 @@ def main():
         if best and best[0] > 1.5:
             pickups.append((best[0], pid, best[1], best[2]))
     pickups.sort(key=lambda t: -t[0])
+
+    # Room for a pickup, cheapest first: an open roster spot, then an injured
+    # bench player who can go on IR, then a drop. It's a long season, so a drop
+    # is only suggested when the pickup is worth more for the rest of it too.
+    def season_value(pid):
+        return values.get(pid, {}).get("value", -99)
+    my_ro = next(r for r in rosters if r["roster_id"] == me_rid)
+    on_ir = set(my_ro.get("reserve") or [])
+    open_spots = len(league["roster_positions"]) - len([p for p in my_ro.get("players") or [] if p not in on_ir])
+    ir_free = (league["settings"].get("reserve_slots") or 0) - len(on_ir)
+    settings = league["settings"]
+    ir_rules = {"out": "reserve_allow_out", "sus": "reserve_allow_sus", "dtd": "reserve_allow_dtd",
+                "doubtful": "reserve_allow_doubtful", "na": "reserve_allow_na"}
+    ir_ready = sorted((pid for pid in me["bench"]
+                       if settings.get(ir_rules.get((player(pid)["injury"] or "").lower(), ""), 0)),
+                      key=season_value)
+    drop_pool = sorted(me["bench"], key=season_value)
     pickup_out = []
-    drop_pool = sorted(me["bench"], key=lambda pid: values.get(pid, {}).get("value", -99))
-    for gain, pid, i, new in pickups[:5]:
+    for gain, pid, i, new in pickups[:20]:
+        if len(pickup_out) == 5:
+            break
+        room = ({"open": True} if open_spots > 0
+                else {"ir": player(ir_ready[0])} if ir_free > 0 and ir_ready
+                else {"drop": player(drop_pool[0])} if drop_pool and season_value(drop_pool[0]) < season_value(pid)
+                else None)
+        if room is None:
+            continue
         trial = list(me["slots"])
         trial[i] = new
         w = win(total({"slots": trial}))
@@ -471,7 +495,7 @@ def main():
         pickup_out.append({"player": player(pid), "slot": me["slots"][i].slot,
                            "replaces": me["slots"][i].player, "gain_pts": round(gain, 1),
                            "win": round(w, 3), "games": [game_out(g) for g in new.games],
-                           "drop": player(drop_pool[0]) if drop_pool else None})
+                           "drop": room.get("drop"), "ir": room.get("ir"), "open": bool(room.get("open"))})
 
     # Today's lock-or-play calls, judged by win chance.
     calls = []
@@ -533,7 +557,7 @@ def advice(s, today, call):
             txt += f" Lock it after the game if it ends at {fmt(s.thresh[1])} or more."
         return {"kind": "live", "text": txt}
     if not g:
-        return {"kind": "final", "text": "No games left this week." if s.current is not None
+        return {"kind": "final", "text": f"Done for the week: his {fmt(s.current)} counts. Only worth replacing with someone who already scored more this week." if s.current is not None
                 else "No games left, so this slot stays at 0."}
     nxt = g[0]
     later = g[1:]
