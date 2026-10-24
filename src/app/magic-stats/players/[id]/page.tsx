@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { GameLog } from "@/components/fantasy/game-log";
 import { RangeBar } from "@/components/fantasy/range-bar";
 import {
   fmtPct,
@@ -400,66 +401,7 @@ export default async function PlayerPageView(props: Props) {
           </div>
 
           <Panel title="Game log">
-            <div className="-mx-4 overflow-x-auto">
-              <table className="w-full min-w-[620px] text-sm tabular-nums">
-                <thead>
-                  <tr className="border-b border-slate-200 text-right text-xs text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Week</th>
-                    <th className="px-2 py-2 text-left font-medium">Opp</th>
-                    <th className="px-2 py-2 font-medium">PPR</th>
-                    <th className="px-2 py-2 font-medium">Expected</th>
-                    <th className="px-2 py-2 font-medium">Snaps</th>
-                    {p.position === "QB" && (
-                      <th className="px-2 py-2 font-medium">Pass yds</th>
-                    )}
-                    <th className="px-2 py-2 font-medium">Car</th>
-                    <th className="px-2 py-2 font-medium">Rush yds</th>
-                    <th className="px-2 py-2 font-medium">Tgt</th>
-                    <th className="px-2 py-2 font-medium">Rec</th>
-                    <th className="px-2 py-2 font-medium">Rec yds</th>
-                    <th className="px-4 py-2 font-medium">TD</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {w.map((g) => (
-                    <tr
-                      key={g.week}
-                      className="border-b border-slate-100 text-right last:border-0"
-                    >
-                      <td className="px-4 py-1.5 text-left">{g.week}</td>
-                      <td className="px-2 py-1.5 text-left">{g.opponent}</td>
-                      <td className="px-2 py-1.5 font-semibold">
-                        {g.ppr.toFixed(1)}
-                      </td>
-                      <td
-                        className={cn(
-                          "px-2 py-1.5",
-                          g.xfp == null
-                            ? ""
-                            : g.ppr - g.xfp >= 3
-                              ? "text-turf-800"
-                              : g.ppr - g.xfp <= -3
-                                ? "text-red-700"
-                                : "",
-                        )}
-                      >
-                        {g.xfp?.toFixed(1) ?? "–"}
-                      </td>
-                      <td className="px-2 py-1.5">{fmtPct(g.snap_pct)}</td>
-                      {p.position === "QB" && (
-                        <td className="px-2 py-1.5">{g.pass_yards}</td>
-                      )}
-                      <td className="px-2 py-1.5">{g.carries}</td>
-                      <td className="px-2 py-1.5">{g.rush_yards}</td>
-                      <td className="px-2 py-1.5">{g.targets}</td>
-                      <td className="px-2 py-1.5">{g.receptions}</td>
-                      <td className="px-2 py-1.5">{g.rec_yards}</td>
-                      <td className="px-4 py-1.5">{g.tds}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <GameLog weeks={w} showPassing={p.position === "QB"} />
           </Panel>
         </>
       )}

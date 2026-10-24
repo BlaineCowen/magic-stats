@@ -4,12 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import toast, { Toaster } from "react-hot-toast";
 import { cn } from "@/lib/utils";
+import { SortableTable, type Column } from "@/components/sortable-table";
 import {
   ALL_DOWNS,
   ALL_QTRS,
   type ChartData,
   type ChartFilters,
   type ChartKind,
+  type LuckPoint,
+  type QbPoint,
+  type TeamPoint,
   type PlayType,
   type Playoffs,
   POSITIONS,
@@ -186,138 +190,193 @@ function MinPlaysInput({
   );
 }
 
-function DataTable({ data }: { data: ChartData }) {
-  const th =
-    "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 font-medium whitespace-nowrap text-slate-600";
-  const num = "px-3 py-1.5 text-right tabular-nums";
-  const txt = "px-3 py-1.5 text-left";
-  if (data.luck) return <LuckTable data={data} />;
-  const cols = data.teams
-    ? [
-        "#",
-        "Team",
-        "Off EPA/play",
-        "Def EPA/play",
-        "Net",
-        "Off success",
-        "Def success",
-        "Games",
-      ]
-    : ["#", "Quarterback", "Team", "EPA/play", "CPOE", "Success", "Plays"];
-  // Columns holding text; everything else is a right-aligned number.
-  const textCols = data.teams ? [1] : [1, 2];
+function num<T>(
+  key: string,
+  label: string,
+  get: (r: T) => number,
+  fmt: (v: number) => string,
+  extra?: Partial<Column<T>>,
+): Column<T> {
+  return { key, label, value: get, render: (r) => fmt(get(r)), ...extra };
+}
+const one = (v: number) => v.toFixed(1);
+const plus1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
+
+function NameCell({
+  name,
+  short,
+  color,
+}: {
+  name: string;
+  /** Shown instead of the name on phones, where the column is narrow. */
+  short?: string;
+  color: string | null;
+}) {
   return (
-    <table className="w-full border-separate border-spacing-0 text-sm">
-      <thead>
-        <tr>
-          {cols.map((h, i) => (
-            <th
-              key={h}
-              scope="col"
-              className={cn(
-                th,
-                textCols.includes(i) ? "text-left" : "text-right",
-              )}
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="[&>tr:nth-child(even)]:bg-slate-50/60 [&>tr>td]:border-b [&>tr>td]:border-slate-100">
-        {data.teams
-          ? data.teams.map((t, i) => (
-              <tr key={t.team}>
-                <td className={cn(num, "text-slate-400")}>{i + 1}</td>
-                <td className={cn(txt, "font-medium whitespace-nowrap")}>
-                  {t.team_name ?? t.team}
-                </td>
-                <td className={num}>{signed(t.off_epa)}</td>
-                <td className={num}>{signed(t.def_epa)}</td>
-                <td className={cn(num, "font-medium")}>
-                  {signed(t.off_epa - t.def_epa)}
-                </td>
-                <td className={num}>{pct(t.off_success)}</td>
-                <td className={num}>{pct(t.def_success)}</td>
-                <td className={num}>{t.games}</td>
-              </tr>
-            ))
-          : (data.qbs ?? []).map((q, i) => (
-              <tr key={q.id}>
-                <td className={cn(num, "text-slate-400")}>{i + 1}</td>
-                <td className={cn(txt, "font-medium whitespace-nowrap")}>
-                  {q.full_name ?? q.name}
-                </td>
-                <td className={txt}>{q.team}</td>
-                <td className={cn(num, "font-medium")}>{signed(q.epa)}</td>
-                <td
-                  className={num}
-                >{`${q.cpoe > 0 ? "+" : ""}${q.cpoe.toFixed(1)}`}</td>
-                <td className={num}>{pct(q.success)}</td>
-                <td className={num}>{q.plays}</td>
-              </tr>
-            ))}
-      </tbody>
-    </table>
+    <span className="flex items-center gap-2 font-medium whitespace-nowrap text-slate-900">
+      <span
+        className="size-2.5 shrink-0 rounded-full bg-slate-300"
+        style={color ? { background: color } : undefined}
+        aria-hidden
+      />
+      {short ? (
+        <>
+          <span className="sm:hidden" title={name}>
+            {short}
+          </span>
+          <span className="max-sm:hidden">{name}</span>
+        </>
+      ) : (
+        name
+      )}
+    </span>
   );
 }
 
-function LuckTable({ data }: { data: ChartData }) {
-  const th =
-    "sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-2 font-medium whitespace-nowrap text-slate-600";
-  const num = "px-3 py-1.5 text-right tabular-nums";
-  const txt = "px-3 py-1.5 text-left";
-  const rows = [...(data.luck ?? [])].sort(
-    (a, b) => b.points - b.expected - (a.points - a.expected),
-  );
-  const plus = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)}`;
-  const cols = [
-    "#",
-    "Player",
-    "Pos",
-    "Team",
-    "PPR/game",
-    "Expected/game",
-    "Over expected",
-    "Games",
-  ];
+const nameSearch = <T extends { team: string }>(
+  name: (r: T) => string,
+  placeholder: string,
+) => ({ text: (r: T) => `${name(r)} ${r.team}`, placeholder });
+
+const teamSearch = nameSearch<TeamPoint>(
+  (t) => t.team_name ?? t.team,
+  "Search teams",
+);
+const qbSearch = nameSearch<QbPoint>(
+  (q) => q.full_name ?? q.name,
+  "Search quarterbacks or teams",
+);
+const luckSearch = nameSearch<LuckPoint>(
+  (p) => p.name,
+  "Search players or teams",
+);
+
+const TEAM_COLS: Column<TeamPoint>[] = [
+  {
+    key: "team",
+    label: "Team",
+    align: "left",
+    ascFirst: true,
+    value: (t) => t.team_name ?? t.team,
+    render: (t) => (
+      <NameCell
+        name={t.team_name ?? t.team}
+        short={t.team}
+        color={t.team_color}
+      />
+    ),
+  },
+  num("off", "Off EPA/play", (t: TeamPoint) => t.off_epa, signed),
+  // Low is good on defense.
+  num("def", "Def EPA/play", (t: TeamPoint) => t.def_epa, signed, {
+    ascFirst: true,
+  }),
+  num("net", "Net", (t: TeamPoint) => t.off_epa - t.def_epa, signed, {
+    className: "font-semibold",
+  }),
+  num("offs", "Off success", (t: TeamPoint) => t.off_success, pct),
+  num("defs", "Def success", (t: TeamPoint) => t.def_success, pct, {
+    ascFirst: true,
+  }),
+  num("games", "Games", (t: TeamPoint) => t.games, String),
+];
+
+const QB_COLS: Column<QbPoint>[] = [
+  {
+    key: "name",
+    label: "Quarterback",
+    align: "left",
+    ascFirst: true,
+    value: (q) => q.full_name ?? q.name,
+    render: (q) => (
+      <NameCell name={q.full_name ?? q.name} color={q.team_color} />
+    ),
+  },
+  {
+    key: "team",
+    label: "Team",
+    align: "left",
+    ascFirst: true,
+    value: (q) => q.team,
+    render: (q) => q.team,
+  },
+  num("epa", "EPA/play", (q: QbPoint) => q.epa, signed, {
+    className: "font-semibold",
+  }),
+  num("cpoe", "CPOE", (q: QbPoint) => q.cpoe, plus1),
+  num("success", "Success", (q: QbPoint) => q.success, pct),
+  num("plays", "Plays", (q: QbPoint) => q.plays, String),
+];
+
+const LUCK_COLS: Column<LuckPoint>[] = [
+  {
+    key: "name",
+    label: "Player",
+    align: "left",
+    ascFirst: true,
+    value: (p) => p.name,
+    render: (p) => <NameCell name={p.name} color={p.team_color} />,
+  },
+  {
+    key: "pos",
+    label: "Pos",
+    align: "left",
+    ascFirst: true,
+    value: (p) => p.position,
+    render: (p) => p.position,
+  },
+  {
+    key: "team",
+    label: "Team",
+    align: "left",
+    ascFirst: true,
+    value: (p) => p.team,
+    render: (p) => p.team,
+  },
+  num("ppg", "PPR/game", (p: LuckPoint) => p.ppg, one),
+  num("xppg", "Expected/game", (p: LuckPoint) => p.xppg, one),
+  num("over", "Over expected", (p: LuckPoint) => p.points - p.expected, plus1, {
+    className: "font-semibold",
+  }),
+  num("games", "Games", (p: LuckPoint) => p.games, String),
+];
+
+function DataTable({ data }: { data: ChartData }) {
+  const common = { rank: true, maxHeight: "28rem", minWidth: 560 } as const;
+  if (data.luck)
+    return (
+      <SortableTable
+        {...common}
+        rows={data.luck}
+        columns={LUCK_COLS}
+        rowKey={(p) => p.id}
+        defaultSort={{ key: "over", desc: true }}
+        search={luckSearch}
+        label="Fantasy luck data"
+      />
+    );
+  if (data.teams)
+    return (
+      <SortableTable
+        {...common}
+        rows={data.teams}
+        columns={TEAM_COLS}
+        rowKey={(t) => t.team}
+        defaultSort={{ key: "net", desc: true }}
+        search={teamSearch}
+        label="Team tiers data"
+      />
+    );
   return (
-    <table className="w-full border-separate border-spacing-0 text-sm">
-      <thead>
-        <tr>
-          {cols.map((h, i) => (
-            <th
-              key={h}
-              scope="col"
-              className={cn(
-                th,
-                [1, 2, 3].includes(i) ? "text-left" : "text-right",
-              )}
-            >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="[&>tr:nth-child(even)]:bg-slate-50/60 [&>tr>td]:border-b [&>tr>td]:border-slate-100">
-        {rows.map((p, i) => (
-          <tr key={p.id}>
-            <td className={cn(num, "text-slate-400")}>{i + 1}</td>
-            <td className={cn(txt, "font-medium whitespace-nowrap")}>
-              {p.name}
-            </td>
-            <td className={txt}>{p.position}</td>
-            <td className={txt}>{p.team}</td>
-            <td className={num}>{p.ppg.toFixed(1)}</td>
-            <td className={num}>{p.xppg.toFixed(1)}</td>
-            <td className={cn(num, "font-medium")}>
-              {plus(p.points - p.expected)}
-            </td>
-            <td className={num}>{p.games}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <SortableTable
+      {...common}
+      rows={data.qbs ?? []}
+      columns={QB_COLS}
+      rowKey={(q) => q.id}
+      defaultSort={{ key: "epa", desc: true }}
+      search={qbSearch}
+      label="Quarterback data"
+    />
   );
 }
 
@@ -984,7 +1043,7 @@ export function ChartsView() {
               {(shown.teams ?? shown.qbs ?? shown.luck ?? []).length} rows
             </span>
           </summary>
-          <div className="max-h-[28rem] overflow-auto border-t border-slate-200">
+          <div className="border-t border-slate-200 p-3 sm:p-4">
             <DataTable data={shown} />
           </div>
         </details>

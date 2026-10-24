@@ -6,7 +6,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Projection } from "@/lib/nfl/fantasy";
 import { cn } from "@/lib/utils";
 import { RangeBar } from "./range-bar";
-import { SortableTable, type Column } from "./sortable-table";
+import {
+  FilterSelect,
+  SortableTable,
+  type Column,
+} from "@/components/sortable-table";
 import { fmtPct, matchup, signals } from "./signals";
 
 type Tab = "breakouts" | "projections" | "ros" | "usage";
@@ -36,7 +40,7 @@ export type BacktestMeta = {
 const focusCls =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-turf-700";
 
-function PlayerCell({ p }: { p: Projection }) {
+function PlayerCell({ p, compact }: { p: Projection; compact?: boolean }) {
   return (
     <Link
       href={`/magic-stats/players/${p.player_id}`}
@@ -48,17 +52,33 @@ function PlayerCell({ p }: { p: Projection }) {
           src={p.headshot}
           alt=""
           loading="lazy"
-          className="size-8 shrink-0 rounded-full bg-slate-100 object-cover object-top sm:size-9"
+          className={cn(
+            "size-8 shrink-0 rounded-full bg-slate-100 object-cover object-top sm:size-9",
+            compact && "max-sm:hidden",
+          )}
         />
       ) : (
-        <span className="size-8 shrink-0 rounded-full bg-slate-100 sm:size-9" />
+        <span
+          className={cn(
+            "size-8 shrink-0 rounded-full bg-slate-100 sm:size-9",
+            compact && "max-sm:hidden",
+          )}
+        />
       )}
       <span className="min-w-0">
-        <span className="group-hover:text-turf-800 block truncate font-semibold text-slate-900 group-hover:underline">
+        <span
+          className={cn(
+            "group-hover:text-turf-800 block truncate font-semibold text-slate-900 group-hover:underline",
+            // On phones the name wraps rather than losing its last letters.
+            compact && "max-sm:leading-tight max-sm:whitespace-normal",
+          )}
+        >
           {p.name}
         </span>
         <span className="block text-xs text-slate-500">
-          {p.position}, {p.team} · {matchup(p)}
+          <span className="whitespace-nowrap">
+            {p.position}, {p.team} · {matchup(p)}
+          </span>
           {p.injury_status && p.injury_status !== "Active" && (
             <span
               className={cn(
@@ -174,12 +194,23 @@ const nameCol: Column<Projection> = {
   align: "left",
   value: (p) => p.name,
   ascFirst: true,
-  render: (p) => <PlayerCell p={p} />,
+  render: (p) => <PlayerCell p={p} compact />,
+  className: "max-sm:min-w-32 max-sm:max-w-36",
+};
+const playerSearch = {
+  text: (p: Projection) => `${p.name} ${p.team} ${p.opp}`,
+  placeholder: "Search players or teams",
 };
 const n1 = (v: number | null) => (v == null ? "–" : v.toFixed(1));
 const signed1 = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}`;
 
-function Projections({ rows }: { rows: Projection[] }) {
+function Projections({
+  rows,
+  filters,
+}: {
+  rows: Projection[];
+  filters: React.ReactNode;
+}) {
   const list = rows.filter((p) => !p.out_next);
   const max = Math.max(30, ...list.map((p) => p.ceiling));
   const columns: Column<Projection>[] = [
@@ -245,17 +276,17 @@ function Projections({ rows }: { rows: Projection[] }) {
         PPR the opponent gives up to the position per game. Click a column to
         sort.
       </Note>
-      {list.length === 0 ? (
-        <Empty />
-      ) : (
-        <SortableTable
-          rows={list}
-          columns={columns}
-          rowKey={(p) => p.player_id}
-          defaultSort={{ key: "proj", desc: true }}
-          minWidth={820}
-        />
-      )}
+      <SortableTable
+        rows={list}
+        columns={columns}
+        rowKey={(p) => p.player_id}
+        defaultSort={{ key: "proj", desc: true }}
+        search={playerSearch}
+        filters={filters}
+        label="This week's projections"
+        empty="No players match. Try another team or position."
+        minWidth={820}
+      />
     </>
   );
 }
@@ -263,9 +294,11 @@ function Projections({ rows }: { rows: Projection[] }) {
 function RestOfSeason({
   rows,
   meta,
+  filters,
 }: {
   rows: Projection[];
   meta: BacktestMeta;
+  filters: React.ReactNode;
 }) {
   // Deep backups (under 3 a game) only clutter a season-long view.
   const list = rows.filter((p) => p.ros_proj != null && (p.ros_ppg ?? 0) >= 3);
@@ -357,22 +390,28 @@ function RestOfSeason({
         {meta.ros_mae != null &&
           ` Backtested from weeks 4, 8 and 12 of 2021 to 2025, the per-game miss is ${meta.ros_mae.toFixed(2)} points against ${meta.ros_mae_base?.toFixed(2)} for season-to-date averages.`}
       </Note>
-      {list.length === 0 ? (
-        <Empty />
-      ) : (
-        <SortableTable
-          rows={list}
-          columns={columns}
-          rowKey={(p) => p.player_id}
-          defaultSort={{ key: "ros", desc: true }}
-          minWidth={900}
-        />
-      )}
+      <SortableTable
+        rows={list}
+        columns={columns}
+        rowKey={(p) => p.player_id}
+        defaultSort={{ key: "ros", desc: true }}
+        search={playerSearch}
+        filters={filters}
+        label="Rest of season projections"
+        empty="No players match. Try another team or position."
+        minWidth={900}
+      />
     </>
   );
 }
 
-function Usage({ rows }: { rows: Projection[] }) {
+function Usage({
+  rows,
+  filters,
+}: {
+  rows: Projection[];
+  filters: React.ReactNode;
+}) {
   const list = rows.filter(
     (p) => p.xfp_l3 != null && p.xfp_pg != null && p.games >= 4,
   );
@@ -468,6 +507,10 @@ function Usage({ rows }: { rows: Projection[] }) {
         columns={columns}
         rowKey={(p) => p.player_id}
         defaultSort={{ key: "delta", desc: true }}
+        search={playerSearch}
+        filters={filters}
+        label="Usage trends"
+        empty="No players match. Try another team or position."
         minWidth={820}
       />
     </>
@@ -520,20 +563,38 @@ export function FantasyView({
   const [pos, setPos] = useState<Pos>(
     POSITIONS.find((p) => p === params.get("pos")) ?? "all",
   );
+  const teams = useMemo(
+    () => [...new Set(projections.map((p) => p.team))].sort(),
+    [projections],
+  );
+  const [team, setTeam] = useState(params.get("team") ?? "");
   useEffect(() => {
     const q = new URLSearchParams();
     if (tab !== "breakouts") q.set("tab", tab);
     if (pos !== "all") q.set("pos", pos);
+    if (team) q.set("team", team);
     const s = q.toString();
     router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
-  }, [tab, pos, pathname, router]);
+  }, [tab, pos, team, pathname, router]);
 
   const rows = useMemo(
     () =>
-      pos === "all"
-        ? projections
-        : projections.filter((p) => p.position === pos),
-    [projections, pos],
+      projections.filter(
+        (p) =>
+          (pos === "all" || p.position === pos) && (!team || p.team === team),
+      ),
+    [projections, pos, team],
+  );
+  const teamFilter = (
+    <FilterSelect
+      label="Team"
+      value={team}
+      onChange={setTeam}
+      options={[
+        { value: "", label: "All teams" },
+        ...teams.map((t) => ({ value: t, label: t })),
+      ]}
+    />
   );
   const weeks = [...new Set(projections.map((p) => p.week))].sort(
     (a, b) => a - b,
@@ -600,9 +661,16 @@ export function FantasyView({
         </p>
       )}
       {tab === "breakouts" && <Breakouts rows={rows} meta={meta} />}
-      {tab === "projections" && <Projections rows={rows} />}
-      {tab === "ros" && <RestOfSeason rows={rows} meta={meta} />}
-      {tab === "usage" && <Usage rows={rows} />}
+      {tab !== "breakouts" && projections.length === 0 && <Empty />}
+      {tab === "projections" && projections.length > 0 && (
+        <Projections rows={rows} filters={teamFilter} />
+      )}
+      {tab === "ros" && projections.length > 0 && (
+        <RestOfSeason rows={rows} meta={meta} filters={teamFilter} />
+      )}
+      {tab === "usage" && projections.length > 0 && (
+        <Usage rows={rows} filters={teamFilter} />
+      )}
     </div>
   );
 }
