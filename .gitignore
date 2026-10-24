@@ -38,3 +38,5 @@ scripts/nba-breakouts/__pycache__/
 /data/nba/
 /data/mlb/
 scripts/projections/work/
+scripts/nba-daily/manual_locks.json
+scripts/nba-daily/manual_locks.tmp

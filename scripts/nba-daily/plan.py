@@ -11,6 +11,9 @@ Each night this reads the matchup from Sleeper and works out, for the coming
 day:
   * Which counted scores are already locked. Sleeper's API doesn't say, so a
     score that doesn't match the player's latest game must be a locked one.
+    Locking the latest game looks the same as not locking, and Sleeper's
+    servers sometimes disagree about counted scores, so the page lets Blaine
+    say which game he locked (manual_locks.json, via refresh_server.py).
   * For every unlocked starter, the score worth locking before each remaining
     game (optimal stopping over his own game-to-game spread from last season,
     scaled to Sleeper's per-game projection, with a chance he sits).
@@ -45,12 +48,15 @@ from refresh_trade_values import atomic_write, fetch_json  # noqa: E402
 ME = "bcows827"
 OUT = os.environ.get("NBA_PLAN_OUT", "/DATA/AppData/nfl-draft/html/csv/nba_plan.json")
 VALUES = "/DATA/AppData/nfl-draft/html/csv/nba_values.json"
+# Starters Blaine marked as locked on the page: {player_id: {"week", "games"}}.
+MARKS = os.environ.get("NBA_MARKS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "manual_locks.json"))
 TZ = ZoneInfo("America/Chicago")
 N = 40000
 GRID = np.arange(-10.0, 120.5, 0.5)
 MIN_WIN_GAIN = 0.005      # a swap has to add half a point of win chance
 MAX_SWAPS = 3
 MIN_SWAP_GAIN = 1.0      # expected points a single swap has to add
+MATCHUP_SAMPLES = 5
 ESPN_ABBR = {"GS": "GSW", "NY": "NYK", "SA": "SAS", "NO": "NOP", "UTAH": "UTA", "WSH": "WAS"}
 
 
@@ -231,7 +237,10 @@ def main():
 
     proj_rows = api(f"/projections/nba/{SEASON}/{week}?season_type=regular&{POS_QS}")
     stat_rows = api(f"/stats/nba/{SEASON}/{week}?season_type=regular&{POS_QS}")
-    matchups = fetch_json(f"https://api.sleeper.app/v1/league/{LEAGUE_ID}/matchups/{week}")
+    # Sleeper's servers can disagree for hours about counted scores, so ask a few times (see counted_score).
+    samples = [fetch_json(f"https://api.sleeper.app/v1/league/{LEAGUE_ID}/matchups/{week}?n={k}")
+               for k in range(MATCHUP_SAMPLES)]
+    matchups = samples[0]
     values = {p["id"]: p for p in json.load(open(VALUES))["players"]}
     shape = load_shapes(scoring)
 
@@ -253,6 +262,21 @@ def main():
                 live.add(r["player_id"])
     for v in played.values():
         v.sort()
+
+    # Locks Blaine marked on the page, {pid: {"pts", "week"}}. A lock lasts the
+    # week and beats whatever Sleeper reports, since Sleeper's servers can
+    # disagree with each other for hours about a counted score.
+    try:
+        with open(MARKS) as f:
+            marks = json.load(f)
+    except (OSError, ValueError):
+        marks = {}
+    saved = json.dumps(marks, sort_keys=True)
+    for m in marks.values():
+        m.setdefault("week", week)
+    marks = {pid: m for pid, m in marks.items() if m["week"] == week}
+    if json.dumps(marks, sort_keys=True) != saved:
+        atomic_write(MARKS, json.dumps(marks))
 
     def player(pid):
         i = info.get(pid, {})
@@ -281,6 +305,8 @@ def main():
     def slot_state(pid, counted):
         """What the slot holds now, and whether it's locked."""
         g = played.get(pid, [])
+        if pid in marks:
+            return marks[pid]["pts"], True
         if pid in live:
             # Sleeper's live number can run ahead of the box score, so only a
             # match with an earlier game means he's locked.
@@ -299,12 +325,24 @@ def main():
 
     roster_slots = [s for s in league["roster_positions"] if s in SLOT_ELIGIBLE]
 
+    def counted_score(rid, k, pid):
+        """Slot k's counted score across the samples. A stale server can show an
+        older game (looks locked) but never a game it hasn't seen, so any sample
+        showing his latest game wins; otherwise the most common answer."""
+        seen = [x["starters_points"][k] for ms in samples for x in ms
+                if x["roster_id"] == rid and x["starters"][k] == pid]
+        g = played.get(pid, [])
+        if g and pid not in live and g[-1][2] in seen:
+            return g[-1][2]
+        return max(set(seen), key=seen.count) if seen else None
+
     def team_view(rid):
         m = next(x for x in matchups if x["roster_id"] == rid)
         ro = next(x for x in rosters if x["roster_id"] == rid)
         u = users.get(ro["owner_id"], {})
+        counted = [counted_score(rid, k, pid) for k, pid in enumerate(m["starters"])]
         slots = []
-        for slot, pid, pts in zip(roster_slots, m["starters"], m["starters_points"]):
+        for slot, pid, pts in zip(roster_slots, m["starters"], counted):
             if not pid or pid == "0":
                 slots.append(Slot(slot, None, None, False, []))
                 continue
@@ -326,7 +364,9 @@ def main():
         bench = [b for b in m["players"] if b not in m["starters"] and b not in reserve]
         return {"rid": rid, "mid": m["matchup_id"], "owner": u.get("display_name"),
                 "team": (u.get("metadata") or {}).get("team_name") or u.get("display_name"),
-                "points": m["points"], "slots": slots, "bench": bench}
+                "points": round(sum(s.current if isinstance(s.current, (int, float)) else (s.live_pts or 0)
+                                    for s in slots if s.player), 1),
+                "slots": slots, "bench": bench}
 
     me_rid = next(r["roster_id"] for r in rosters if users.get(r["owner_id"], {}).get("display_name") == ME)
     me = team_view(me_rid)
@@ -460,6 +500,7 @@ def main():
              "ev": round(s.ev, 1)}
         if mine:
             o["advice"] = advice(s, today, call_by_slot.get(s.slot + s.player["id"]))
+            o["marked"] = s.player["id"] in marks
         return o
 
     out = {
