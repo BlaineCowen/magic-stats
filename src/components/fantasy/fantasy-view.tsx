@@ -487,6 +487,31 @@ function Usage({
       render: (p) => pctCell(...(share(p) as [number | null, number | null])),
     },
     {
+      key: "yprr",
+      label: "Yds per route",
+      value: (p) => p.yprr,
+      render: (p) =>
+        p.yprr == null ? (
+          "–"
+        ) : (
+          <span
+            title={
+              p.yprr_prev != null
+                ? `${p.yprr_prev.toFixed(2)} last season`
+                : undefined
+            }
+          >
+            {p.yprr.toFixed(2)}
+          </span>
+        ),
+    },
+    {
+      key: "tprr",
+      label: "Tgts per route",
+      value: (p) => p.tprr,
+      render: (p) => (p.tprr == null ? "–" : p.tprr.toFixed(2)),
+    },
+    {
       key: "luck",
       label: "Pts vs expected",
       value: (p) => p.luck_pg,
@@ -500,7 +525,9 @@ function Usage({
         compared with his season, with snap and target or carry share for the
         same games (change in percentage points). Expected points measure usage,
         so they move before the box scores do. Sort the change column either way
-        for risers or fallers.
+        for risers or fallers. Yards and targets per route run cover the season
+        so far; routes are estimated from snaps and the team&apos;s pass plays
+        until the real counts come out after the season.
       </Note>
       <SortableTable
         rows={list}
@@ -511,7 +538,7 @@ function Usage({
         filters={filters}
         label="Usage trends"
         empty="No players match. Try another team or position."
-        minWidth={820}
+        minWidth={980}
       />
     </>
   );

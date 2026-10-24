@@ -37,6 +37,10 @@ WEEKLY_OUT = OUT.with_name("projections_weekly.parquet")
 
 ID_COLS = ["player_id", "name", "season", "game_id", "team", "opp", "position", "upcoming", "ppr", "xfp_game",
            "horizon", "out_next", "absent", "vacated_names", "injury_status", "return_date", "injury", "injury_note"]
+# Shown on the site but not model inputs: this season's per-route rates are
+# estimates and noisy early on, and adding them made the 2021-2025 backtest no
+# better (last season's real ones, yprr_prev and tprr_prev, stay in).
+DISPLAY_ONLY = ["routes_pg", "yprr", "tprr", "tprr_l3"]
 # Unknown more than about two weeks ahead.
 FAR_DROP = ["spread", "implied_total", "total_line", "temp_f", "wind_mph", "precip_mm"]
 # Columns that change from game to game when a player's numbers are frozen.
@@ -68,6 +72,8 @@ LABELS = {
     "ay_share": "air-yards share",
     "snap_pct": "snap share",
     "snap_l3": "recent snap share",
+    "yprr_prev": "yards per route run last season",
+    "tprr_prev": "targets per route run last season",
     "separation": "separation",
     "yac_oe": "YAC over expected",
     "ryoe_att": "rush yards over expected",
@@ -124,7 +130,7 @@ def load() -> tuple[pd.DataFrame, list[str]]:
         n, k = df.games_to_date.fillna(0), PRIOR_GAMES
         blend = (n * df[col].fillna(0) + k * df[prev]) / (n + k)
         df[col.replace("_pg", "_blend")] = blend.fillna(df[col]).where(df.position != "QB")
-    feats = [c for c in df.columns if c not in ID_COLS]
+    feats = [c for c in df.columns if c not in ID_COLS + DISPLAY_ONLY]
     df[feats] = df[feats].astype(float)
     return df, feats
 
@@ -363,6 +369,7 @@ def predict(df: pd.DataFrame, feats: list[str]) -> None:
             "proj", "floor", "median", "ceiling", "breakout_prob", "why",
             "games_to_date", "ppr_pg", "xfp_pg", "ppr_l3", "xfp_l3", "luck_pg",
             "tgt_share", "tgt_share_l3", "car_share", "car_share_l3", "snap_pct", "snap_l3",
+            "routes_pg", "yprr", "tprr", "yprr_prev",
             "separation", "yac_oe", "ryoe_att", "vacated_tgt", "vacated_car",
             "implied_total", "spread", "home", "indoor", "temp_f", "wind_mph", "precip_mm",
             "opp_pos_allowed", "age", "years_exp",

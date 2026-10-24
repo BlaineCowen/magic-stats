@@ -93,6 +93,15 @@ export default async function PlayerPageView(props: Props) {
   const xppg = avg((x) => x.xfp);
   const snaps = avg((x) => x.snap_pct);
   const share = avg((x) => (p.position === "RB" ? x.car_share : x.tgt_share));
+  // Per route run, from games with a route count.
+  const routed = w.filter((x) => x.routes != null);
+  const routes = routed.reduce((a, x) => a + (x.routes ?? 0), 0);
+  const perRoute = (f: (x: (typeof w)[number]) => number) =>
+    routes > 0 ? routed.reduce((a, x) => a + f(x), 0) / routes : null;
+  const yprr = perRoute((x) => x.rec_yards);
+  const tprr = perRoute((x) => x.targets);
+  const routesEst = routed.some((x) => x.routes_est);
+  const showRoutes = p.position !== "QB" && routes > 0;
   const proj = p.projection;
   const receiver = p.position === "WR" || p.position === "TE";
 
@@ -301,7 +310,12 @@ export default async function PlayerPageView(props: Props) {
         </p>
       ) : (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div
+            className={cn(
+              "mt-3 grid grid-cols-2 gap-3",
+              showRoutes ? "sm:grid-cols-5" : "sm:grid-cols-4",
+            )}
+          >
             <Stat
               label="PPR per game"
               value={ppg?.toFixed(1) ?? "–"}
@@ -323,6 +337,15 @@ export default async function PlayerPageView(props: Props) {
               label={p.position === "RB" ? "Carry share" : "Target share"}
               value={fmtPct(share)}
             />
+            {showRoutes && (
+              <div className="col-span-2 sm:col-span-1">
+                <Stat
+                  label="Yards per route"
+                  value={yprr?.toFixed(2) ?? "–"}
+                  sub={`${tprr?.toFixed(2) ?? "–"} targets per route${routesEst ? ", estimated" : ""}`}
+                />
+              </div>
+            )}
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">

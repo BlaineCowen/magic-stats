@@ -146,6 +146,10 @@ export const nflViews: SportViews = {
         WHERE regexp_matches(h.year, '^[0-9]{4}$')
         QUALIFY row_number() OVER (PARTITION BY player_name, player_id, h.year ORDER BY year_signed DESC) = 1`);
     }
+    // Routes run per player per game (scripts/projections/build.py).
+    if (has("routes.parquet")) {
+      await run(parquetView("routes", `${dir}/routes.parquet`));
+    }
     // Model output from scripts/projections (next game + breakout chance).
     if (has("projections.parquet")) {
       await run(parquetView("projections", `${dir}/projections.parquet`));

@@ -4,13 +4,16 @@ kickoff, plus rows for each team's next unplayed game.
 
   ../fourth-down/.venv/bin/python build.py
 Reads data/nfl (nflverse + ffopportunity) and work/weather.parquet (weather.py).
-Writes work/player_games.parquet.
+Writes work/player_games.parquet, and data/nfl/routes.parquet (routes run per
+player per game) for the site.
 
 Feature groups
   player usage   last 3 games and season to date: expected PPR points (xFP),
                  snap share, target/carry/air-yards share, expected TDs (red
-                 zone work), actual PPR and points over expected (luck)
-  prior season   PPR and xFP per game, games played
+                 zone work), actual PPR and points over expected (luck),
+                 routes per game, yards and targets per route run
+  prior season   PPR and xFP per game, games played, yards and targets per
+                 route run
   tracking       Next Gen Stats to date: separation, YAC over expected,
                  rush yards over expected per carry, time to throw
   player         position, age, years in the league, draft capital
@@ -71,12 +74,39 @@ def main() -> None:
         (gametime >= '19:00' OR dayname(gameday::DATE) IN ('Monday', 'Thursday'))::INT AS primetime
       FROM sides""")
 
+    # Routes run. nflverse participation lists who was on the field for each
+    # play; a dropback with a receiver on the field counts as a route. It's
+    # posted after each season, so this season uses an estimate: offensive
+    # snaps times the team's dropback rate that game, scaled by position to
+    # match the real counts (tight ends and backs stay in to block more). The
+    # estimate tracks real routes at r = 0.95-0.98 per game.
+    con.execute(f"""
+      CREATE TABLE dropbacks AS
+      SELECT game_id, play_id, posteam AS team, qb_dropback = 1 AS dropback
+      FROM {pq('pbp')}
+      WHERE season >= {FIRST - 1} AND season_type = 'REG' AND posteam IS NOT NULL
+        AND play_type IN ('pass', 'run', 'qb_kneel', 'qb_spike')""")
+    con.execute("""
+      CREATE TABLE team_dropbacks AS
+      SELECT game_id, team, sum(dropback::INT) / count(*) AS dropback_rate
+      FROM dropbacks GROUP BY ALL""")
+    con.execute(f"""
+      CREATE TABLE routes_actual AS
+      SELECT game_id, player_id, count(*) AS routes
+      FROM (
+        SELECT d.game_id, unnest(string_split(x.offense_players, ';')) AS player_id
+        FROM dropbacks d
+        JOIN {pq('participation')} x ON x.nflverse_game_id = d.game_id AND x.play_id = d.play_id
+        WHERE d.dropback
+      )
+      GROUP BY ALL""")
+
     # Per player per game: production, expected production and shares.
     con.execute(f"""
       CREATE TABLE pg AS
       WITH w AS (
         SELECT player_id, season, week, game_id, team, position, fantasy_points_ppr AS ppr,
-          targets, carries, receptions, air_yards_share, target_share,
+          targets, carries, receptions, receiving_yards AS rec_yards, air_yards_share, target_share,
           passing_epa, attempts
         FROM {pq('player_week')}
         WHERE season_type = 'REG' AND season >= {FIRST - 1} AND position IN {POS}
@@ -87,15 +117,31 @@ def main() -> None:
         FROM {pq('xfp')} WHERE player_id IS NOT NULL
       ),
       s AS (
-        SELECT p.gsis_id AS player_id, s.game_id, max(s.offense_pct) AS snap_pct
+        SELECT p.gsis_id AS player_id, s.game_id, max(s.offense_pct) AS snap_pct,
+          max(s.offense_snaps) AS snaps
         FROM {pq('snaps')} s JOIN players p ON p.pfr_id = s.pfr_player_id
         GROUP BY ALL
       )
       SELECT w.*, x.xfp, x.xtd,
         w.targets / nullif(x.team_targets, 0) AS tgt_share,
         w.carries / nullif(x.team_carries, 0) AS car_share,
-        s.snap_pct
-      FROM w LEFT JOIN x USING (player_id, game_id) LEFT JOIN s USING (player_id, game_id)""")
+        s.snap_pct,
+        CASE WHEN w.position <> 'QB' THEN s.snaps * td.dropback_rate END AS routes_raw,
+        -- Real routes for seasons with participation data (0 if never out on a dropback).
+        CASE WHEN w.position <> 'QB' AND w.season IN (SELECT DISTINCT season FROM games
+          WHERE game_id IN (SELECT game_id FROM routes_actual)) THEN coalesce(ra.routes, 0) END AS routes_actual
+      FROM w LEFT JOIN x USING (player_id, game_id) LEFT JOIN s USING (player_id, game_id)
+      LEFT JOIN team_dropbacks td ON td.game_id = w.game_id AND td.team = w.team
+      LEFT JOIN routes_actual ra ON ra.game_id = w.game_id AND ra.player_id = w.player_id""")
+    con.execute("""
+      CREATE OR REPLACE TABLE pg AS
+      WITH scale AS (
+        SELECT position, sum(routes_actual) / sum(routes_raw) AS k
+        FROM pg WHERE routes_actual IS NOT NULL AND routes_raw IS NOT NULL GROUP BY position
+      )
+      SELECT pg.* EXCLUDE (routes_raw), pg.routes_raw * scale.k AS routes
+      FROM pg LEFT JOIN scale USING (position)""")
+    print(con.sql("SELECT position, round(sum(routes_actual) / sum(routes), 3) AS actual_vs_est FROM pg WHERE routes_actual IS NOT NULL GROUP BY 1 ORDER BY 1").df().to_string(index=False))
 
     # Next Gen Stats, weekly rows (week > 0).
     con.execute(f"""
@@ -166,7 +212,7 @@ def main() -> None:
       WITH raw AS (
         SELECT r.player_id, r.season, r.week, r.game_id, r.upcoming,
           p.ppr, p.xfp, p.xtd, p.tgt_share, p.car_share, p.air_yards_share, p.snap_pct,
-          p.targets, p.carries,
+          p.targets, p.carries, p.rec_yards, p.routes,
           median(p.snap_pct) OVER (PARTITION BY r.player_id, r.season ORDER BY r.week
             ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS typical_snap,
           count(p.snap_pct) OVER (PARTITION BY r.player_id, r.season ORDER BY r.week
@@ -199,7 +245,10 @@ def main() -> None:
           CASE WHEN partial THEN NULL ELSE tgt_share END AS tgt_share,
           CASE WHEN partial THEN NULL ELSE car_share END AS car_share,
           CASE WHEN partial THEN NULL ELSE air_yards_share END AS air_yards_share,
-          CASE WHEN partial THEN NULL ELSE snap_pct END AS snap_pct)
+          CASE WHEN partial THEN NULL ELSE snap_pct END AS snap_pct,
+          CASE WHEN partial THEN NULL ELSE targets END AS targets,
+          CASE WHEN partial THEN NULL ELSE rec_yards END AS rec_yards,
+          CASE WHEN partial THEN NULL ELSE routes END AS routes)
         FROM (
           SELECT *, coalesce(snap_games >= 2 AND snap_pct < 0.75 * typical_snap
             AND xfp < 0.6 * typical_xfp, false) AS partial
@@ -216,12 +265,16 @@ def main() -> None:
         avg(car_share) OVER prior AS car_share,
         avg(air_yards_share) OVER prior AS ay_share,
         avg(snap_pct) OVER prior AS snap_pct,
+        avg(routes) OVER prior AS routes_pg,
+        sum(rec_yards) OVER prior / nullif(sum(routes) OVER prior, 0) AS yprr,
+        sum(targets) OVER prior / nullif(sum(routes) OVER prior, 0) AS tprr,
         avg(ppr) OVER last3 AS ppr_l3,
         avg(xfp) OVER last3 AS xfp_l3,
         avg(xtd) OVER last3 AS xtd_l3,
         avg(tgt_share) OVER last3 AS tgt_share_l3,
         avg(car_share) OVER last3 AS car_share_l3,
         avg(snap_pct) OVER last3 AS snap_l3,
+        sum(targets) OVER last3 / nullif(sum(routes) OVER last3, 0) AS tprr_l3,
         max(xfp) OVER prior AS xfp_max,
         lag(xfp) OVER ord AS xfp_last
       FROM h
@@ -232,7 +285,12 @@ def main() -> None:
     con.execute("""
       CREATE TABLE prev_season AS
       SELECT player_id, season + 1 AS season, avg(ppr) AS ppr_prev, avg(xfp) AS xfp_prev,
-        count(*) AS games_prev, avg(tgt_share) AS tgt_share_prev, avg(snap_pct) AS snap_prev
+        count(*) AS games_prev, avg(tgt_share) AS tgt_share_prev, avg(snap_pct) AS snap_prev,
+        -- Real routes when that season's participation is out; under 50 routes is noise.
+        CASE WHEN sum(coalesce(routes_actual, routes)) >= 50
+          THEN sum(rec_yards) / sum(coalesce(routes_actual, routes)) END AS yprr_prev,
+        CASE WHEN sum(coalesce(routes_actual, routes)) >= 50
+          THEN sum(targets) / sum(coalesce(routes_actual, routes)) END AS tprr_prev
       FROM pg GROUP BY player_id, season""")
 
     # Tracking stats to date, weighted by volume.
@@ -353,6 +411,7 @@ def main() -> None:
         r.position, r.upcoming, r.ppr, r.xfp AS xfp_game,
         h.* EXCLUDE (player_id, game_id),
         ps.ppr_prev, ps.xfp_prev, ps.games_prev, ps.tgt_share_prev, ps.snap_prev,
+        ps.yprr_prev, ps.tprr_prev,
         n.separation, n.yac_oe, n.ryoe_att, n.time_to_throw,
         (r.position = 'QB')::INT AS is_qb, (r.position = 'RB')::INT AS is_rb,
         (r.position = 'WR')::INT AS is_wr, (r.position = 'TE')::INT AS is_te,
@@ -472,6 +531,17 @@ def main() -> None:
       LEFT JOIN vac_future v ON v.team = a.team AND v.game_id = a.game_id AND a.horizon > 0
       LEFT JOIN absences b ON b.player_id = a.player_id AND b.game_id = a.game_id
       LEFT JOIN inj_now i ON i.player_id = a.player_id AND a.horizon > 0""")
+
+    # Routes per player per game for the site and Ask: real counts where
+    # participation is out, the estimate otherwise.
+    con.execute(f"""
+      COPY (
+        SELECT season, week, game_id, player_id, team, position,
+          round(coalesce(routes_actual, routes), 1) AS routes, routes_actual IS NULL AS estimated,
+          targets, receptions, rec_yards
+        FROM pg WHERE routes IS NOT NULL OR routes_actual IS NOT NULL
+        ORDER BY season, week, game_id, player_id
+      ) TO '{D / "routes.parquet"}' (FORMAT parquet, COMPRESSION zstd)""")
 
     WORK.mkdir(parents=True, exist_ok=True)
     out = WORK / "player_games.parquet"

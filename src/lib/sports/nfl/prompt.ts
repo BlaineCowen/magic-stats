@@ -268,6 +268,14 @@ const SNAP_COLS: Col[] = [
     "pct is a 0-1 share of the team's snaps",
   ],
 ];
+const ROUTE_COLS: Col[] = [
+  ["season, week, game_id, player_id, team, position", "regular season, RB/WR/TE"],
+  [
+    "routes, estimated",
+    "pass plays he was on the field for; estimated = true when the real count isn't published yet (the current season), then routes is snaps times the team's dropback rate",
+  ],
+  ["targets, receptions, rec_yards", ""],
+];
 const QBR_COLS: Col[] = [
   [
     "season, season_type, team, player_name, qualified",
@@ -345,6 +353,7 @@ const FUZZY = `- projections, "who should I start", ceiling, upside, sleepers, b
 - QBR: qbr_season or qbr_week.
 - "overpaid" / "bad contract" / value per dollar: contract_years cap_number for that season joined on player_id to production (player_week fantasy points or EPA); rank cost per point. "Best value" is the reverse.
 - snap share, "plays every snap", "barely plays": snaps.offense_pct.
+- yards per route run (YPRR), targets per route run (TPRR), routes run, route participation: the routes table. YPRR = SUM(rec_yards) / SUM(routes) per player; TPRR = SUM(targets) / SUM(routes). Require a minimum (SUM(routes) >= 100 for a season) and compare within a position.
 - broken tackles, drops, bad throws, pressure, missed tackles, yards after contact: the pfr_* tables (2018 on). SUM per player_id, pfr_player_name; filter game_type = 'REG' for the regular season. Their counts are often NULL, so wrap each in coalesce(x, 0) before adding columns together. "Broken tackles" for a runner means rushing_broken_tackles unless the question says catches too.
 - "fraud" team: won more than its points say it should. From team_games: wins - games * POW(pf, 2.37) / (POW(pf, 2.37) + POW(pa, 2.37)) where pf/pa are summed points; higher = bigger fraud. Show record, point differential and expected wins. "Unlucky" is the reverse.
 - "lucky": record in one-score games (ABS(points_for - points_against) <= 8).
@@ -537,6 +546,11 @@ export const nflPrompt: SportPrompt = {
       view: "snaps",
       title: () => "snap counts, one row per player per game, 2012 on",
       cols: SNAP_COLS,
+    },
+    {
+      view: "routes",
+      title: () => "routes run per player per game, 2015 on",
+      cols: ROUTE_COLS,
     },
     {
       view: "qbr_season",

@@ -82,6 +82,14 @@ const DATASETS = [
     url: (y) => `${RELEASES}/ftn_charting/ftn_charting_${y}.parquet`,
     order: ["nflverse_game_id", "nflverse_play_id"],
   },
+  // Who was on the field for each play (offense_players), for routes run.
+  // Posted after each season ends, so the current season is usually missing.
+  {
+    name: "participation",
+    first: 2016,
+    url: (y) => `${RELEASES}/pbp_participation/pbp_participation_${y}.parquet`,
+    order: ["nflverse_game_id", "play_id"],
+  },
   // Weekly injury reports: who's out for the projection model.
   {
     name: "injuries",

@@ -39,6 +39,12 @@ export type Projection = {
   car_share_l3: number | null;
   snap_pct: number | null;
   snap_l3: number | null;
+  /** Routes run per game this season (estimated from snaps until the real counts are out). */
+  routes_pg: number | null;
+  /** Receiving yards and targets per route run, this season and last. */
+  yprr: number | null;
+  tprr: number | null;
+  yprr_prev: number | null;
   separation: number | null;
   yac_oe: number | null;
   ryoe_att: number | null;
@@ -70,6 +76,9 @@ export type Projection = {
   /** Teammates out for his next game whose targets/carries open up. */
   vacated_names: string | null;
 };
+
+const enoughRoutes = (r: Row) =>
+  (num(r.routes_pg) ?? 0) * Number(r.games_to_date ?? 0) >= 40;
 
 function toProjection(r: Row): Projection {
   let why: Reason[] = [];
@@ -105,6 +114,11 @@ function toProjection(r: Row): Projection {
     car_share_l3: num(r.car_share_l3),
     snap_pct: num(r.snap_pct),
     snap_l3: num(r.snap_l3),
+    routes_pg: num(r.routes_pg),
+    // Under 40 routes the rates are mostly noise.
+    yprr: enoughRoutes(r) ? num(r.yprr) : null,
+    tprr: enoughRoutes(r) ? num(r.tprr) : null,
+    yprr_prev: num(r.yprr_prev),
     separation: num(r.separation),
     yac_oe: num(r.yac_oe),
     ryoe_att: num(r.ryoe_att),
@@ -178,6 +192,10 @@ export type PlayerWeek = {
   ppr: number;
   xfp: number | null;
   snap_pct: number | null;
+  /** Routes run; null for QBs. */
+  routes: number | null;
+  /** True when routes is estimated from snaps (real counts come out after the season). */
+  routes_est: boolean;
   tgt_share: number | null;
   car_share: number | null;
   targets: number;
@@ -252,7 +270,7 @@ export async function getPlayerPage(
 
   const { rows } = await runSafeSelect(`
     SELECT w.week, w.opponent_team AS opponent, w.fantasy_points_ppr AS ppr,
-      x.fantasy_points_exp AS xfp, s.snap_pct,
+      x.fantasy_points_exp AS xfp, s.snap_pct, rt.routes, rt.estimated AS routes_est,
       w.targets / nullif(x.team_targets, 0) AS tgt_share,
       w.carries / nullif(x.team_carries, 0) AS car_share,
       w.targets, w.receptions, w.carries, w.receiving_yards AS rec_yards,
@@ -263,6 +281,7 @@ export async function getPlayerPage(
     LEFT JOIN xfp x ON x.player_id = w.player_id AND x.game_id = w.game_id
     LEFT JOIN (SELECT player_id, game_id, max(offense_pct) AS snap_pct FROM snaps GROUP BY ALL) s
       ON s.player_id = w.player_id AND s.game_id = w.game_id
+    LEFT JOIN routes rt ON rt.player_id = w.player_id AND rt.game_id = w.game_id
     LEFT JOIN ngs_receiving nr ON nr.player_id = w.player_id AND nr.season = w.season
       AND nr.week = w.week AND nr.season_type = 'REG'
     LEFT JOIN ngs_rushing nu ON nu.player_id = w.player_id AND nu.season = w.season
@@ -275,6 +294,8 @@ export async function getPlayerPage(
     ppr: Number(r.ppr ?? 0),
     xfp: num(r.xfp),
     snap_pct: num(r.snap_pct),
+    routes: num(r.routes),
+    routes_est: r.routes_est === true,
     tgt_share: num(r.tgt_share),
     car_share: num(r.car_share),
     targets: Number(r.targets ?? 0),

@@ -74,7 +74,25 @@ export function GameLog({
       value: (g) => g.snap_pct,
       render: (g) => fmtPct(g.snap_pct),
     },
-    ...(showPassing ? [stat("pass_yards", "Pass yds")] : []),
+    ...(showPassing
+      ? [stat("pass_yards", "Pass yds")]
+      : [
+          {
+            key: "routes",
+            label: "Routes",
+            value: (g: PlayerWeek) => g.routes,
+            render: (g: PlayerWeek) =>
+              g.routes == null ? (
+                "–"
+              ) : g.routes_est ? (
+                <span title="Estimated from snaps and the team's pass plays">
+                  ~{Math.round(g.routes)}
+                </span>
+              ) : (
+                Math.round(g.routes)
+              ),
+          },
+        ]),
     stat("carries", "Car"),
     stat("rush_yards", "Rush yds"),
     stat("targets", "Tgt"),
@@ -88,7 +106,7 @@ export function GameLog({
       columns={columns}
       rowKey={(g) => String(g.week)}
       defaultSort={{ key: "week", desc: false }}
-      minWidth={showPassing ? 640 : 580}
+      minWidth={showPassing ? 640 : 620}
       label="Game log"
     />
   );
