@@ -30,9 +30,19 @@ type DbState = { instance: DuckDBInstance; key: string };
 
 const stateKey = (sport: Sport) => `${dataVersion(sport)}:${VIEWS[sport].rev}`;
 
+/**
+ * Which database a query runs against. The licensed one leaves out the views
+ * in the sport's `restricted` list (sources that can't be resold, and model
+ * output the connector only serves through its own tools), for SQL that
+ * outside agents write through the connector (src/lib/mcp).
+ */
+export type DbOpts = { licensed?: boolean };
+const slot = (sport: Sport, { licensed }: DbOpts) =>
+  licensed ? `${sport}:licensed` : sport;
+
 // Cached on globalThis so `next dev` hot reloads don't open a new instance each time.
 const g = globalThis as unknown as {
-  __sportsDb?: Partial<Record<Sport, Promise<DbState>>>;
+  __sportsDb?: Record<string, Promise<DbState>>;
 };
 g.__sportsDb ??= {};
 const dbs = g.__sportsDb;
@@ -52,7 +62,7 @@ export function dataVersion(sport: Sport): string {
 
 export const sqlStr = (s: string) => `'${s.replaceAll("'", "''")}'`;
 
-async function createDb(sport: Sport): Promise<DbState> {
+async function createDb(sport: Sport, opts: DbOpts): Promise<DbState> {
   const key = stateKey(sport);
   const spec = VIEWS[sport];
   const dir = dataDir(sport);
@@ -77,6 +87,10 @@ async function createDb(sport: Sport): Promise<DbState> {
     dir,
     has,
   });
+  if (opts.licensed) {
+    for (const v of spec.restricted ?? [])
+      await conn.run(`DROP VIEW IF EXISTS ${v}`);
+  }
   for (const s of spec.settings ?? []) await conn.run(s);
   // LLM-written SQL may only read this sport's data directory: no other files,
   // no network, and no changing these settings afterwards.
@@ -87,18 +101,19 @@ async function createDb(sport: Sport): Promise<DbState> {
   return { instance, key };
 }
 
-async function getDb(sport: Sport): Promise<DbState> {
-  const existing = dbs[sport];
+async function getDb(sport: Sport, opts: DbOpts = {}): Promise<DbState> {
+  const id = slot(sport, opts);
+  const existing = dbs[id];
   if (existing) {
     const state = await existing.catch(() => null);
     // Rebuild after a refresh so view schemas pick up new/changed files.
     if (state && state.key === stateKey(sport)) return state;
     if (state) state.instance.closeSync();
   }
-  const next = createDb(sport);
-  dbs[sport] = next;
+  const next = createDb(sport, opts);
+  dbs[id] = next;
   next.catch(() => {
-    if (dbs[sport] === next) delete dbs[sport];
+    if (dbs[id] === next) delete dbs[id];
   });
   return next;
 }
@@ -137,10 +152,10 @@ export function cleanSql(sql: string): string {
 export async function runSafeSelect(
   sport: Sport,
   rawSql: string,
-  { maxRows = MAX_ROWS }: { maxRows?: number } = {},
+  { maxRows = MAX_ROWS, licensed }: { maxRows?: number } & DbOpts = {},
 ): Promise<{ columns: string[]; rows: Row[]; truncated: boolean }> {
   const sql = cleanSql(rawSql);
-  const { instance } = await getDb(sport);
+  const { instance } = await getDb(sport, { licensed });
   const conn = await instance.connect();
   const timer = setTimeout(() => conn.interrupt(), QUERY_TIMEOUT_MS);
   try {
@@ -183,8 +198,9 @@ export async function runSafeSelect(
 export async function describeView(
   sport: Sport,
   view: string,
+  opts: DbOpts = {},
 ): Promise<Set<string>> {
-  const { instance } = await getDb(sport);
+  const { instance } = await getDb(sport, opts);
   const conn = await instance.connect();
   try {
     const r = await conn.runAndReadAll(`DESCRIBE ${view}`);

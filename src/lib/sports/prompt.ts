@@ -1,9 +1,10 @@
-import { describeView, getDataInfo } from "./db";
+import { describeView, getDataInfo, type DbOpts } from "./db";
 import { mlbPrompt } from "./mlb/prompt";
 import { nbaPrompt } from "./nba/prompt";
 import { nflPrompt } from "./nfl/prompt";
 import type { Col, SportPrompt } from "./prompt-kit";
 import type { Sport } from "./types";
+import { VIEWS } from "./views";
 
 /**
  * System prompt for text-to-SQL. Kept to a few thousand tokens per sport: a
@@ -24,8 +25,9 @@ async function renderTable(
   sport: Sport,
   view: string,
   cols: Col[],
+  opts: DbOpts = {},
 ): Promise<string> {
-  const have = await describeView(sport, view).catch(() => null);
+  const have = await describeView(sport, view, opts).catch(() => null);
   if (!have) return "";
   const lines = cols
     .map(([names, desc]) => {
@@ -114,6 +116,52 @@ ${output}`;
     if (k.startsWith(`${sport}:${mode}:`)) cache.delete(k);
   cache.set(key, prompt);
   return prompt;
+}
+
+/**
+ * The same table notes, rules and examples, written for an outside agent that
+ * writes its own SQL against the licensed database (the connector's
+ * describe_data tool). Tables missing from that database are left out.
+ */
+export async function describeData(sport: Sport): Promise<string> {
+  const info = await getDataInfo(sport);
+  const p = PROMPTS[sport];
+  const tables = (
+    await Promise.all(
+      p.tables.map(async (t) => {
+        const cols = await renderTable(sport, t.view, t.cols, {
+          licensed: true,
+        });
+        return cols ? `${t.view} -- ${t.title(info)}\n${cols}` : null;
+      }),
+    )
+  ).filter(Boolean);
+  // Hints that send the model to a left-out table would only cause errors.
+  const gone = (VIEWS[sport].restricted ?? []).map((v) =>
+    v.replace(/_.*$/, "_"),
+  );
+  const fuzzy = p.fuzzy
+    .split("\n")
+    .filter((l) => !gone.some((v) => new RegExp(`\\b${v}`).test(l)))
+    .join("\n");
+  // The examples carry the Ask page's chart object; outside agents only need the SQL.
+  const examples = p.examples.replace(/, "chart": \{[^}]*\}/g, "");
+  return `${p.intro.replace(/^You write one/, "Write one")}
+
+${p.seasonContext(info)}
+
+RULES
+${p.rules.map((r, i) => `${i + 1}. ${r}`).join("\n")}
+
+TABLES
+${tables.join("\n\n")}
+
+${p.idioms}
+
+STAND-INS FOR SLANG AND OPINION QUESTIONS
+${fuzzy}
+
+${examples}`;
 }
 
 /** Hints for errors models tend to repeat verbatim: the sport's own, then general ones. */

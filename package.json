@@ -14,10 +14,11 @@
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx --test src/lib/nfl/*.test.ts src/lib/fourth/*.test.ts src/lib/sports/*.test.ts src/lib/pickem/*.test.ts"
+    "test": "npx tsx --test src/lib/nfl/*.test.ts src/lib/fourth/*.test.ts src/lib/sports/*.test.ts src/lib/pickem/*.test.ts src/lib/mcp/*.test.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.5",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-slot": "^1.2.3",

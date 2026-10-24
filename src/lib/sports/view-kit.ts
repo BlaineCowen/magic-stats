@@ -15,6 +15,12 @@ export type SportViews = {
   /** Paths under dir that must exist before the views can be built. */
   required: string[];
   create: (ctx: ViewContext) => Promise<void>;
+  /**
+   * Views left out of the licensed database (see DbOpts in db.ts): data whose
+   * terms don't allow reselling it, and model output the connector sells
+   * through its own tools rather than raw SQL.
+   */
+  restricted?: string[];
   /** Extra DuckDB SET statements, applied before the settings are locked. */
   settings?: string[];
   /**

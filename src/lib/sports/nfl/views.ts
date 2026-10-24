@@ -5,6 +5,20 @@ export const nflViews: SportViews = {
   envVar: "NFL_DATA_DIR",
   rev: 8,
   required: ["pbp", "players.parquet"],
+  restricted: [
+    // Pro Football Reference, ESPN QBR and OverTheCap: scraped or no-reuse terms.
+    "pfr_pass",
+    "pfr_rush",
+    "pfr_rec",
+    "pfr_def",
+    "qbr_week",
+    "qbr_season",
+    "contracts",
+    "contract_years",
+    // The fantasy model's output, served by the connector's projection tools.
+    "projections",
+    "projections_weekly",
+  ],
   async create({ run, dir, has }) {
     await run(
       `CREATE VIEW players AS SELECT * FROM read_parquet(${sqlLit(`${dir}/players.parquet`)})`,
