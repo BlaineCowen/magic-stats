@@ -163,6 +163,8 @@ function NumInput({
         autoComplete="off"
         value={text}
         placeholder={placeholder}
+        // named here, or the wrapping label would fold the ± button's name into it
+        aria-label={label}
         onChange={(e) => type(e.target.value)}
         onBlur={() => {
           if (read(text) === undefined) setText(show(value));
