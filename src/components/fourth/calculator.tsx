@@ -101,6 +101,88 @@ function Segmented<T extends string | number>({
   );
 }
 
+/**
+ * A number box that works with phone keyboards. It keeps whatever is typed ("-", "3.",
+ * an empty box) and only passes on numbers inside [min, max]; leaving the box puts the
+ * last good number back. Phone number pads have no minus key, so fields that can go
+ * negative get a +/− button.
+ */
+function NumInput({
+  value,
+  onChange,
+  min,
+  max,
+  decimals = false,
+  signed = false,
+  optional = false,
+  placeholder,
+  label,
+}: {
+  value: number | null | undefined;
+  onChange: (v: number | null) => void;
+  min: number;
+  max: number;
+  decimals?: boolean;
+  signed?: boolean;
+  /** An empty box means "unknown" (null). */
+  optional?: boolean;
+  placeholder?: string;
+  label: string;
+}) {
+  const show = (v: number | null | undefined) => (v == null ? "" : String(v));
+  const [text, setText] = useState(show(value));
+  // follow outside changes (presets, Reset) unless the box already says that number
+  useEffect(() => {
+    setText((t) => (read(t) === (value ?? null) ? t : show(value)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  function read(t: string): number | null | undefined {
+    const c = t.trim().replace(/[−–]/g, "-");
+    if (c === "") return optional ? null : undefined;
+    if (!(decimals ? /^-?\d+(\.\d*)?$|^-?\.\d+$/ : /^-?\d+$/).test(c)) return undefined;
+    const n = Number(c);
+    return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
+  }
+  const type = (t: string) => {
+    setText(t);
+    const n = read(t);
+    if (n !== undefined && n !== value) onChange(n);
+  };
+  const flip = () => {
+    const t = text.trim();
+    type(t.startsWith("-") ? t.slice(1) : `-${t || "0"}`.replace(/^-0$/, "-"));
+  };
+
+  return (
+    <div className="flex gap-1">
+      <input
+        type="text"
+        inputMode={decimals ? "decimal" : "numeric"}
+        enterKeyHint="done"
+        autoComplete="off"
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => type(e.target.value)}
+        onBlur={() => {
+          if (read(text) === undefined) setText(show(value));
+        }}
+        className={cn(inputCls, "min-w-0 text-base sm:text-sm")}
+      />
+      {signed && (
+        <button
+          type="button"
+          onClick={flip}
+          aria-label={`Make ${label.toLowerCase()} ${text.trim().startsWith("-") ? "positive" : "negative"}`}
+          className="focus-visible:outline-turf-700 w-10 shrink-0 rounded-md border border-slate-300 bg-white text-base font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2"
+        >
+          ±
+        </button>
+      )}
+    </div>
+  );
+}
+
 const mmss = (sec: number) =>
   `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 const parseClock = (s: string): number | null => {
@@ -251,29 +333,22 @@ export function Calculator({ initial }: { initial: Situation }) {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Yards to go">
-              <input
-                type="number"
+              <NumInput
+                label="Yards to go"
                 min={1}
                 max={s.yardline}
                 value={s.ydstogo}
-                onChange={(e) =>
-                  set(
-                    "ydstogo",
-                    Math.max(
-                      1,
-                      Math.min(s.yardline, Number(e.target.value) || 1),
-                    ),
-                  )
-                }
-                className={inputCls}
+                onChange={(v) => set("ydstogo", v ?? 1)}
               />
             </Field>
             <Field label="Score" hint="(+ ahead, − behind)">
-              <input
-                type="number"
+              <NumInput
+                label="Score"
+                signed
+                min={-60}
+                max={60}
                 value={s.scoreDiff}
-                onChange={(e) => set("scoreDiff", Number(e.target.value) || 0)}
-                className={inputCls}
+                onChange={(v) => set("scoreDiff", v ?? 0)}
               />
             </Field>
             <Field label="Quarter">
@@ -288,13 +363,16 @@ export function Calculator({ initial }: { initial: Situation }) {
             </Field>
             <Field label="Clock">
               <input
+                inputMode="numeric"
+                enterKeyHint="done"
+                autoComplete="off"
                 value={clockText}
                 onChange={(e) => {
                   setClockText(e.target.value);
                   const c = parseClock(e.target.value);
                   if (c != null) set("clock", c);
                 }}
-                className={inputCls}
+                className={cn(inputCls, "text-base sm:text-sm")}
                 placeholder="5:00"
               />
             </Field>
@@ -320,21 +398,24 @@ export function Calculator({ initial }: { initial: Situation }) {
             </summary>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <Field label="Spread" hint="(+ = offense favored)">
-                <input
-                  type="number"
-                  step={0.5}
+                <NumInput
+                  label="Spread"
+                  signed
+                  decimals
+                  min={-30}
+                  max={30}
                   value={s.spread}
-                  onChange={(e) => set("spread", Number(e.target.value) || 0)}
-                  className={inputCls}
+                  onChange={(v) => set("spread", v ?? 0)}
                 />
               </Field>
               <Field label="Over/under">
-                <input
-                  type="number"
-                  step={0.5}
+                <NumInput
+                  label="Over/under"
+                  decimals
+                  min={25}
+                  max={70}
                   value={s.total}
-                  onChange={(e) => set("total", Number(e.target.value) || 45)}
-                  className={inputCls}
+                  onChange={(v) => set("total", v ?? 45)}
                 />
               </Field>
               <Field label="Offense is">
@@ -348,15 +429,12 @@ export function Calculator({ initial }: { initial: Situation }) {
                 />
               </Field>
               <Field label="Season">
-                <input
-                  type="number"
+                <NumInput
+                  label="Season"
                   min={1999}
                   max={2030}
                   value={s.season}
-                  onChange={(e) =>
-                    set("season", Number(e.target.value) || 2025)
-                  }
-                  className={inputCls}
+                  onChange={(v) => set("season", v ?? 2025)}
                 />
               </Field>
               <div className="col-span-2">
@@ -375,32 +453,26 @@ export function Calculator({ initial }: { initial: Situation }) {
               {s.roof !== "dome" && (
                 <>
                   <Field label="Wind (mph)">
-                    <input
-                      type="number"
+                    <NumInput
+                      label="Wind"
+                      optional
                       min={0}
-                      value={s.wind ?? ""}
+                      max={50}
+                      value={s.wind}
                       placeholder="unknown"
-                      onChange={(e) =>
-                        set(
-                          "wind",
-                          e.target.value === "" ? null : Number(e.target.value),
-                        )
-                      }
-                      className={inputCls}
+                      onChange={(v) => set("wind", v)}
                     />
                   </Field>
                   <Field label="Temp (°F)">
-                    <input
-                      type="number"
-                      value={s.temp ?? ""}
+                    <NumInput
+                      label="Temperature"
+                      signed
+                      optional
+                      min={-20}
+                      max={120}
+                      value={s.temp}
                       placeholder="unknown"
-                      onChange={(e) =>
-                        set(
-                          "temp",
-                          e.target.value === "" ? null : Number(e.target.value),
-                        )
-                      }
-                      className={inputCls}
+                      onChange={(v) => set("temp", v)}
                     />
                   </Field>
                 </>

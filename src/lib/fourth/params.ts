@@ -79,6 +79,15 @@ export function parseSituation(p: URLSearchParams): Situation {
   };
 }
 
+/** For the page: a bad or hand-edited link falls back to the default spot instead of crashing. */
+export function safeSituation(p: URLSearchParams): Situation {
+  try {
+    return parseSituation(p);
+  } catch {
+    return DEFAULT_SITUATION;
+  }
+}
+
 export function situationQuery(s: Situation): string {
   const p = new URLSearchParams();
   for (const [k, short] of Object.entries(KEYS) as [

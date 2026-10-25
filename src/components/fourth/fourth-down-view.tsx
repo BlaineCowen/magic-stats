@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { parseSituation } from "@/lib/fourth/params";
+import { safeSituation } from "@/lib/fourth/params";
 import type { GameListItem } from "@/lib/fourth/games";
 import type { LiveGameSummary } from "@/lib/fourth/live";
 import { cn } from "@/lib/utils";
@@ -324,7 +324,7 @@ export function FourthDownView() {
           </button>
         ))}
       </div>
-      {tab === "calculator" && <Calculator initial={parseSituation(params)} />}
+      {tab === "calculator" && <Calculator initial={safeSituation(params)} />}
       {tab === "coaches" && <Coaches />}
       {tab === "live" && <Live />}
       {tab === "game" && <GameFinder />}
