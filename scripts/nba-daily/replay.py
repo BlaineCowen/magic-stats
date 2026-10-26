@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import sys
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -61,6 +62,12 @@ def espn_games(dates):
             home = next(c for c in comp["competitors"] if c["homeAway"] == "home")["team"]["abbreviation"]
             out[(d, ESPN_ABBR.get(home, home))] = e["id"]
     return out
+
+
+def norm(name):
+    """Name key for matching ESPN to Sleeper when the ESPN id is missing."""
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+    return " ".join(w for w in name.replace(".", "").replace("'", "").split() if w not in ("jr", "sr", "ii", "iii", "iv"))
 
 
 def box_timeline(event_id):
@@ -107,7 +114,10 @@ def box_timeline(event_id):
         for a, v in delta.items():
             cum[a] += v
             out[a].append((t, cum[a], share))
-    return {"tip": ts(plays[0]["wallclock"]), "end": ts(plays[-1]["wallclock"]), "players": out}
+    names = {a["athlete"]["id"]: norm(a["athlete"]["displayName"])
+             for team in d.get("boxscore", {}).get("players", []) for grp in team.get("statistics", [])
+             for a in grp.get("athletes", [])}
+    return {"tip": ts(plays[0]["wallclock"]), "end": ts(plays[-1]["wallclock"]), "players": out, "names": names}
 
 
 def main():
@@ -190,6 +200,8 @@ def main():
                  "final": final, "mean": mean, "proj_ok": ok, "line": []}
             if b and final is not None:
                 espn_id = next((e for e, s in espn_to_sleeper.items() if s == pid), None)
+                if espn_id not in b["players"]:
+                    espn_id = next((e for e, n in b["names"].items() if n == norm(name(pid))), espn_id)
                 raw = b["players"].get(espn_id, [])
                 pbp_final = raw[-1][1] if raw else 0.0
                 # Scale the play-by-play path to Sleeper's official final.
