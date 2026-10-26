@@ -217,8 +217,14 @@ def main():
         return {"slot": slot_name, "pid": pid, "name": name(pid), "team": p_team, "counted": counted,
                 "games": games, "lock_at": lock_at, "lock_game": k, "snap": snap}
 
+    def counted_for(pid, pts):
+        # Sleeper's public API often ignores lock-ins, so the locks marked on
+        # the plan page win when they disagree.
+        m = marks.get(pid)
+        return float(m["pts"]) if m and m.get("week", week) == week else float(pts)
+
     def side(m):
-        return [build_slot(pid, float(pts), s) for pid, pts, s in
+        return [build_slot(pid, counted_for(pid, pts), s) for pid, pts, s in
                 zip(m["starters"], m["starters_points"], league["roster_positions"])]
 
     me, opp = side(mine), side(theirs)
@@ -345,7 +351,7 @@ def main():
 
     def slot_out(s):
         return {"slot": s["slot"], "name": s["name"], "team": s["team"], "counted": s["counted"],
-                "locked": s["lock_at"] is not None, "swapped": s["snap"] is not None,
+                "locked": s["lock_at"] is not None, "marked": s["pid"] in marks, "swapped": s["snap"] is not None,
                 "games": [{"date": g["date"], "pts": g["final"], "proj": round(g["mean"], 1), "counted": i == s["lock_game"]}
                           for i, g in enumerate(s["games"])]}
 
@@ -362,8 +368,8 @@ def main():
 
     week_out = {
         "week": week, "dates": dates, "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "me": {"team": team_name(mine["roster_id"]), "points": mine["points"], "slots": [slot_out(s) for s in me]},
-        "opp": {"team": team_name(theirs["roster_id"]), "points": theirs["points"], "slots": [slot_out(s) for s in opp]},
+        "me": {"team": team_name(mine["roster_id"]), "points": sum(x["counted"] for x in me), "sleeper_points": mine["points"], "slots": [slot_out(s) for s in me]},
+        "opp": {"team": team_name(theirs["roster_id"]), "points": sum(x["counted"] for x in opp), "sleeper_points": theirs["points"], "slots": [slot_out(s) for s in opp]},
         "series": series, "events": events, "windows": windows,
     }
     try:
