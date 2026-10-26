@@ -95,12 +95,6 @@ const SEASON: Item[] = [
     icon: ClipboardList,
   },
   {
-    href: "/nfl/league-odds/",
-    title: "League odds",
-    blurb: "Playoff and title chances for every H-Town Ballers team.",
-    icon: Trophy,
-  },
-  {
     href: "/magic-stats/trades",
     title: "Trade ideas",
     blurb: "Fair trades for every team in H-Town Ballers.",
@@ -132,6 +126,12 @@ const PRIVATE: Item[] = [
     title: "Trade desk",
     blurb: "Rest-of-season trade values.",
     icon: Repeat,
+  },
+  {
+    href: "/nfl/value/league-odds/",
+    title: "League odds",
+    blurb: "Playoff and title chances for every H-Town Ballers team.",
+    icon: Trophy,
   },
   {
     href: "/nfl/nba/",
