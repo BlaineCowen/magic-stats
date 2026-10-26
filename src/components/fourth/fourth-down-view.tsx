@@ -27,11 +27,15 @@ const NOW = new Date();
 const CURRENT_SEASON =
   NOW.getMonth() >= 7 ? NOW.getFullYear() : NOW.getFullYear() - 1;
 
-const weekLabel = (w: number) =>
-  w <= 18
+// 17-week regular seasons through 2020, so the playoffs start a week earlier
+const regWeeks = (season: number) => (season >= 2021 ? 18 : 17);
+
+const weekLabel = (w: number, season: number) =>
+  w <= regWeeks(season)
     ? `Week ${w}`
-    : (["Wild card", "Divisional", "Conference", "Super Bowl"][w - 19] ??
-      `Week ${w}`);
+    : (["Wild card", "Divisional", "Conference", "Super Bowl"][
+        w - regWeeks(season) - 1
+      ] ?? `Week ${w}`);
 
 function TeamChip({ team }: { team: string }) {
   return (
@@ -189,7 +193,7 @@ function GameFinder() {
         {sel && (
           <span className="text-sm text-slate-500">
             Showing {TEAM_NAME[sel.away] ?? sel.away} at{" "}
-            {TEAM_NAME[sel.home] ?? sel.home}, {weekLabel(sel.week)}
+            {TEAM_NAME[sel.home] ?? sel.home}, {weekLabel(sel.week, season)}
           </span>
         )}
       </div>
@@ -214,7 +218,7 @@ function GameFinder() {
                   : "border-slate-300 bg-white text-slate-600 hover:border-slate-400",
               )}
             >
-              {w <= 18 ? w : weekLabel(w)}
+              {w <= regWeeks(season) ? w : weekLabel(w, season)}
             </button>
           ))}
         </div>
@@ -239,7 +243,7 @@ function GameFinder() {
             <div key={g.gameId}>
               {team && (
                 <div className="mb-1 text-xs font-medium text-slate-500">
-                  {weekLabel(g.week)}
+                  {weekLabel(g.week, season)}
                 </div>
               )}
               <GameCard

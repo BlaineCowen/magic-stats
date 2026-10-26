@@ -364,7 +364,7 @@ function Scoreboard({ g }: { g: GameAnalysis }) {
             Final
           </div>
           {date && <div className="hidden sm:block">{date}</div>}
-          <div>{g.week > 18 ? "Playoffs" : `Week ${g.week}`}</div>
+          <div>{g.week > (g.season >= 2021 ? 18 : 17) ? "Playoffs" : `Week ${g.week}`}</div>
         </div>
         {side(g.teams.home, g.homeScore, g.homeScore > g.awayScore, "right")}
       </div>
