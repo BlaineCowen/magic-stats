@@ -79,16 +79,20 @@ def box_timeline(event_id):
         return None
     cum = defaultdict(float)
     out = defaultdict(list)
+    clock_line = []                  # (time, share of the game played), every play
     for p in plays:
         t = ts(p["wallclock"])
         per = p["period"]["number"]
         try:
-            m, s = (p["clock"]["displayValue"].split(":") + ["0"])[:2]
-            left = float(m) + float(s) / 60
+            clock = p["clock"]["displayValue"]
+            # "5:14" is minutes:seconds; under a minute ESPN shows just seconds ("8.3").
+            m, sec = clock.split(":") if ":" in clock else ("0", clock)
+            left = float(m) + float(sec) / 60
         except ValueError:
             left = 0.0
         elapsed = (per - 1) * 12 + 12 - left if per <= 4 else 48 + (per - 5) * 5 + 5 - left
         share = min(elapsed / 48, 1.0)
+        clock_line.append((t, share))
         ids = [a["athlete"]["id"] for a in p.get("participants", [])]
         if not ids:
             continue
@@ -117,7 +121,7 @@ def box_timeline(event_id):
     names = {a["athlete"]["id"]: norm(a["athlete"]["displayName"])
              for team in d.get("boxscore", {}).get("players", []) for grp in team.get("statistics", [])
              for a in grp.get("athletes", [])}
-    return {"tip": ts(plays[0]["wallclock"]), "end": ts(plays[-1]["wallclock"]), "players": out, "names": names}
+    return {"tip": ts(plays[0]["wallclock"]), "end": ts(plays[-1]["wallclock"]), "players": out, "names": names, "clock": clock_line}
 
 
 def main():
@@ -197,7 +201,7 @@ def main():
             final = finals.get(pid, {}).get(date)
             mean, ok = proj.get(pid, {}).get(date, (None, True))
             g = {"date": date, "tip": b["tip"] if b else None, "end": b["end"] if b else None,
-                 "final": final, "mean": mean, "proj_ok": ok, "line": []}
+                 "final": final, "mean": mean, "proj_ok": ok, "line": [], "clock": b["clock"] if b else []}
             if b and final is not None:
                 espn_id = next((e for e, s in espn_to_sleeper.items() if s == pid), None)
                 if espn_id not in b["players"]:
@@ -255,8 +259,9 @@ def main():
                     cur = g["final"]
             elif g["tip"] and g["tip"] <= t:
                 if g["final"] is not None:
-                    pts = [(c, sh) for tt, c, sh in g["line"] if tt <= t]
-                    live = (pts[-1] if pts else (0.0, 0.0), g)
+                    pts = [c for tt, c, _ in g["line"] if tt <= t]
+                    played = [sh for tt, sh in g["clock"] if tt <= t]
+                    live = ((pts[-1] if pts else 0.0, played[-1] if played else 0.0), g)
             else:
                 fut.append(g)
         if not fut and not live and s["snap"] is not None and t >= end - timedelta(minutes=10):
@@ -296,24 +301,29 @@ def main():
         a, b = sum(tot[:n_me]), sum(tot[n_me:])
         return float((a > b).mean() + 0.5 * (a == b).mean()), float(a.mean()), float(b.mean())
 
-    def shown(st):
-        fixed, cur, live, _ = st
-        if fixed is not None:
-            return round(fixed, 1)
-        if live:
-            return round(live[0][0], 1)
-        return None if cur is None else round(cur, 1)
-
-    series, last_sig, last = [], None, None
+    # Every five minutes, plus right after every play that moves a starter's score.
+    times = set()
     t = start
     while t <= end:
+        times.add(t)
+        t += STEP
+    for sl in slots:
+        for g in sl["games"]:
+            if g["final"] is None or not g["tip"]:
+                continue
+            times.update(tt + timedelta(seconds=1) for tt, _, _ in g["line"])
+            tt = g["tip"]
+            while tt < g["end"]:        # the clock keeps running between his plays
+                times.add(tt)
+                tt += timedelta(minutes=1)
+    series, last_sig, last = [], None, None
+    for t in sorted(times):
         sts = [state(s, t) for s in slots]
         sig = json.dumps([(a, b, (round(l[0][0], 1), round(l[0][1], 2)) if l else None, len(f)) for a, b, l, f in sts])
         if sig != last_sig:
             last, last_sig = evaluate(sts), sig
-        series.append({"t": t.isoformat(timespec="minutes"), "win": round(last[0], 4), "me": round(last[1], 1),
-                       "opp": round(last[2], 1), "slots": [shown(st) for st in sts]})
-        t += STEP
+        series.append({"t": t.isoformat(timespec="seconds"), "win": round(last[0], 4), "me": round(last[1], 1),
+                       "opp": round(last[2], 1)})
 
     def swing(i, t, t0):
         """Win chance at t, minus the same with slot i held at where it stood at t0."""
