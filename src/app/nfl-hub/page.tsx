@@ -128,6 +128,12 @@ const PRIVATE: Item[] = [
     icon: Repeat,
   },
   {
+    href: "/nfl/value/league-odds/",
+    title: "League odds",
+    blurb: "Playoff and title chances for every H-Town Ballers team.",
+    icon: Trophy,
+  },
+  {
     href: "/nfl/nba/",
     title: "Crabsketball",
     blurb: "Daily lock-in plan for your NBA team, plus the draft board.",
