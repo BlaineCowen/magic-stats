@@ -54,6 +54,8 @@ TZ = ZoneInfo("America/Chicago")
 N = 40000
 GRID = np.arange(-10.0, 120.5, 0.5)
 MIN_WIN_GAIN = 0.005      # a swap has to add half a point of win chance
+LOOK_GAP = 2.5 * 3600     # seconds a game needs to be over before the next tip
+MIN_LOOK_GAIN = 0.5       # expected points a free look has to add
 MAX_SWAPS = 3
 MIN_SWAP_GAIN = 1.0      # expected points a single swap has to add
 MATCHUP_SAMPLES = 5
@@ -110,6 +112,12 @@ def load_shapes(scoring):
 
 
 # ---------- one slot: optimal locks ----------
+
+def tip_ts(g):
+    """Tip time of a game dict as a UTC timestamp, or None."""
+    t = g.get("tip") if g else None
+    return datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp() if t else None
+
 
 class Slot:
     """A starting slot: the player in it, the score it holds now, and his
@@ -401,6 +409,12 @@ def main():
                     if pid in live or not allow(pid):
                         continue
                     new = fresh(pid, s.slot)
+                    # He plays before the new guy does: leave him in for a free look and
+                    # make the swap after his game (it's then a fresh call).
+                    t_old = tip_ts(s.games[0]) if s.games else None
+                    t_new = tip_ts(new.games[0]) if new.games else None
+                    if t_old and t_new and t_old + LOOK_GAP <= t_new:
+                        continue
                     gain = new.ev - s.ev
                     if gain >= MIN_SWAP_GAIN and (best is None or gain > best[0]):
                         best = (gain, i, pid, new)
@@ -438,6 +452,41 @@ def main():
     applied = best_swaps(me, list(me["bench"]), lambda pid: True)
     if applied and win(total(me)) < base["win"] + MIN_WIN_GAIN:
         me["slots"], applied = before, []
+
+    # Free looks: a bench player whose game ends before a starter's next one can take
+    # the slot for that game. Keep his score if it beats what the starter's slot is
+    # worth; otherwise swap the starter back (he brings his old score) before he tips.
+    looks, taken = [], {m["in"]["id"] for m in applied} | {m["out"]["id"] for m in applied if m["out"]}
+    cands = []
+    now_ts = datetime.now(timezone.utc).timestamp()
+    for pid in me["bench"]:
+        if pid in taken or pid in live:
+            continue
+        gs = games_for(pid)
+        tb = tip_ts(gs[0]) if gs else None
+        if not tb or tb <= now_ts:
+            continue
+        p = player(pid)
+        for i, s in enumerate(me["slots"]):
+            if s.locked or getattr(s, "live", False) or not s.player or not set(p["pos"]) & SLOT_ELIGIBLE[s.slot]:
+                continue
+            ts = tip_ts(s.games[0]) if s.games else None
+            if s.games and (not ts or ts < tb + LOOK_GAP):
+                continue
+            v = s.ev
+            gain = gs[0]["p"] * float(np.maximum(np.asarray(gs[0]["xs"]) - v, 0).mean())
+            if gain >= MIN_LOOK_GAIN:
+                cands.append((gain, i, pid, gs[0], v))
+    used_slots = set()
+    for gain, i, pid, g, v in sorted(cands, key=lambda c: -c[0]):
+        if i in used_slots or pid in taken:
+            continue
+        s = me["slots"][i]
+        used_slots.add(i)
+        taken.add(pid)
+        looks.append({"slot": s.slot, "out": s.player, "in": player(pid), "in_game": game_out(g),
+                      "keep_if": float(np.ceil(v * 2) / 2), "back_by": game_out(s.games[0]) if s.games else None,
+                      "gain_pts": round(gain, 1)})
 
     plan_total = total(me)
     plan = {"win": win(plan_total), "mean": float(plan_total.mean()),
@@ -541,11 +590,11 @@ def main():
                 "expected_moves": opp_moves, "mean": float(opp_total.mean()),
                 "p10": float(np.percentile(opp_total, 10)), "p90": float(np.percentile(opp_total, 90))},
         "base": rnd(base), "plan": rnd(plan),
-        "moves": applied, "calls": calls, "pickups": pickup_out,
+        "moves": applied, "looks": looks, "calls": calls, "pickups": pickup_out,
     }
     atomic_write(OUT, json.dumps(out, separators=(",", ":"), ensure_ascii=False))
     print(f"{out['generated']} week {week} {today}: win {base['win']:.1%} -> {plan['win']:.1%}, "
-          f"{len(applied)} moves, {len(calls)} calls, {len(pickup_out)} pickups")
+          f"{len(applied)} moves, {len(looks)} looks, {len(calls)} calls, {len(pickup_out)} pickups")
 
 
 def advice(s, today, call):
