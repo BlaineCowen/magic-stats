@@ -50,6 +50,36 @@ QUIT_HAZARD = [         # (games out of 6th, weekly chance of quitting); elimina
     (3, 0.12), (2, 0.05),
 ]
 QUIT_ELIM = 0.35
+GAVE_UP_GAP = 0.10      # a season this far below the league's lineup rate counts as giving up
+SKILL_SHRINK = 1.5      # pull a manager's lineup rate toward average, in seasons
+LINEUP_LOG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lineup_log.json")
+
+
+def pts_of(st, k):
+    return st.get(k, 0) + st.get(k + "_decimal", 0) / 100
+
+
+def lineup_history(league):
+    """Each manager's points as a share of Sleeper's best possible lineup
+    ("max points"), for every past season of this league."""
+    out, lid = {}, league.get("previous_league_id")
+    while lid and lid != "0":
+        lg = fetch_json(f"https://api.sleeper.app/v1/league/{lid}")
+        names = {u["user_id"]: u["display_name"] for u in fetch_json(f"https://api.sleeper.app/v1/league/{lid}/users")}
+        rows = []
+        for r in fetch_json(f"https://api.sleeper.app/v1/league/{lid}/rosters"):
+            st = r["settings"]
+            if pts_of(st, "ppts") > 0:
+                rows.append((r["owner_id"], st["wins"], pts_of(st, "fpts"), pts_of(st, "ppts")))
+        avg = float(np.mean([f / m for _, _, f, m in rows]))
+        # The average among managers who kept trying, so a newcomer's 1.0 means typical.
+        avg = float(np.mean([f / m for _, _, f, m in rows if f / m >= avg - GAVE_UP_GAP]))
+        for uid, w, f, m in rows:
+            out.setdefault(uid, {"name": names.get(uid, uid), "seasons": {}})["seasons"][lg["season"]] = {
+                "eff": round(f / m, 4), "rel": round(f / m / avg, 4), "wins": w, "pts": round(f), "max": round(m),
+                "gave_up": f / m < avg - GAVE_UP_GAP, "league": round(avg, 4)}
+        lid = lg.get("previous_league_id")
+    return out
 
 
 def games_by_week(sched, cur, today):
@@ -84,6 +114,22 @@ def main():
     idx = {rid: i for i, rid in enumerate(rids)}
     T = len(rids)
     owner = {r["roster_id"]: users.get(r["owner_id"], f"Team {r['roster_id']}") for r in rosters}
+
+    # Lineup skill: past seasons' share of max points vs the league, skipping
+    # seasons the manager gave up, pulled toward average.
+    hist = lineup_history(league)
+    skill, lineups = {}, []
+    for r in rosters:
+        h = hist.get(r["owner_id"], {"seasons": {}})
+        tried = [x["rel"] for x in h["seasons"].values() if not x["gave_up"]]
+        n = len(tried)
+        skill[r["roster_id"]] = 1 + (np.mean(tried) - 1) * n / (n + SKILL_SHRINK) if n else 1.0
+        st = r["settings"]
+        lineups.append({"roster_id": r["roster_id"], "team": owner[r["roster_id"]],
+                        "seasons": dict(sorted(h["seasons"].items())),
+                        "now": {"pts": round(pts_of(st, "fpts")), "max": round(pts_of(st, "ppts")),
+                                "eff": round(pts_of(st, "fpts") / pts_of(st, "ppts"), 4) if pts_of(st, "ppts") else None},
+                        "skill": round(float(skill[r["roster_id"]]), 4)})
     active = {r["roster_id"]: [p for p in (r.get("players") or []) if p not in set(r.get("reserve") or [])]
               for r in rosters}
     sched = api(f"/schedule/nba/regular/{SEASON}")
@@ -166,6 +212,7 @@ def main():
         model = np.zeros(T)
         for w in range(1, played + 1):
             model += [best_lineup(active[r], w, full[w])[0] for r in rids]
+        model *= [skill[r] for r in rids]
         calib = float(pf.sum() / model.sum())
         print("so far actual vs model:", ", ".join(f"{owner[r][:8]} {a:.0f}/{m * calib:.0f}" for r, a, m in zip(rids, pf, model)),
               f"r={np.corrcoef(pf, model)[0, 1]:.2f}", file=sys.stderr)
@@ -193,7 +240,7 @@ def main():
         else:
             for r in rids:
                 mu[idx[r]], var[idx[r]] = best_lineup(active[r], w)
-        mu *= calib
+        mu *= calib * np.array([skill[r] for r in rids])
         # Lock-in spread from the slot sims, topped up to the league's history.
         sd[w] = np.sqrt(np.maximum(var * calib ** 2, (WEEK_SD * mu) ** 2))
         mean[w] = mu
@@ -291,6 +338,24 @@ def main():
                       "decay": {k: v for k, v in a.items() if k != "roster_id"},
                       "no_decay": {k: v for k, v in b.items() if k not in ("roster_id", "quit", "quit_by14", "vs_quit")}})
     teams.sort(key=lambda t: (-t["decay"]["champ"], -t["decay"]["playoffs"]))
+    # Sleeper only keeps season totals of max points, so log them each run to
+    # get week-by-week lineup rates from here on.
+    try:
+        log = json.load(open(LINEUP_LOG))
+    except (OSError, ValueError):
+        log = {}
+    if played:
+        log[str(played)] = {str(r["roster_id"]): [pts_of(r["settings"], "fpts"), pts_of(r["settings"], "ppts")] for r in rosters}
+        atomic_write(LINEUP_LOG, json.dumps(log))
+    for L in lineups:
+        k, prev, wk = str(L["roster_id"]), [0.0, 0.0], {}
+        for n in sorted(log, key=int):
+            f, m = log[n].get(k, prev)
+            if m > prev[1] and int(n) <= played:
+                wk[n] = round((f - prev[0]) / (m - prev[1]), 4)
+            prev = [f, m]
+        L["weeks"] = wk
+
     res = {
         "league": league["name"], "season": SEASON, "week": cur,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -298,6 +363,8 @@ def main():
         "quit": {"from_week": QUIT_FROM, "factor": QUIT_FACTOR, "elim": QUIT_ELIM,
                  "hazard": [{"games_back": g, "p": p} for g, p in QUIT_HAZARD], **qstats},
         "teams": teams,
+        "lineups": sorted(lineups, key=lambda L: -L["skill"]),
+        "gave_up_gap": GAVE_UP_GAP,
     }
     atomic_write(OUT, json.dumps(res, indent=1, allow_nan=False))
     print(f"week {cur}, calib {calib:.3f}, quitters {qstats}", file=sys.stderr)
