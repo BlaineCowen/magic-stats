@@ -3,6 +3,7 @@ import {
   Activity,
   ArrowLeftRight,
   Scale,
+  SlidersHorizontal,
   BarChart3,
   Calculator,
   ChevronRight,
@@ -134,9 +135,15 @@ const PRIVATE: Item[] = [
     icon: Trophy,
   },
   {
+    href: "/nfl/value/superflex/",
+    title: "Superflex study",
+    blurb: "Scoring settings that put starting QBs back on waivers.",
+    icon: SlidersHorizontal,
+  },
+  {
     href: "/nfl/nba/",
     title: "Crabsketball",
-    blurb: "Daily lock-in plan for your NBA team, plus the draft board.",
+    blurb: "Daily lock-in plan, breakouts, week replay and season odds.",
     icon: Volleyball,
   },
 ];
