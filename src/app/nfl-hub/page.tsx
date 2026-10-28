@@ -12,6 +12,7 @@ import {
   MessageSquareText,
   Radio,
   Repeat,
+  Route,
   Trophy,
   Volleyball,
   Waypoints,
@@ -106,6 +107,15 @@ const SEASON: Item[] = [
     title: "Trade calculator",
     blurb: "Grade any trade with values for your league's settings.",
     icon: Scale,
+  },
+];
+
+const RESEARCH: Item[] = [
+  {
+    href: "/nfl/bend/",
+    title: "Bending the edge",
+    blurb: "How much speed rookie edge rushers keep turning the corner, and why the Combine misses it.",
+    icon: Route,
   },
 ];
 
@@ -212,6 +222,34 @@ export default function NflHub() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {SEASON.map((it) => (
+              <a
+                key={it.href}
+                href={it.href}
+                className="group hover:border-turf-700 focus-visible:outline-turf-700 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 transition focus-visible:outline-2"
+              >
+                <it.icon
+                  className="text-turf-700 mt-0.5 size-5 shrink-0"
+                  aria-hidden
+                />
+                <span>
+                  <span className="block font-semibold text-slate-900">
+                    {it.title}
+                  </span>
+                  <span className="block text-sm text-slate-600">
+                    {it.blurb}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section aria-labelledby="research">
+          <h2 id="research" className="font-display mb-4 text-2xl font-bold">
+            Research
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {RESEARCH.map((it) => (
               <a
                 key={it.href}
                 href={it.href}
