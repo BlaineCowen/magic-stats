@@ -382,13 +382,11 @@ def main():
     opp = team_view(opp_rid)
     rostered = {p for r in rosters for p in (r.get("players") or [])}
 
-    def fresh(pid, slot, rostered=True):
-        # A player moved into a slot from the bench brings his latest game this
-        # week with him: Sleeper counts that score until a newer game replaces it.
-        # A free agent only scores from games after he's added, so he brings nothing.
-        g = played.get(pid, []) if rostered else []
-        s = Slot(slot, player(pid), g[-1][2] if g else None, False, games_for(pid))
-        s.history = g
+    def fresh(pid, slot):
+        # A player moved into a slot (from the bench or free agency) brings nothing:
+        # a big game he had on the bench doesn't count, only his games from then on.
+        s = Slot(slot, player(pid), None, False, games_for(pid))
+        s.history = played.get(pid, [])
         return s
 
     def best_swaps(team, pool, allow):
@@ -454,8 +452,9 @@ def main():
         me["slots"], applied = before, []
 
     # Free looks: a bench player whose game ends before a starter's next one can take
-    # the slot for that game. Keep his score if it beats what the starter's slot is
-    # worth; otherwise swap the starter back (he brings his old score) before he tips.
+    # the slot for that game. Keep his score if it beats what the starter is worth
+    # starting fresh; otherwise swap the starter back before he tips. The starter
+    # comes back with nothing, so any unlocked score he holds is given up.
     looks, taken = [], {m["in"]["id"] for m in applied} | {m["out"]["id"] for m in applied if m["out"]}
     cands = []
     now_ts = datetime.now(timezone.utc).timestamp()
@@ -473,8 +472,9 @@ def main():
             ts = tip_ts(s.games[0]) if s.games else None
             if s.games and (not ts or ts < tb + LOOK_GAP):
                 continue
-            v = s.ev
-            gain = gs[0]["p"] * float(np.maximum(np.asarray(gs[0]["xs"]) - v, 0).mean())
+            v = s.value_from(0) if s.current is None else Slot(s.slot, s.player, None, False, s.games).ev
+            gain = (gs[0]["p"] * float(np.maximum(np.asarray(gs[0]["xs"]), v).mean())
+                    + (1 - gs[0]["p"]) * v - s.ev)
             if gain >= MIN_LOOK_GAIN:
                 cands.append((gain, i, pid, gs[0], v))
     used_slots = set()
@@ -485,7 +485,7 @@ def main():
         used_slots.add(i)
         taken.add(pid)
         looks.append({"slot": s.slot, "out": s.player, "in": player(pid), "in_game": game_out(g),
-                      "keep_if": float(np.ceil(v * 2) / 2), "back_by": game_out(s.games[0]) if s.games else None,
+                      "keep_if": float(np.ceil(v * 2) / 2), "out_score": s.current, "back_by": game_out(s.games[0]) if s.games else None,
                       "gain_pts": round(gain, 1)})
 
     plan_total = total(me)
@@ -503,7 +503,7 @@ def main():
         for i, s in enumerate(me["slots"]):
             if s.locked or getattr(s, "live", False) or not set(player(pid)["pos"]) & SLOT_ELIGIBLE[s.slot]:
                 continue
-            new = fresh(pid, s.slot, rostered=False)
+            new = fresh(pid, s.slot)
             gain = new.ev - s.ev
             if best is None or gain > best[0]:
                 best = (gain, i, new)
