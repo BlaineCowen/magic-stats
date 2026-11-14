@@ -421,6 +421,9 @@ def main():
             gain, i, pid, new = best
             old = team["slots"][i]
             moves.append({"slot": old.slot, "out": old.player, "out_score": old.current, "in_score": new.current,
+                          # His games, so the page can offer "locked a game?" on the swap itself: a
+                          # lock Sleeper doesn't show is what makes him look worth swapping out.
+                          "out_history": [{"date": d, "opp": o, "pts": x} for d, o, x in getattr(old, "history", [])],
                           "in": new.player, "gain_pts": round(gain, 1),
                           "in_next": game_out(new.games[0]) if new.games else None})
             team["slots"][i] = new
