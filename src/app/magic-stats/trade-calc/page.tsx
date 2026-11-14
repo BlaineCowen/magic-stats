@@ -22,10 +22,12 @@ export default async function TradeCalcPage() {
         </h1>
         <p className="mt-1.5 max-w-2xl text-base text-slate-600 sm:mt-2 sm:text-lg">
           Set up your league, put in what each team gets, and see who wins the
-          trade. Dynasty leagues can trade draft picks too.
+          trade. Dynasty leagues can trade draft picks too. Load your Sleeper
+          league and click any player&apos;s name for trades that would get him.
         </p>
       </header>
-      <TradeCalc owner={owner} />
+      {/* Blaine's own team in H-Town Ballers, so "Ways to get" works with no setup. */}
+      <TradeCalc owner={owner} myTeam={owner ? { league: "1389362330239795200", roster: 1 } : undefined} />
       <div className="mt-8 max-w-3xl space-y-2 text-sm text-slate-500">
         <p>
           Values come from FantasyCalc, which builds them from real trades in

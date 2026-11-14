@@ -6,6 +6,10 @@ import {
   balancers,
   DEFAULT_SETTINGS,
   gradeTrade,
+  SAMPLE_KINDS,
+  sampleTrades,
+  type SampleKind,
+  type SampleTrade,
   type Settings,
   type ValuedPlayer,
 } from "@/lib/nfl/trade-grade";
@@ -48,7 +52,9 @@ function Segmented<T extends string | number | boolean>({ label, value, options,
   );
 }
 
-function SettingsPanel({ s, set, etr }: { s: Settings; set: (s: Settings) => void; etr: boolean }) {
+function SettingsPanel({ s, set, etr, onLeague }: {
+  s: Settings; set: (s: Settings) => void; etr: boolean; onLeague: (id: string) => void;
+}) {
   const [league, setLeague] = useState("");
   const [note, setNote] = useState<string | null>(null);
 
@@ -70,6 +76,7 @@ function SettingsPanel({ s, set, etr }: { s: Settings; set: (s: Settings) => voi
         tep: nearest(Number(sc.bonus_rec_te ?? 0), [0, 0.5, 1]),
       });
       setNote(`Using the settings from ${l.name}.`);
+      onLeague(id);
     } catch {
       setNote("Couldn't find that league on Sleeper. Check the ID and try again.");
     }
@@ -169,9 +176,167 @@ function PlayerPicker({ pool, taken, onAdd, label }: {
   );
 }
 
-function Side({ title, players, pool, taken, onAdd, onRemove, grade, total }: {
+type Roster = { rosterId: number; label: string; players: string[] };
+type League = { id: string; name: string; rosters: Roster[]; slots: string[] };
+const TEAM_STORE = "trade-calc-team";
+
+/** A league's rosters from Sleeper, labeled by team name (else the manager's name). */
+async function loadLeague(id: string): Promise<League> {
+  const get = (p: string) => fetch(`https://api.sleeper.app/v1/league/${id}${p}`).then((r) => {
+    if (!r.ok) throw new Error(String(r.status));
+    return r.json();
+  });
+  const [l, rosters, users] = await Promise.all([get(""), get("/rosters"), get("/users")]) as [
+    { name?: string; roster_positions?: string[] },
+    { roster_id: number; owner_id: string | null; players: string[] | null }[],
+    { user_id: string; display_name?: string; metadata?: { team_name?: string } }[],
+  ];
+  const who = new Map(users.map((u) => [u.user_id, u.metadata?.team_name || u.display_name || "Unknown"]));
+  return {
+    id,
+    name: l.name ?? "Your league",
+    slots: l.roster_positions ?? [],
+    rosters: rosters
+      .map((r) => ({ rosterId: r.roster_id, label: (r.owner_id && who.get(r.owner_id)) || `Team ${r.roster_id}`, players: r.players ?? [] }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
+const KIND_TITLE: Record<SampleKind, string> = {
+  "1-for-1": "One for one",
+  "2-for-1": "Two of yours for him",
+  "1-for-2": "One of yours for him plus a smaller piece",
+  "2-for-2": "Two of yours for him plus one of theirs",
+  "throw-in": "Add him to a bigger deal",
+};
+
+const NONE: Record<SampleKind, string> = {
+  "1-for-1": "None of your players is close enough to his value on its own.",
+  "2-for-1": "No pair of your lesser players adds up to a fair deal once they free a roster spot for you.",
+  "1-for-2": "They have no smaller piece that makes it even.",
+  "2-for-2": "No two of yours match him plus one of theirs.",
+  "throw-in": "No bigger deal with him in it comes out even.",
+};
+
+const SLOT_NAME: Record<string, string> = { SUPER_FLEX: "superflex", FLEX: "flex", WRRB_FLEX: "flex", REC_FLEX: "flex" };
+/** "Kittle starts at TE for them. Pickens sits." */
+function whereText(players: ValuedPlayer[], slots: Record<string, string | null>, who: string) {
+  const last = (p: ValuedPlayer) => p.name.split(" ").filter((w) => !/^(Jr\.?|Sr\.?|II|III|IV)$/.test(w)).pop();
+  return players.map((p) => {
+    const slot = slots[p.id];
+    return slot ? `${last(p)} starts at ${SLOT_NAME[slot] ?? slot} ${who}.` : `${last(p)} is depth ${who}.`;
+  }).join(" ");
+}
+
+function Names({ players }: { players: ValuedPlayer[] }) {
+  return (
+    <span>
+      {players.map((p, i) => (
+        <span key={p.id}>
+          {i > 0 && " + "}
+          <span className="font-medium text-slate-900">{p.name}</span>{" "}
+          <span className="text-xs text-slate-500">{p.pos} · {fmt(p.value)}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function TradeFor({ target, pool, league, myRoster, setMyRoster, s, onPick, onLoad }: {
+  target: ValuedPlayer | null; pool: ValuedPlayer[]; league: League | null; myRoster: number | null;
+  setMyRoster: (id: number) => void; s: Settings; onPick: (p: ValuedPlayer) => void;
+  onLoad: (t: SampleTrade) => void;
+}) {
+  const byId = useMemo(() => new Map(pool.map((p) => [p.id, p])), [pool]);
+  const valued = (ids: string[]) => ids.map((id) => byId.get(id)).filter((p): p is ValuedPlayer => !!p);
+  const mine = league?.rosters.find((r) => r.rosterId === myRoster) ?? null;
+  const owner = target ? league?.rosters.find((r) => r.players.includes(target.id)) ?? null : null;
+  const ideas = useMemo(
+    () => (target && mine && owner && owner !== mine ? sampleTrades(target, valued(mine.players), valued(owner.players), pool, s, 3, league?.slots.length ? league.slots : undefined) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [target, mine, owner, pool, s, league],
+  );
+
+  let message: string | null = null;
+  if (!league) message = "Load your Sleeper league above (“Use my league”) to see trades built from real rosters.";
+  else if (!mine) message = "Pick your team to see trades built from your roster.";
+  else if (!target) message = "Click a player’s name in the trade, or search for one, to see ways to get him.";
+  else if (!owner) message = `Nobody in ${league.name} rosters ${target.name}. Pick him up from waivers.`;
+  else if (owner === mine) message = `${target.name} is already on your team.`;
+  else if (!ideas.length) message = `Nothing on your roster lines up with ${target.name}’s value. Try adding a third player in the calculator.`;
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">
+          {target ? <>Ways to get {target.name}</> : "Trade for a player"}
+        </h2>
+        {league && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            Your team
+            <select
+              value={myRoster ?? ""}
+              onChange={(e) => setMyRoster(Number(e.target.value))}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm"
+            >
+              <option value="" disabled>Pick your team</option>
+              {league.rosters.map((r) => <option key={r.rosterId} value={r.rosterId}>{r.label}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      <div className="mt-3 max-w-md">
+        <PlayerPicker pool={pool} taken={new Set()} onAdd={onPick} label="Find trades for a player" />
+      </div>
+      {target && owner && owner !== mine && (
+        <p className="mt-3 text-sm text-slate-600">
+          {target.name} ({target.pos} · {fmt(target.value)}) is on <span className="font-medium text-slate-800">{owner.label}</span>.
+          Each idea is close enough that they shouldn&apos;t lose on value, and makes their starting lineup better. Tap one to grade it above.
+        </p>
+      )}
+      {message && <p className="mt-3 text-slate-600">{message}</p>}
+      {ideas.length > 0 && SAMPLE_KINDS.map((kind) => {
+        const list = ideas.filter((t) => t.kind === kind);
+        return (
+          <div key={kind} className="mt-4">
+            <h3 className="text-sm font-semibold tracking-wide text-slate-500 uppercase">{KIND_TITLE[kind]}</h3>
+            {!list.length && <p className="mt-1 text-sm text-slate-500">{NONE[kind]}</p>}
+            <ul className="mt-2 space-y-2">
+              {list.map((t) => (
+                <li key={t.give.map((p) => p.id).join() + t.get.map((p) => p.id).join()}>
+                  <button
+                    type="button"
+                    onClick={() => onLoad(t)}
+                    className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-left hover:bg-slate-50"
+                  >
+                    <span className="space-y-0.5">
+                      <span className="block text-sm"><span className="text-slate-500">You give </span><Names players={t.give} /></span>
+                      <span className="block text-sm"><span className="text-slate-500">You get </span><Names players={t.get} /></span>
+                      {t.lineup && (
+                        <span className="block text-xs text-slate-500">
+                          {whereText(t.give, t.lineup.theirSlots, "for them")} {whereText(t.get, t.lineup.yourSlots, "for you")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm text-slate-600 tabular-nums">
+                      {t.result.winner === null ? "Fair" : t.edge > 0 ? `You win ${Math.round(t.edge * 100)}%` : `You pay ${Math.round(-t.edge * 100)}% more`}
+                      <span className="ml-2 font-display text-lg font-bold text-slate-900">{t.result.a.grade}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function Side({ title, players, pool, taken, onAdd, onRemove, onPick, grade, total }: {
   title: string; players: ValuedPlayer[]; pool: ValuedPlayer[]; taken: Set<string>;
-  onAdd: (p: ValuedPlayer) => void; onRemove: (id: string) => void; grade?: string; total: number;
+  onAdd: (p: ValuedPlayer) => void; onRemove: (id: string) => void; onPick: (p: ValuedPlayer) => void;
+  grade?: string; total: number;
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
@@ -186,7 +351,10 @@ function Side({ title, players, pool, taken, onAdd, onRemove, grade, total }: {
         {players.map((p) => (
           <li key={p.id} className="flex items-center justify-between gap-3 py-2">
             <span>
-              <span className="font-medium text-slate-900">{p.name}</span>{" "}
+              <button type="button" onClick={() => onPick(p)} title={`Ways to get ${p.name}`}
+                className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-900">
+                {p.name}
+              </button>{" "}
               <span className="text-sm text-slate-500">
                 {p.pos}{p.team ? ` · ${p.team}` : ""}{p.age ? ` · ${p.age.toFixed(0)}` : ""}
               </span>
@@ -207,8 +375,16 @@ function Side({ title, players, pool, taken, onAdd, onRemove, grade, total }: {
   );
 }
 
-export function TradeCalc({ owner = false }: { owner?: boolean }) {
+export function TradeCalc({ owner = false, myTeam }: {
+  owner?: boolean;
+  /** Blaine's league and roster, so his trade ideas work without setup. */
+  myTeam?: { league: string; roster: number };
+}) {
   const [s, setS] = useState<Settings>(DEFAULT_SETTINGS);
+  const [league, setLeague] = useState<League | null>(null);
+  const [myRoster, setMyRosterState] = useState<number | null>(null);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const tradeFor = useRef<HTMLDivElement>(null);
   // Blaine only: grade with his ETR values instead of the market. Never put in shared links.
   const [source, setSource] = useState<"market" | "etr">("market");
   const [pool, setPool] = useState<ValuedPlayer[]>([]);
@@ -233,6 +409,40 @@ export function TradeCalc({ owner = false }: { owner?: boolean }) {
     setS(next);
     try { localStorage.setItem(STORE, JSON.stringify(next)); } catch { /* ignore */ }
   }, []);
+
+  // This browser's league and team, so trade ideas come back on the next visit.
+  const saveTeam = (leagueId: string, roster: number | null) => {
+    try { localStorage.setItem(TEAM_STORE, JSON.stringify({ league: leagueId, roster })); } catch { /* ignore */ }
+  };
+  const connectLeague = useCallback(async (id: string, roster: number | null) => {
+    try {
+      const l = await loadLeague(id);
+      setLeague(l);
+      const keep = roster != null && l.rosters.some((r) => r.rosterId === roster) ? roster : null;
+      setMyRosterState(keep);
+      saveTeam(id, keep);
+    } catch { /* the settings note already says when a league can't be found */ }
+  }, []);
+  useEffect(() => {
+    let saved: { league?: string; roster?: number | null } | null = null;
+    try { saved = JSON.parse(localStorage.getItem(TEAM_STORE) ?? "null"); } catch { /* private window */ }
+    const start = saved?.league ? { league: saved.league, roster: saved.roster ?? null } : myTeam ?? null;
+    if (start) void connectLeague(start.league, start.roster);
+  }, [myTeam, connectLeague]);
+  const setMyRoster = (roster: number) => {
+    setMyRosterState(roster);
+    if (league) saveTeam(league.id, roster);
+  };
+  const pick = (p: ValuedPlayer) => {
+    setTargetId(p.id);
+    tradeFor.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  // Team A is you: A gets the target side, B gets what you give.
+  const loadIdea = (t: SampleTrade) => {
+    setA(t.get.map((p) => p.id));
+    setB(t.give.map((p) => p.id));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (!ready.current) return;
@@ -287,14 +497,14 @@ export function TradeCalc({ owner = false }: { owner?: boolean }) {
             options={[["market", "Market"], ["etr", "My ETR values"]]} onChange={setSource} />
         </div>
       )}
-      <SettingsPanel s={s} set={set} etr={source === "etr"} />
+      <SettingsPanel s={s} set={set} etr={source === "etr"} onLeague={(id) => void connectLeague(id, league?.id === id ? myRoster : null)} />
       {error && <p className="rounded-lg bg-amber-50 px-4 py-3 text-amber-900">{error}</p>}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Side title="Team A gets" players={a} pool={pool} taken={taken} total={result?.a.raw ?? a.reduce((t, p) => t + p.value, 0)}
-          onAdd={(p) => setA((x) => [...x, p.id])} onRemove={(id) => setA((x) => x.filter((i) => i !== id))} grade={result?.a.grade} />
+          onAdd={(p) => setA((x) => [...x, p.id])} onRemove={(id) => setA((x) => x.filter((i) => i !== id))} onPick={pick} grade={result?.a.grade} />
         <Side title="Team B gets" players={b} pool={pool} taken={taken} total={result?.b.raw ?? b.reduce((t, p) => t + p.value, 0)}
-          onAdd={(p) => setB((x) => [...x, p.id])} onRemove={(id) => setB((x) => x.filter((i) => i !== id))} grade={result?.b.grade} />
+          onAdd={(p) => setB((x) => [...x, p.id])} onRemove={(id) => setB((x) => x.filter((i) => i !== id))} onPick={pick} grade={result?.b.grade} />
       </div>
 
       {result ? (
@@ -348,6 +558,11 @@ export function TradeCalc({ owner = false }: { owner?: boolean }) {
       ) : (
         <p className="text-slate-600">Add at least one player or pick to each side to see the grade.</p>
       )}
+
+      <div ref={tradeFor} className="scroll-mt-4">
+        <TradeFor target={targetId ? byId.get(targetId) ?? null : null} pool={pool} league={league} myRoster={myRoster}
+          setMyRoster={setMyRoster} s={s} onPick={pick} onLoad={loadIdea} />
+      </div>
     </div>
   );
 }
