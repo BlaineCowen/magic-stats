@@ -244,7 +244,7 @@ function Names({ players }: { players: ValuedPlayer[] }) {
 
 function TradeFor({ target, pool, crowd, league, myRoster, setMyRoster, s, onPick, onLoad }: {
   target: ValuedPlayer | null; pool: ValuedPlayer[];
-  /** KTC crowd values: how the other team likely rates players. Given, ideas are checked against them. */
+  /** Crowd values (KTC + FantasyCalc): how the other team likely rates players. Given, ideas are checked against them. */
   crowd: ValuedPlayer[] | null;
   league: League | null; myRoster: number | null;
   setMyRoster: (id: number) => void; s: Settings; onPick: (p: ValuedPlayer) => void;
@@ -295,7 +295,7 @@ function TradeFor({ target, pool, crowd, league, myRoster, setMyRoster, s, onPic
         <p className="mt-3 text-sm text-slate-600">
           {target.name} ({target.pos} · {fmt(target.value)}) is on <span className="font-medium text-slate-800">{owner.label}</span>.
           {crowd
-            ? <>Each idea looks fair to them by KeepTradeCut&apos;s crowd values and makes their starting lineup better by those values. The ones you win most by your ETR values come first. Tap one to grade it above.</>
+            ? <>Each idea looks fair to them by crowd values (KeepTradeCut and FantasyCalc averaged) and makes their starting lineup better by those values. The ones you win most by your ETR values come first. Tap one to grade it above.</>
             : <>Each idea is close enough that they shouldn&apos;t lose on value, and makes their starting lineup better. Tap one to grade it above.</>}
         </p>
       )}
@@ -328,7 +328,7 @@ function TradeFor({ target, pool, crowd, league, myRoster, setMyRoster, s, onPic
                       <span className="ml-2 font-display text-lg font-bold text-slate-900">{t.result.a.grade}</span>
                       {t.market && (
                         <span className="block text-right text-xs text-slate-500">
-                          KTC: {t.market.result.winner === null ? "fair" : t.market.edge > 0 ? `they lose ${Math.round(t.market.edge * 100)}%` : `they win ${Math.round(-t.market.edge * 100)}%`}
+                          Crowd: {t.market.result.winner === null ? "fair" : t.market.edge > 0 ? `they lose ${Math.round(t.market.edge * 100)}%` : `they win ${Math.round(-t.market.edge * 100)}%`}
                         </span>
                       )}
                     </span>
@@ -398,7 +398,7 @@ export function TradeCalc({ owner = false, myTeam }: {
   // Blaine only: grade with his ETR values instead of the market. Never put in shared links.
   const [source, setSource] = useState<"market" | "ktc" | "etr">("market");
   const [pool, setPool] = useState<ValuedPlayer[]>([]);
-  // With ETR values: KTC's, to check trade ideas against how league mates likely rate players.
+  // With ETR values: KTC and FantasyCalc averaged, to check ideas against how league mates likely rate players.
   const [crowd, setCrowd] = useState<ValuedPlayer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aIds, setA] = useState<string[]>([]);
@@ -470,7 +470,7 @@ export function TradeCalc({ owner = false, myTeam }: {
       .catch(() => live && setError("Couldn't load player values. Check your connection and try again."));
     setCrowd(null);
     if (source === "etr")
-      fetch(`/api/trade-values?${new URLSearchParams({ values: "ktc", ...settingsQ })}`)
+      fetch(`/api/trade-values?${new URLSearchParams({ values: "crowd", ...settingsQ })}`)
         .then((r) => r.json())
         .then((d) => { if (live && !d.error) setCrowd(d.players); })
         .catch(() => { /* ideas fall back to your values alone */ });
@@ -514,7 +514,7 @@ export function TradeCalc({ owner = false, myTeam }: {
         <div className="flex flex-wrap items-center gap-3">
           <Segmented label="Values (only you see this)" value={source}
             options={[["market", "Market"], ["ktc", "KeepTradeCut"], ["etr", "My ETR values"]]} onChange={setSource} />
-          {source === "ktc" && <p className="text-sm text-slate-600">Crowd votes from KeepTradeCut: roughly how a typical league mate rates players.</p>}
+          {source === "ktc" && <p className="text-sm text-slate-600">KeepTradeCut&apos;s crowd order, spaced like FantasyCalc&apos;s real-trade values so the grades work.</p>}
         </div>
       )}
       <SettingsPanel s={s} set={set} etr={source === "etr"} onLeague={(id) => void connectLeague(id, league?.id === id ? myRoster : null)} />

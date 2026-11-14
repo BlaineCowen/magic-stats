@@ -39,3 +39,12 @@ test("parses the player list out of the page", () => {
   assert.equal(parseKtc(html)[0]!.playerName, "A B");
   assert.throws(() => parseKtc("<html></html>"));
 });
+
+test("KTC goes on FantasyCalc's scale by rank, and the crowd averages the two", async () => {
+  const { onScale, blend } = await import("./trade-values");
+  const P = (id: string, value: number) => ({ id, name: id, pos: "WR", team: null, age: null, value });
+  const k = onScale([P("a", 5000), P("b", 9000), P("c", 4900)], [10000, 3000]);
+  assert.deepEqual(k.map((p) => [p.id, p.value]), [["b", 10000], ["a", 3000], ["c", 3000]]);
+  const c = blend([P("x", 100), P("y", 50)], [P("x", 300), P("z", 80)]);
+  assert.deepEqual(c.map((p) => [p.id, p.value]), [["x", 200], ["z", 40], ["y", 25]]);
+});

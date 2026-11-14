@@ -161,6 +161,42 @@ async function sleeperPlayers(): Promise<SleeperPlayer[]> {
   }
 }
 
+/**
+ * Puts players on another source's scale by rank: the nth best gets `scale`'s nth best value.
+ * KTC's numbers are nearly flat (its 168th player is still worth a third of its first), which
+ * breaks the star curve and the open roster spot credit, both tuned to FantasyCalc's curve.
+ * So KTC keeps its order, and FantasyCalc, built from real trades, sets how far apart they are.
+ */
+export function onScale(players: ValuedPlayer[], scale: number[]): ValuedPlayer[] {
+  const sorted = [...scale].sort((a, b) => b - a);
+  const floor = sorted.at(-1) ?? 1;
+  return [...players].sort((a, b) => b.value - a.value).map((p, i) => ({ ...p, value: Math.max(1, sorted[i] ?? floor) }));
+}
+
+/** The average of two value sets on the same scale. A player one leaves out counts 0 there. */
+export function blend(a: ValuedPlayer[], b: ValuedPlayer[]): ValuedPlayer[] {
+  const byId = new Map<string, { p: ValuedPlayer; sum: number }>();
+  for (const p of [...a, ...b]) {
+    const hit = byId.get(p.id);
+    if (hit) hit.sum += p.value;
+    else byId.set(p.id, { p, sum: p.value });
+  }
+  return [...byId.values()]
+    .map(({ p, sum }) => ({ ...p, value: Math.round(sum / 2) }))
+    .filter((p) => p.value > 0)
+    .sort((x, y) => y.value - x.value);
+}
+
+/**
+ * The crowd: KTC and FantasyCalc averaged, for checking whether league mates would accept a
+ * trade. KTC alone is thin in redraft (a few hundred votes a player) and light on the superflex
+ * QB premium; FantasyCalc alone is real trades but not all of them are leagues like this one.
+ */
+export async function crowdValues(s: Settings): Promise<{ players: ValuedPlayer[]; updated: string }> {
+  const [k, fc] = await Promise.all([ktcValues(s), marketValues(s)]);
+  return { players: blend(k.players, fc), updated: k.updated };
+}
+
 export async function ktcValues(s: Settings): Promise<{ players: ValuedPlayer[]; updated: string }> {
   const key = s.dynasty ? "dynasty" : "redraft";
   const hit = ktcCache.get(key);
@@ -182,5 +218,7 @@ export async function ktcValues(s: Settings): Promise<{ players: ValuedPlayer[];
     }
   }
   const at = ktcCache.get(key)?.at ?? Date.now();
-  return { players: withTePremium(matchKtc(rows, await sleeperPlayers(), s.qbs), s.tep), updated: new Date(at).toISOString() };
+  const [known, fc] = await Promise.all([sleeperPlayers(), marketValues({ ...s, tep: 0 })]);
+  const players = onScale(matchKtc(rows, known, s.qbs), fc.map((p) => p.value));
+  return { players: withTePremium(players, s.tep), updated: new Date(at).toISOString() };
 }
