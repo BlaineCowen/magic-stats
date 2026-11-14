@@ -71,3 +71,116 @@ export async function etrValues(): Promise<{ players: ValuedPlayer[]; updated: s
     .sort((a, b) => b.value - a.value);
   return { players, updated: file.etrFileDate ?? file.generated ?? null };
 }
+
+/**
+ * KeepTradeCut crowd values: fans' keep/trade/cut votes, so roughly how a typical league mate
+ * rates each player. Read from the rankings page (redraft or dynasty), superflex or 1-QB to match
+ * the settings. KTC has no Sleeper IDs, so players are matched to Sleeper's player list by name,
+ * position and team. Owner only, like the ETR values.
+ */
+type KtcRow = {
+  playerName: string; playerID: number; position: string; team: string | null; age: number | null;
+  oneQBValues?: { value?: number }; superflexValues?: { value?: number };
+};
+const ktcCache = new Map<string, { at: number; rows: KtcRow[] }>();
+const KTC_TTL = 6 * 3600_000;
+
+export const nameKey = (n: string) =>
+  n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[.'’]/g, "").replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/[^a-z]+/g, " ").trim();
+
+// KTC's positions and team codes, in Sleeper's terms.
+const KTC_POS: Record<string, string> = { RDP: "PICK", PK: "K", DST: "DEF" };
+const KTC_TEAM: Record<string, string> = { GBP: "GB", KCC: "KC", SFO: "SF", NEP: "NE", NOS: "NO", TBB: "TB", LVR: "LV", JAC: "JAX", WSH: "WAS" };
+
+export function parseKtc(html: string): KtcRow[] {
+  const m = /<script[^>]*id="ktc-players"[^>]*>([\s\S]*?)<\/script>/.exec(html);
+  if (!m) throw new Error("KTC page changed: no player list");
+  return JSON.parse(m[1]!) as KtcRow[];
+}
+
+/** `pos` is every fantasy position he's listed at (Travis Hunter: DB and WR). */
+export type SleeperPlayer = { id: string; name: string; pos: string[]; team: string | null; age: number | null };
+
+/**
+ * Gives KTC rows Sleeper IDs: same name and position (the same team when the name is shared),
+ * else the same last name, position and team, which catches nicknames like Chig / Chigoziem.
+ */
+export function matchKtc(rows: KtcRow[], known: SleeperPlayer[], qbs: 1 | 2): ValuedPlayer[] {
+  const byNamePos = new Map<string, SleeperPlayer[]>(), byLastPosTeam = new Map<string, SleeperPlayer[]>();
+  const add = (m: Map<string, SleeperPlayer[]>, k: string, p: SleeperPlayer) => m.set(k, [...(m.get(k) ?? []), p]);
+  const last = (n: string) => nameKey(n).split(" ").pop() ?? "";
+  for (const p of known)
+    for (const pos of p.pos) {
+      add(byNamePos, `${nameKey(p.name)}|${pos}`, p);
+      if (p.team) add(byLastPosTeam, `${last(p.name)}|${pos}|${p.team}`, p);
+    }
+  const seen = new Set<string>();
+  const out: ValuedPlayer[] = [];
+  for (const r of rows) {
+    const value = (qbs === 2 ? r.superflexValues?.value : r.oneQBValues?.value) ?? 0;
+    if (value <= 0) continue;
+    const pos = KTC_POS[r.position] ?? r.position;
+    const team = r.team ? KTC_TEAM[r.team] ?? r.team : null;
+    // Defenses: KTC says "Kansas City Chiefs DST", Sleeper's ID is the team code.
+    const cands = pos === "DEF" ? known.filter((p) => p.pos.includes("DEF") && p.id === team)
+      : byNamePos.get(`${nameKey(r.playerName)}|${pos}`) ?? [];
+    const loose = byLastPosTeam.get(`${last(r.playerName)}|${pos}|${team}`) ?? [];
+    const hit = (cands.length === 1 ? cands[0] : cands.find((p) => p.team === team)) ?? (loose.length === 1 ? loose[0] : undefined);
+    const id = hit && !seen.has(hit.id) ? hit.id : `ktc${r.playerID}`;
+    seen.add(id);
+    out.push({ id, name: hit?.name ?? r.playerName, pos, team: team ?? hit?.team ?? null, age: r.age ?? hit?.age ?? null, value });
+  }
+  return out.sort((a, b) => b.value - a.value);
+}
+
+// Sleeper asks for its full player list at most once a day.
+let sleeperCache: { at: number; players: SleeperPlayer[] } | null = null;
+async function sleeperPlayers(): Promise<SleeperPlayer[]> {
+  if (sleeperCache && Date.now() - sleeperCache.at < 24 * 3600_000) return sleeperCache.players;
+  try {
+    const res = await fetch("https://api.sleeper.app/v1/players/nfl", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`Sleeper ${res.status}`);
+    const all = (await res.json()) as Record<string, {
+      full_name?: string; first_name?: string; last_name?: string; position?: string; fantasy_positions?: string[] | null;
+      team?: string | null; age?: number | null;
+    }>;
+    const keep = new Set(["QB", "RB", "WR", "TE", "K", "DEF"]);
+    const players = Object.entries(all)
+      .map(([id, p]) => [id, p, [...new Set([p.position ?? "", ...(p.fantasy_positions ?? [])])].filter((x) => keep.has(x))] as const)
+      .filter(([, , pos]) => pos.length)
+      .map(([id, p, pos]) => ({
+        id, pos, team: p.team ?? null, age: p.age ?? null,
+        name: p.full_name ?? `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(),
+      }));
+    sleeperCache = { at: Date.now(), players };
+    return players;
+  } catch (e) {
+    if (sleeperCache) return sleeperCache.players;
+    throw e;
+  }
+}
+
+export async function ktcValues(s: Settings): Promise<{ players: ValuedPlayer[]; updated: string }> {
+  const key = s.dynasty ? "dynasty" : "redraft";
+  const hit = ktcCache.get(key);
+  let rows = hit && Date.now() - hit.at < KTC_TTL ? hit.rows : null;
+  if (!rows) {
+    const url = `https://keeptradecut.com/${s.dynasty ? "dynasty-rankings" : "fantasy-rankings"}`;
+    try {
+      const res = await fetch(url, {
+        cache: "no-store", signal: AbortSignal.timeout(15_000),
+        headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" },
+      });
+      if (!res.ok) throw new Error(`KTC ${res.status}`);
+      rows = parseKtc(await res.text());
+      if (rows.length < 100) throw new Error(`KTC returned only ${rows.length} players`);
+      ktcCache.set(key, { at: Date.now(), rows });
+    } catch (e) {
+      if (hit) rows = hit.rows; // stale beats nothing
+      else throw e;
+    }
+  }
+  const at = ktcCache.get(key)?.at ?? Date.now();
+  return { players: withTePremium(matchKtc(rows, await sleeperPlayers(), s.qbs), s.tep), updated: new Date(at).toISOString() };
+}

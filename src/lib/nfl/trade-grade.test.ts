@@ -103,3 +103,25 @@ test("lineup check: no tight ends for a team that starts the league's best one",
   assert.ok(!checked.some(twoTes), "the lineup check drops them");
   for (const t of checked) assert.ok(t.lineup && t.lineup.theirGain > 0);
 });
+
+test("crowd check: ideas look fair by their values, best for you by yours come first", () => {
+  // You value t0 well above what the crowd does; the crowd loves m1.
+  const yours = [P("m1", 3000), P("m2", 2800), P("m3", 1000)];
+  const target = P("t0", 6000);
+  const theirs = [target, P("t1", 500)];
+  const myPool = [...pool, ...yours, target].sort((a, b) => b.value - a.value);
+  const crowd = [P("t0", 3200), P("m1", 3400), P("m2", 1500), P("m3", 900), P("t1", 500), ...pool.slice(60)]
+    .sort((a, b) => b.value - a.value);
+  const ideas = sampleTrades(target, yours, theirs, myPool, DEFAULT_SETTINGS, 3, undefined, crowd);
+  assert.ok(ideas.length > 0);
+  for (const t of ideas) {
+    assert.ok(t.market, "graded by the crowd too");
+    assert.ok(t.market.edge <= 0.05, "the other team doesn't lose by its own values");
+    assert.ok(t.edge >= -0.05, "you don't lose by yours");
+  }
+  const ones = ideas.filter((t) => t.kind === "1-for-1");
+  assert.deepEqual(ones.map((t) => t.give[0]!.id), ["m1"]);
+  // Sorted by your edge, biggest first.
+  for (let i = 1; i < ideas.length; i++)
+    if (ideas[i]!.kind === ideas[i - 1]!.kind) assert.ok(ideas[i - 1]!.edge >= ideas[i]!.edge);
+});

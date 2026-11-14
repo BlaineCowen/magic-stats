@@ -140,6 +140,8 @@ export type SampleTrade = {
   result: TradeResult; // side A = you
   /** Your adjusted value minus theirs, as a share of the bigger side: below 0 = you pay more. */
   edge: number;
+  /** With `market` values: the same trade graded the way the other team likely sees it. */
+  market?: { result: TradeResult; edge: number };
   /** With the league's lineup slots: how each starting lineup changes, and where incoming players go. */
   lineup?: {
     yourGain: number;
@@ -199,7 +201,17 @@ export function sampleTrades(
   target: ValuedPlayer, mine: ValuedPlayer[], theirs: ValuedPlayer[], pool: ValuedPlayer[], s: Settings, perKind = 3,
   /** The league's lineup slots (Sleeper roster_positions). Given, a trade has to make their lineup better. */
   slots?: string[],
+  /**
+   * How the other team values players (e.g. KTC crowd values), best first. Given, an idea has to
+   * look fair to them by these values, their lineup is judged by them, you mustn't lose by your
+   * own `pool` values, and the ideas you win most by (your values) come first.
+   */
+  market?: ValuedPlayer[],
 ): SampleTrade[] {
+  const mById = market ? new Map(market.map((p) => [p.id, p])) : null;
+  // A player the market doesn't list is waiver fodder to them.
+  const asMarket = (ps: ValuedPlayer[]) => (mById ? ps.map((p) => mById.get(p.id) ?? { ...p, value: 0 }) : ps);
+  const edgeOf = (r: TradeResult) => (r.a.adjusted - r.b.adjusted) / (Math.max(r.a.adjusted, r.b.adjusted) || 1);
   const yours = mine.filter((p) => p.id !== target.id && p.value > 0);
   const others = theirs.filter((p) => p.id !== target.id && p.value > 0);
   const candidates: Omit<SampleTrade, "result" | "edge">[] = [];
@@ -217,19 +229,24 @@ export function sampleTrades(
       for (const x of others) candidates.push({ kind: "2-for-2", give: [yours[i]!, yours[j]!], get: [target, x] });
 
   const youBefore = slots ? bestLineup(mine, slots) : null;
-  const themBefore = slots ? bestLineup(theirs, slots) : null;
+  const themBefore = slots ? bestLineup(asMarket(theirs), slots) : null;
   const scored: SampleTrade[] = [];
   for (const c of candidates) {
     const result = gradeTrade(c.get, c.give, pool, s);
     if (!result) continue;
-    const big = Math.max(result.a.adjusted, result.b.adjusted) || 1;
-    const edge = (result.a.adjusted - result.b.adjusted) / big;
-    if (edge > FAIR || edge < -OVERPAY) continue;
+    const edge = edgeOf(result);
+    let marketView: SampleTrade["market"];
+    if (market) {
+      const r = gradeTrade(asMarket(c.get), asMarket(c.give), market, s);
+      if (!r) continue;
+      marketView = { result: r, edge: edgeOf(r) };
+      if (marketView.edge > FAIR || marketView.edge < -OVERPAY || edge < -FAIR) continue;
+    } else if (edge > FAIR || edge < -OVERPAY) continue;
     let lineup: SampleTrade["lineup"];
     if (slots) {
       const out = new Set(c.give.map((p) => p.id)), inn = new Set(c.get.map((p) => p.id));
       const youAfter = bestLineup([...mine.filter((p) => !out.has(p.id)), ...c.get], slots);
-      const themAfter = bestLineup([...theirs.filter((p) => !inn.has(p.id)), ...c.give], slots);
+      const themAfter = bestLineup(asMarket([...theirs.filter((p) => !inn.has(p.id)), ...c.give]), slots);
       const theirGain = themAfter.strength - themBefore!.strength;
       if (theirGain <= 0) continue;
       const where = (ids: ValuedPlayer[], l: { slotOf: Map<string, string> }) =>
@@ -239,9 +256,9 @@ export function sampleTrades(
         yourSlots: where(c.get, youAfter), theirSlots: where(c.give, themAfter),
       };
     }
-    scored.push({ ...c, result, edge, lineup });
+    scored.push({ ...c, result, edge, lineup, market: marketView });
   }
-  scored.sort((x, y) => Math.abs(x.edge) - Math.abs(y.edge));
+  scored.sort(market ? (x, y) => y.edge - x.edge : (x, y) => Math.abs(x.edge) - Math.abs(y.edge));
 
   const out: SampleTrade[] = [];
   for (const kind of SAMPLE_KINDS) {

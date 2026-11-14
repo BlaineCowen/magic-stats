@@ -242,8 +242,11 @@ function Names({ players }: { players: ValuedPlayer[] }) {
   );
 }
 
-function TradeFor({ target, pool, league, myRoster, setMyRoster, s, onPick, onLoad }: {
-  target: ValuedPlayer | null; pool: ValuedPlayer[]; league: League | null; myRoster: number | null;
+function TradeFor({ target, pool, crowd, league, myRoster, setMyRoster, s, onPick, onLoad }: {
+  target: ValuedPlayer | null; pool: ValuedPlayer[];
+  /** KTC crowd values: how the other team likely rates players. Given, ideas are checked against them. */
+  crowd: ValuedPlayer[] | null;
+  league: League | null; myRoster: number | null;
   setMyRoster: (id: number) => void; s: Settings; onPick: (p: ValuedPlayer) => void;
   onLoad: (t: SampleTrade) => void;
 }) {
@@ -252,9 +255,9 @@ function TradeFor({ target, pool, league, myRoster, setMyRoster, s, onPick, onLo
   const mine = league?.rosters.find((r) => r.rosterId === myRoster) ?? null;
   const owner = target ? league?.rosters.find((r) => r.players.includes(target.id)) ?? null : null;
   const ideas = useMemo(
-    () => (target && mine && owner && owner !== mine ? sampleTrades(target, valued(mine.players), valued(owner.players), pool, s, 3, league?.slots.length ? league.slots : undefined) : []),
+    () => (target && mine && owner && owner !== mine ? sampleTrades(target, valued(mine.players), valued(owner.players), pool, s, 3, league?.slots.length ? league.slots : undefined, crowd ?? undefined) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [target, mine, owner, pool, s, league],
+    [target, mine, owner, pool, s, league, crowd],
   );
 
   let message: string | null = null;
@@ -291,7 +294,9 @@ function TradeFor({ target, pool, league, myRoster, setMyRoster, s, onPick, onLo
       {target && owner && owner !== mine && (
         <p className="mt-3 text-sm text-slate-600">
           {target.name} ({target.pos} · {fmt(target.value)}) is on <span className="font-medium text-slate-800">{owner.label}</span>.
-          Each idea is close enough that they shouldn&apos;t lose on value, and makes their starting lineup better. Tap one to grade it above.
+          {crowd
+            ? <>Each idea looks fair to them by KeepTradeCut&apos;s crowd values and makes their starting lineup better by those values. The ones you win most by your ETR values come first. Tap one to grade it above.</>
+            : <>Each idea is close enough that they shouldn&apos;t lose on value, and makes their starting lineup better. Tap one to grade it above.</>}
         </p>
       )}
       {message && <p className="mt-3 text-slate-600">{message}</p>}
@@ -321,6 +326,11 @@ function TradeFor({ target, pool, league, myRoster, setMyRoster, s, onPick, onLo
                     <span className="text-sm text-slate-600 tabular-nums">
                       {t.result.winner === null ? "Fair" : t.edge > 0 ? `You win ${Math.round(t.edge * 100)}%` : `You pay ${Math.round(-t.edge * 100)}% more`}
                       <span className="ml-2 font-display text-lg font-bold text-slate-900">{t.result.a.grade}</span>
+                      {t.market && (
+                        <span className="block text-right text-xs text-slate-500">
+                          KTC: {t.market.result.winner === null ? "fair" : t.market.edge > 0 ? `they lose ${Math.round(t.market.edge * 100)}%` : `they win ${Math.round(-t.market.edge * 100)}%`}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>
@@ -386,8 +396,10 @@ export function TradeCalc({ owner = false, myTeam }: {
   const [targetId, setTargetId] = useState<string | null>(null);
   const tradeFor = useRef<HTMLDivElement>(null);
   // Blaine only: grade with his ETR values instead of the market. Never put in shared links.
-  const [source, setSource] = useState<"market" | "etr">("market");
+  const [source, setSource] = useState<"market" | "ktc" | "etr">("market");
   const [pool, setPool] = useState<ValuedPlayer[]>([]);
+  // With ETR values: KTC's, to check trade ideas against how league mates likely rate players.
+  const [crowd, setCrowd] = useState<ValuedPlayer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aIds, setA] = useState<string[]>([]);
   const [bIds, setB] = useState<string[]>([]);
@@ -448,13 +460,20 @@ export function TradeCalc({ owner = false, myTeam }: {
     if (!ready.current) return;
     let live = true;
     setError(null);
+    const settingsQ = { dynasty: s.dynasty ? "1" : "0", teams: String(s.teams), qbs: String(s.qbs), ppr: String(s.ppr), tep: String(s.tep) };
     const q = source === "etr"
       ? new URLSearchParams({ values: "etr" })
-      : new URLSearchParams({ dynasty: s.dynasty ? "1" : "0", teams: String(s.teams), qbs: String(s.qbs), ppr: String(s.ppr), tep: String(s.tep) });
+      : new URLSearchParams(source === "ktc" ? { values: "ktc", ...settingsQ } : settingsQ);
     fetch(`/api/trade-values?${q}`)
       .then((r) => r.json())
       .then((d) => { if (!live) return; if (d.error) setError(d.error); else setPool(d.players); })
       .catch(() => live && setError("Couldn't load player values. Check your connection and try again."));
+    setCrowd(null);
+    if (source === "etr")
+      fetch(`/api/trade-values?${new URLSearchParams({ values: "ktc", ...settingsQ })}`)
+        .then((r) => r.json())
+        .then((d) => { if (live && !d.error) setCrowd(d.players); })
+        .catch(() => { /* ideas fall back to your values alone */ });
     return () => { live = false; };
   }, [s, source]);
 
@@ -494,7 +513,8 @@ export function TradeCalc({ owner = false, myTeam }: {
       {owner && (
         <div className="flex flex-wrap items-center gap-3">
           <Segmented label="Values (only you see this)" value={source}
-            options={[["market", "Market"], ["etr", "My ETR values"]]} onChange={setSource} />
+            options={[["market", "Market"], ["ktc", "KeepTradeCut"], ["etr", "My ETR values"]]} onChange={setSource} />
+          {source === "ktc" && <p className="text-sm text-slate-600">Crowd votes from KeepTradeCut: roughly how a typical league mate rates players.</p>}
         </div>
       )}
       <SettingsPanel s={s} set={set} etr={source === "etr"} onLeague={(id) => void connectLeague(id, league?.id === id ? myRoster : null)} />
@@ -560,7 +580,7 @@ export function TradeCalc({ owner = false, myTeam }: {
       )}
 
       <div ref={tradeFor} className="scroll-mt-4">
-        <TradeFor target={targetId ? byId.get(targetId) ?? null : null} pool={pool} league={league} myRoster={myRoster}
+        <TradeFor target={targetId ? byId.get(targetId) ?? null : null} pool={pool} crowd={source === "etr" ? crowd : null} league={league} myRoster={myRoster}
           setMyRoster={setMyRoster} s={s} onPick={pick} onLoad={loadIdea} />
       </div>
     </div>
